@@ -110,7 +110,8 @@ def run_train(train_iter: DataLoader, val_iter: DataLoader,
     pprint.pprint(config.get_config())
     config.save()
 
-    model: EncoderDecoder = make_model(emb_size=512,  # TODO: fixed for RoBERTa?
+    model: EncoderDecoder = make_model(emb_size=config['WORD_EMBEDDING_SIZE'],
+                                       hidden_size_encoder=config['ENCODER_HIDDEN_SIZE'],
                                        hidden_size_decoder=config['DECODER_HIDDEN_SIZE'],
                                        num_layers=config['NUM_LAYERS'],
                                        dropout=config['DROPOUT'],

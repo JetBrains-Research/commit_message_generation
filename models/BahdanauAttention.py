@@ -8,12 +8,9 @@ from typing import Tuple
 class BahdanauAttention(nn.Module):
     """Implements Bahdanau (MLP) attention"""
 
-    def __init__(self, hidden_size, key_size: int = None, query_size: int = None):
+    def __init__(self, hidden_size, key_size: int, query_size: int = None):
         super(BahdanauAttention, self).__init__()
 
-        # TODO: attention layer dimensions
-        # We assume a bi-directional encoder so key_size is 2 * hidden_size
-        key_size = 2 * hidden_size if key_size is None else key_size
         query_size = hidden_size if query_size is None else query_size
 
         self.key_layer = nn.Linear(key_size, hidden_size, bias=False)

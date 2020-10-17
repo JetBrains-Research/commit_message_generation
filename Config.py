@@ -23,7 +23,8 @@ class Config:
         'TOKEN_MIN_FREQ': 1,
         'LEARNING_RATE': 0.0001,
         'MAX_NUM_OF_EPOCHS': {'cmg': 5000},
-        'WORD_EMBEDDING_SIZE': 512,
+        'WORD_EMBEDDING_SIZE': 512,  # used in pretrained CodeBERT
+        'ENCODER_HIDDEN_SIZE': 768,  # used in pretrained CodeBERT
         'DECODER_HIDDEN_SIZE': 256,
         'NUM_LAYERS': 2,
         'TEACHER_FORCING_RATIO': 0.9,

@@ -6,8 +6,8 @@ from models import BahdanauAttention
 class Decoder(nn.Module):
     """A conditional RNN decoder with attention."""
 
-    def __init__(self, emb_size: int, hidden_size: int, attention: BahdanauAttention, num_layers: int, dropout: float,
-                 bridge: bool):
+    def __init__(self, emb_size: int, hidden_size: int, hidden_size_encoder: int, attention: BahdanauAttention,
+                 num_layers: int, dropout: float, bridge: bool):
         super(Decoder, self).__init__()
 
         self.hidden_size = hidden_size
@@ -19,8 +19,7 @@ class Decoder(nn.Module):
                           batch_first=True, dropout=dropout)
 
         # to initialize from the final encoder state
-        # TODO: input dimension of this layer should match encoder_hidden.shape[-1]
-        self.bridge = nn.Linear(768, hidden_size, bias=True) if bridge else None
+        self.bridge = nn.Linear(hidden_size_encoder, hidden_size, bias=True) if bridge else None
 
         self.dropout_layer = nn.Dropout(p=dropout)
         self.pre_output_layer = nn.Linear(hidden_size + 2 * hidden_size + emb_size,
@@ -48,6 +47,7 @@ class Decoder(nn.Module):
                 src_mask, hidden=None, max_len=None):
         """
         Unroll the decoder one step at a time.
+        TODO: check dimensions of arguments
         :param batch:
         :param encoder_hidden: [B, SrcSeqLen, NumDirections * SrcEncoderH]
         :param encoder_final: Tuple of [NumLayers, B, NumDirections * SrcEncoderH]

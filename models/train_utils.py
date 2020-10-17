@@ -20,6 +20,7 @@ import Config
 
 
 def make_model(emb_size: int,
+               hidden_size_encoder: int,
                hidden_size_decoder: int,
                num_layers: int,
                dropout: float,
@@ -29,15 +30,11 @@ def make_model(emb_size: int,
 
     codebert_config = RobertaConfig.from_pretrained("microsoft/codebert-base", output_hidden_states=True)
     codebert_model = RobertaModel.from_pretrained("microsoft/codebert-base", config=codebert_config)
-    codebert_tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")
-
-    # TODO: dimension of RoBERTa last layer's output, how to get it properly?
-    hidden_size_encoder = 768
-    hidden_size_decoder = 768
+    codebert_tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")  # need for vocab size only
 
     attention = BahdanauAttention(hidden_size_decoder, key_size=hidden_size_encoder, query_size=hidden_size_decoder)
     generator = GeneratorModel(hidden_size_decoder, codebert_tokenizer.vocab_size)
-    decoder = Decoder(emb_size, hidden_size_decoder, attention, num_layers, dropout, use_bridge)
+    decoder = Decoder(emb_size, hidden_size_decoder, hidden_size_encoder, attention, num_layers, dropout, use_bridge)
 
     model: EncoderDecoder = EncoderDecoder(
         codebert_model,
