@@ -51,12 +51,17 @@ class EncoderDecoder(nn.Module):
         encoder_final, _, encoder_hidden = self.encoder(input_ids, attention_mask=attention_mask,
                                                         output_hidden_states=True)
         # convert tuple to tensor
-        encoder_hidden = torch.stack(encoder_hidden)
+        encoder_hidden = torch.stack(encoder_hidden).to(self.device)
         print("encoder_hidden.shape:", encoder_hidden.shape)
         print("encoder_hidden[-1].shape:", encoder_hidden[-1].shape)
+        encoder_final = encoder_final.to(self.device)
+
         return encoder_hidden, encoder_final
 
     def decode(self, batch, encoder_hidden, encoder_final, src_mask, decoder_hidden=None):
+        src_mask = src_mask.to(self.device)
+        batch['input_ids'] = batch['input_ids'].to(self.device)
+        batch['attention_mask'] = batch['attention_mask'].to(self.device)
         # decoder.forward()
         return self.decoder(batch, encoder_hidden, encoder_final,
                             src_mask, hidden=decoder_hidden)
