@@ -22,21 +22,22 @@ class BahdanauAttention(nn.Module):
 
     def forward(self, query: Tensor, proj_key: Tensor, value: Tensor, mask: Tensor) -> Tuple[Tensor, Tensor]:
         """
-        :param query: [B, 1, DecoderH]
-        :param proj_key: [B, SrcSeqLen, DecoderH]
-        :param value: [B, SrcSeqLen, NumDirections * SrcEncoderH]
-        :param mask: [B, 1, SrcSeqLen]
-        :return: Tuple[[B, 1, NumDirections * SrcEncoderH], [B, 1, SrcSeqLen]]
+        :param query: [batch_size, 1, hidden_size_decoder]
+        :param proj_key: [batch_size, sequence_length, hidden_size_decoder]
+        :param value: [batch_size, sequence_length, hidden_size_encoder]
+        :param mask: [batch_size, 1, sequence_length] // Actual: [1, sequence_length]
+
+        :return: Tuple[[batch_size, 1, hidden_size_encoder], [batch_size, 1, sequence_length]]
         """
         assert mask is not None, "mask is required"
-
         # We first project the query (the decoder state).
-        # The projected keys (the encoder states) were already pre-computated.
-        query = self.query_layer(query)  # [B, 1, DecoderH]
+        # The projected keys (the encoder states) were already pre-computed.
+
+        query = self.query_layer(query)  # [batch_size, 1, hidden_size_decoder]
 
         # Calculate scores.
-        scores = self.energy_layer(torch.tanh(query + proj_key))  # [B, SrcSeqLen, 1]
-        scores = scores.squeeze()  # [B, 1, SrcSeqLen]
+        scores = self.energy_layer(torch.tanh(query + proj_key))  # [batch_size, sequence_length, 1]
+        scores = scores.squeeze(2).unsqueeze(1)  # [batch_size, 1, sequence_length]
 
         # Mask out invalid positions.
         # The mask marks valid positions so we invert it using `mask & 0`.
@@ -44,10 +45,8 @@ class BahdanauAttention(nn.Module):
 
         # Turn scores to probabilities.
         alphas = F.softmax(scores, dim=-1)
-        self.alphas = alphas  # [B, 1, SrcSeqLen]
+        self.alphas = alphas  # [batch_size, 1, sequence_length]
 
         # The context vector is the weighted sum of the values.
-        context = torch.bmm(alphas, value)  # [B, 1, NumDirections * SrcEncoderH]
-
-        # context shape: [B, 1, 2D], alphas shape: [B, 1, M]
+        context = torch.bmm(alphas, value)  # [batch_size, 1, hidden_size_encoder]
         return context, alphas

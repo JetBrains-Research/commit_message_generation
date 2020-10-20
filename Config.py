@@ -25,7 +25,7 @@ class Config:
         'MAX_NUM_OF_EPOCHS': {'cmg': 5000},
         'WORD_EMBEDDING_SIZE': 512,  # used in pretrained CodeBERT
         'ENCODER_HIDDEN_SIZE': 768,  # used in pretrained CodeBERT
-        'DECODER_HIDDEN_SIZE': 256,
+        'DECODER_HIDDEN_SIZE': 32,
         'NUM_LAYERS': 2,
         'TEACHER_FORCING_RATIO': 0.9,
         'DROPOUT': 0.2,

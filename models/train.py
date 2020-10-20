@@ -23,7 +23,7 @@ def train(model: EncoderDecoder, tokenizer: RobertaTokenizer,
           config: Config) -> Tuple[List[float], List[float]]:
     """
     :param suffix_for_saving:
-    :param tokenizer:
+    :param tokenizer: RobertaTokenizer TODO: is it needed?
     :param model: models to train
     :param train_iter: train data loader
     :param val_iter: validation data loader
@@ -107,7 +107,7 @@ def save_data_on_checkpoint(model: nn.Module,
 
 def run_train(train_iter: DataLoader, val_iter: DataLoader,
               suffix_for_saving: str, config: Config) -> EncoderDecoder:
-    print("----Used config----")
+    print("-------Config--------")
     pprint.pprint(config.get_config())
     config.save()
 
@@ -145,10 +145,11 @@ def main():
 
     config = Config()
     print('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n', end='')
+    print("--Constructing datasets--")
     train_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'),
                                                                     config)
     val_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'), config)
-    test_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'), config)
+    #test_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'), config)
 
     train_loader = DataLoader(train_dataset_commit, batch_size=config['BATCH_SIZE'])
     val_loader = DataLoader(val_dataset_commit, batch_size=config['BATCH_SIZE'])

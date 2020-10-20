@@ -14,27 +14,40 @@ class Decoder(nn.Module):
         self.num_layers = num_layers
         self.attention = attention
         self.dropout = dropout
-
-        self.rnn = nn.GRU(emb_size + 2 * hidden_size, hidden_size, num_layers,
+        # TODO: dimensions with attention output don't match if use any other # layers than 13?
+        # TODO: why prev_embed.size(-1) is 1?
+        self.rnn = nn.GRU(hidden_size_encoder + 1, hidden_size, num_layers=13,
                           batch_first=True, dropout=dropout)
 
         # to initialize from the final encoder state
         self.bridge = nn.Linear(hidden_size_encoder, hidden_size, bias=True) if bridge else None
 
         self.dropout_layer = nn.Dropout(p=dropout)
-        self.pre_output_layer = nn.Linear(hidden_size + 2 * hidden_size + emb_size,
+        self.pre_output_layer = nn.Linear(hidden_size_encoder + hidden_size + 1,
                                           hidden_size, bias=False)
 
-    def forward_step(self, prev_embed, encoder_hidden, src_mask, proj_key, hidden):
-        """Perform a single decoder step (1 word)"""
+    def forward_step(self, prev_embed, encoder_output, src_mask, proj_key, hidden):
+        """Perform a single decoder step (1 word)
+
+        :param prev_embed: [B, 1, EmbCode] // Actual: [batch_size, 1, 1] TODO: what is EmbCode?
+        :param encoder_output: [batch_size, sequence_length, hidden_size_encoder]
+        :param src_mask: [B, 1, SrcSeqLen] // Actual: [1, sequence_length]
+        :param proj_key: [batch_size, sequence_length, hidden_size_decoder]
+        :param hidden: [batch_size, hidden_size_decoder]
+        :return: Tuple[[batch_size, 1, hidden_size_decoder],
+                       [num_layers, batch_size, hidden_size_decoder],
+                       [batch_size, 1, hidden_size_decoder]]"""
+
         # compute context vector using attention mechanism
         query = hidden[-1].unsqueeze(1)  # [#layers, B, D] -> [B, 1, D]
+
         context, attn_probs = self.attention(
             query=query, proj_key=proj_key,
-            value=encoder_hidden[-1], mask=src_mask)  # TODO: encoder_hidden[-1]?
+            value=encoder_output, mask=src_mask)
 
         # update rnn hidden state
         rnn_input = torch.cat([prev_embed, context], dim=2)
+
         output, hidden = self.rnn(rnn_input, hidden)
 
         pre_output = torch.cat([prev_embed, output, context], dim=2)
@@ -43,25 +56,24 @@ class Decoder(nn.Module):
 
         return output, hidden, pre_output
 
-    def forward(self, batch, encoder_hidden, encoder_final,
+    def forward(self, batch, encoder_output, encoder_final,
                 src_mask, hidden=None, max_len=None):
         """
         Unroll the decoder one step at a time.
         TODO: check dimensions of arguments
         :param batch:
-        :param encoder_hidden: [B, SrcSeqLen, NumDirections * SrcEncoderH]
-        :param encoder_final: Tuple of [NumLayers, B, NumDirections * SrcEncoderH]
-        :param src_mask: [B, 1, SrcSeqLen]
+        :param encoder_output: [batch_size, sequence_length, hidden_size_encoder]
+        :param encoder_final: [num_layers, batch_size, hidden_size_encoder]
+        :param src_mask: [B, 1, SrcSeqLen] // Actual: [1, sequence_length]
         :param hidden: decoder hidden state
         :param max_len: the maximum number of steps to unroll the RNN
         :return: Tuple[
-                 [B, TrgSeqLen, DecoderH],
-                 [NumLayers, B, DecoderH],
-                 [B, TrgSeqLen, DecoderH]]
+                 [batch_size, target_sequence_length, hidden_size_decoder],
+                 [num_layers, batch_size, hidden_size_decoder],
+                 [batch_size, target_sequence_length, hidden_size_decoder]]
         """
 
-        # TODO: is batch['input_ids'] good choice for trg_embed?
-        trg_embed = batch['input_ids']
+        trg_embed = batch['input_ids'].unsqueeze(2)  # [B, TrgSeqLen, EmbCode]
         trg_mask = batch['attention_mask']
 
         # the maximum number of steps to unroll the RNN
@@ -70,12 +82,12 @@ class Decoder(nn.Module):
 
         # initialize decoder hidden state
         if hidden is None:
-            hidden = self.init_hidden(encoder_final)
+            hidden = self.init_hidden(encoder_final)  # [num_layers, batch_size (or just 1), hidden_size_decoder]
 
         # pre-compute projected encoder hidden states
         # (the "keys" for the attention mechanism)
         # this is only done for efficiency
-        proj_key = self.attention.key_layer(encoder_hidden)
+        proj_key = self.attention.key_layer(encoder_output)
 
         # here we store all intermediate hidden states and pre-output vectors
         decoder_states = []
@@ -85,7 +97,7 @@ class Decoder(nn.Module):
         for i in range(max_len):
             prev_embed = trg_embed[:, i].unsqueeze(1)
             output, hidden, pre_output = self.forward_step(
-                prev_embed, encoder_hidden, src_mask, proj_key, hidden)
+                prev_embed, encoder_output, src_mask, proj_key, hidden)
             decoder_states.append(output)
             pre_output_vectors.append(pre_output)
 
