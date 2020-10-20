@@ -52,6 +52,8 @@ class EncoderDecoder(nn.Module):
                                                         output_hidden_states=True)
         # convert tuple to tensor
         encoder_hidden = torch.stack(encoder_hidden)
+        print("encoder_hidden.shape:", encoder_hidden.shape)
+        print("encoder_hidden[-1].shape:", encoder_hidden[-1].shape)
         return encoder_hidden, encoder_final
 
     def decode(self, batch, encoder_hidden, encoder_final, src_mask, decoder_hidden=None):

@@ -1,4 +1,5 @@
 import os
+import sys
 import pickle
 import pprint
 from typing import Tuple, List
@@ -136,6 +137,12 @@ def run_train(train_iter: DataLoader, val_iter: DataLoader,
 
 
 def main():
+    if len(sys.argv) > 1:
+        working = sys.argv[1]
+        os.chdir(working)
+
+    print("pwd", os.getcwd())
+
     config = Config()
     print('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n', end='')
     train_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'),

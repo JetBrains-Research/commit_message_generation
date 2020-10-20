@@ -31,7 +31,7 @@ class Decoder(nn.Module):
         query = hidden[-1].unsqueeze(1)  # [#layers, B, D] -> [B, 1, D]
         context, attn_probs = self.attention(
             query=query, proj_key=proj_key,
-            value=encoder_hidden, mask=src_mask)
+            value=encoder_hidden[-1], mask=src_mask)  # TODO: encoder_hidden[-1]?
 
         # update rnn hidden state
         rnn_input = torch.cat([prev_embed, context], dim=2)
@@ -75,8 +75,6 @@ class Decoder(nn.Module):
         # pre-compute projected encoder hidden states
         # (the "keys" for the attention mechanism)
         # this is only done for efficiency
-        print(encoder_hidden.shape)
-        print(self.attention.key_layer)
         proj_key = self.attention.key_layer(encoder_hidden)
 
         # here we store all intermediate hidden states and pre-output vectors

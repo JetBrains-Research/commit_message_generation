@@ -37,7 +37,7 @@ class BahdanauAttention(nn.Module):
         # Calculate scores.
         scores = self.energy_layer(torch.tanh(query + proj_key))  # [B, SrcSeqLen, 1]
         scores = scores.squeeze(2).unsqueeze(1)  # [B, 1, SrcSeqLen]
-
+        print(scores.shape)
         # Mask out invalid positions.
         # The mask marks valid positions so we invert it using `mask & 0`.
         scores.data.masked_fill_(mask == 0, -float('inf'))
