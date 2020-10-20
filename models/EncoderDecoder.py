@@ -28,7 +28,8 @@ class EncoderDecoder(nn.Module):
     def forward(self, batch):
         """Process masked src and target sequences."""
         encoder_output, encoder_final = self.encode(batch)
-        return self.decode(batch['target'], encoder_output, encoder_final, src_mask=batch['attention_mask'])
+        return self.decode(batch['target'], encoder_output, encoder_final,
+                           src_mask=batch['attention_mask'].unsqueeze(1))
 
     def encode(self, batch) -> Tuple[Tensor, Tensor]:
         """

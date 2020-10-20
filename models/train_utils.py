@@ -58,7 +58,6 @@ def run_epoch(data_iter: Generator, model: EncoderDecoder, loss_compute: SimpleL
     total_loss = 0
 
     for i, batch in enumerate(data_iter, 1):
-        print(f"Current batch: {i}")
         out, _, pre_output = model.forward(batch)
         loss = loss_compute(pre_output, batch, batch_size)
         total_loss += loss

@@ -25,7 +25,7 @@ class BahdanauAttention(nn.Module):
         :param query: [batch_size, 1, hidden_size_decoder]
         :param proj_key: [batch_size, sequence_length, hidden_size_decoder]
         :param value: [batch_size, sequence_length, hidden_size_encoder]
-        :param mask: [batch_size, 1, sequence_length] // Actual: [1, sequence_length]
+        :param mask: [batch_size, 1, sequence_length]
 
         :return: Tuple[[batch_size, 1, hidden_size_encoder], [batch_size, 1, sequence_length]]
         """
