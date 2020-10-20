@@ -65,8 +65,8 @@ def run_epoch(data_iter: Generator, model: EncoderDecoder, loss_compute: SimpleL
 
         # number of tokens in batch
         # attention mask is 0 for pad tokens and 1 for all others
-        total_tokens += np.sum(batch['attention_mask'])
-        print_tokens += np.sum(batch['attention_mask'])
+        total_tokens += torch.sum(batch['attention_mask'])
+        print_tokens += torch.sum(batch['attention_mask'])
 
         if model.training and i % print_every == 0:
             elapsed = time.time() - start
