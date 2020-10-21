@@ -39,7 +39,7 @@ class Config:
         'START_BEST_FROM_EPOCH': 0,
         'LEAVE_ONLY_CHANGED': True,
         'VERBOSE': True,
-        'BATCH_SIZE': 32,  # TODO: all model.forward() functions work differently for actual batches?
+        'BATCH_SIZE': 2,  # TODO: all model.forward() functions work differently for actual batches?
         'TSNE_BATCH_SIZE': 1024,
         'VAL_BATCH_SIZE': 1,
         'TEST_BATCH_SIZE': 1,
