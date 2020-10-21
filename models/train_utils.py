@@ -103,7 +103,6 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
 
     for i in range(max_len):
         with torch.no_grad():
-            # TODO: prev_y argument?
             trg_embed = model.get_embeddings(prev_y, trg_mask)
             out, hidden, pre_output = model.decode(batch['target'], encoder_output, encoder_final,
                                                    batch['attention_mask'].unsqueeze(1), hidden=hidden,
@@ -137,6 +136,11 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
     sos_index = tokenizer.bos_token_id
 
     for i, batch in enumerate(example_iter):
+        batch['input_ids'] = batch['input_ids'].to(model.device)
+        batch['attention_mask'] = batch['attention_mask'].to(model.device)
+        batch['target']['input_ids'] = batch['target']['input_ids'].to(model.device)
+        batch['target']['attention_mask'] = batch['target']['attention_mask'].to(model.device)
+
         src = batch['input_ids'].cpu().numpy()[0, :]
         trg = batch['target']['input_ids'].cpu().numpy()[0, :]
 
