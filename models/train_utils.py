@@ -94,7 +94,7 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
         prev_y = torch.ones(1, 1).fill_(sos_index).type_as(batch['input_ids'])
         trg_mask = torch.ones_like(prev_y)
 
-    output = []
+    output = torch.zeros((batch.nseqs, max_len))
     attention_scores = []
     hidden = None
 
@@ -105,20 +105,25 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
                                                    batch['attention_mask'].unsqueeze(1), hidden=hidden)
             # we predict from the pre-output layer, which is
             # a combination of Decoder state, prev emb, and context
-            prob = model.generator(pre_output)[:, -1]
-        _, next_word = torch.max(prob, dim=1)
-        next_word = next_word.data.item()
-        output.append(next_word)
-        prev_y = torch.ones(1, 1).type_as(batch['input_ids']).fill_(next_word)
-        attention_scores.append(model.decoder.attention.alphas.cpu().numpy())
+            prob = model.generator(pre_output)[:, -1]  # [B, V]
+        print("prob", prob.shape)
+        print(prob)
+        _, next_words = torch.max(prob, dim=1)
+        output[:, i] = next_words
+        prev_y[:, 0] = next_words
 
-    output = np.array(output)
-    # cut off everything starting from </s>
-    first_eos = np.where(output == eos_index)[0]
-    if len(first_eos) > 0:
-        output = output[:first_eos[0]]
-    print("Greedy decode output", output)
-    return output, np.concatenate(attention_scores, axis=1)
+    output = output.cpu().long().numpy()
+    return remove_eos(output, eos_index)
+
+
+def remove_eos(batch: np.array, eos_index: int):
+    result = []
+    for sequence in batch:
+        eos = np.where(sequence == eos_index)[0]
+        if eos.shape[0] > 0:
+            sequence = sequence[:eos[0]]
+        result.append(sequence)
+    return result
 
 
 def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: RobertaTokenizer,
@@ -149,6 +154,7 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
         print("Src : ", tokenizer.decode(src, skip_special_tokens=True))
         print("Trg : ", tokenizer.decode(trg, skip_special_tokens=True))
         print("Pred: ", tokenizer.decode(result, skip_special_tokens=True))
+        print("Another try for pred: ", tokenizer.decode(result[0], skip_special_tokens=True))
         print()
 
         count += 1
