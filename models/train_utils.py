@@ -106,8 +106,6 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
             # we predict from the pre-output layer, which is
             # a combination of Decoder state, prev emb, and context
             prob = model.generator(pre_output)[:, -1]
-        print(prob)
-        print(prob.shape)
         _, next_word = torch.max(prob, dim=1)
         next_word = next_word.data.item()
         output.append(next_word)
@@ -119,7 +117,7 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
     first_eos = np.where(output == eos_index)[0]
     if len(first_eos) > 0:
         output = output[:first_eos[0]]
-    print(output)
+    print("Greedy decode output", output)
     return output, np.concatenate(attention_scores, axis=1)
 
 
