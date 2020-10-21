@@ -105,7 +105,7 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
                                                    batch['attention_mask'].unsqueeze(1), hidden=hidden)
             # we predict from the pre-output layer, which is
             # a combination of Decoder state, prev emb, and context
-            prob = model.generator(pre_output)[:, -1]  # [B, V]
+            prob = model.generator(pre_output[:, -1])  # [B, V]
         _, next_words = torch.max(prob, dim=1)
         output[:, i] = next_words
         prev_y[:, 0] = next_words
