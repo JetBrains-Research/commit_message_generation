@@ -39,10 +39,10 @@ class Config:
         'START_BEST_FROM_EPOCH': 0,
         'LEAVE_ONLY_CHANGED': True,
         'VERBOSE': True,
-        'BATCH_SIZE': 64, # TODO: all model.forward() functions work differently for actual batches?
+        'BATCH_SIZE': 32,  # TODO: all model.forward() functions work differently for actual batches?
         'TSNE_BATCH_SIZE': 1024,
-        'VAL_BATCH_SIZE': 2,
-        'TEST_BATCH_SIZE': 2,
+        'VAL_BATCH_SIZE': 1,
+        'TEST_BATCH_SIZE': 1,
         'SAVE_MODEL_EVERY': 5,
         'PRINT_EVERY_iTH_BATCH': 5,
         'MAKE_CUDA_REPRODUCIBLE': False,
