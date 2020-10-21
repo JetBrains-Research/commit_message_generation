@@ -104,9 +104,8 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
     for i in range(max_len):
         with torch.no_grad():
             trg_embed = model.get_embeddings(prev_y, trg_mask)
-            out, hidden, pre_output = model.decode(batch['target'], encoder_output, encoder_final,
-                                                   batch['attention_mask'].unsqueeze(1), hidden=hidden,
-                                                   trg_embed=trg_embed, trg_mask=trg_mask)
+            out, hidden, pre_output = model.decode(trg_embed, trg_mask, encoder_output, encoder_final,
+                                                   batch['attention_mask'].unsqueeze(1), hidden=hidden)
             # we predict from the pre-output layer, which is
             # a combination of Decoder state, prev emb, and context
             prob = model.generator(pre_output[:, -1])
