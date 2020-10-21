@@ -90,9 +90,6 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
     eos_index = tokenizer.eos_token_id
 
     with torch.no_grad():
-        print("Greedy decode")
-        print("input_ids", batch['input_ids'])
-        print("attention_mask", batch['attention_mask'])
         encoder_output, encoder_final = model.encode(batch['input_ids'], batch['attention_mask'])
         prev_y = torch.ones(1, 1).fill_(sos_index).type_as(batch['input_ids'])
         trg_mask = torch.ones_like(prev_y)
@@ -108,7 +105,9 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
                                                    batch['attention_mask'].unsqueeze(1), hidden=hidden)
             # we predict from the pre-output layer, which is
             # a combination of Decoder state, prev emb, and context
-            prob = model.generator(pre_output[:, -1])
+            prob = model.generator(pre_output)[:, -1]
+        print(prob)
+        print(prob.shape)
         _, next_word = torch.max(prob, dim=1)
         next_word = next_word.data.item()
         output.append(next_word)
@@ -116,7 +115,6 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
         attention_scores.append(model.decoder.attention.alphas.cpu().numpy())
 
     output = np.array(output)
-    print(output)
     # cut off everything starting from </s>
     first_eos = np.where(output == eos_index)[0]
     if len(first_eos) > 0:
