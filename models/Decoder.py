@@ -73,10 +73,10 @@ class Decoder(nn.Module):
                  [num_layers, batch_size, hidden_size_decoder],
                  [batch_size, target_sequence_length, hidden_size_decoder]]
         """
-
-        trg_embed = batch['input_ids']  # [B, TrgSeqLen, EmbCode]
-        trg_mask = batch['attention_mask']
-        print("trg_embed shape:", trg_embed)
+        print("trg_embed shape before unsqueeze:", batch['input_ids'].shape)
+        trg_embed = batch['input_ids'].unsqueeze(2)
+        print("trg_embed shape after unsqueeze:", trg_embed.shape)  # [B, TrgSeqLen, EmbCode]
+        trg_mask = batch['attention_mask'].unsqueeze(1)
         print("trg_mask shape", trg_mask.shape)
         print("src_mask shape", src_mask.shape)
 
