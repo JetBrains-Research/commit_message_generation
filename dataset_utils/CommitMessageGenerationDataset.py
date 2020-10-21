@@ -12,6 +12,7 @@ from transformers import RobertaTokenizer
 
 class CommitMessageGenerationDataset(Dataset):
     """Defines a dataset for commit message generation task as torch.utils.data.Dataset"""
+
     def __init__(self, src_encodings, trg_encodings):
         self.src_encodings = src_encodings
         self.trg_encodings = trg_encodings
@@ -54,10 +55,11 @@ class CommitMessageGenerationDataset(Dataset):
                 upds.append(updated_line)
                 msgs.append(msg_line)
         if small:
-            return CommitMessageGenerationDataset(src_encodings=codebert_tokenizer(prevs[:100], upds[:100], truncation=True,
-                                                                               padding=True, return_tensors='pt'),
-                                              trg_encodings=codebert_tokenizer(msgs[:100], truncation=True, padding=True,
-                                                                               return_tensors='pt'))
+            return CommitMessageGenerationDataset(
+                src_encodings=codebert_tokenizer(prevs[:50], upds[:50], truncation=True,
+                                                 padding=True, return_tensors='pt'),
+                trg_encodings=codebert_tokenizer(msgs[:50], truncation=True, padding=True,
+                                                 return_tensors='pt'))
         return CommitMessageGenerationDataset(src_encodings=codebert_tokenizer(prevs, upds, truncation=True,
                                                                                padding=True, return_tensors='pt'),
                                               trg_encodings=codebert_tokenizer(msgs, truncation=True,
