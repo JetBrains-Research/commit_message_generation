@@ -153,7 +153,7 @@ def main():
     #test_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'), config)
 
     train_loader = DataLoader(train_dataset_commit, batch_size=config['BATCH_SIZE'])
-    val_loader = DataLoader(val_dataset_commit, batch_size=config['BATCH_SIZE'])
+    val_loader = DataLoader(val_dataset_commit, batch_size=config['VAL_BATCH_SIZE'])
 
     commit_message_generator = run_train(train_loader, val_loader,
                                          'commit_msg_generator', config=config)

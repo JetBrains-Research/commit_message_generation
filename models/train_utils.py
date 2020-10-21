@@ -58,8 +58,13 @@ def run_epoch(data_iter: Generator, model: EncoderDecoder, loss_compute: SimpleL
     total_loss = 0
 
     for i, batch in enumerate(data_iter, 1):
+        batch['input_ids'] = batch['input_ids'].to(model.device)
+        batch['attention_mask'] = batch['attention_mask'].to(model.device)
+        batch['target']['input_ids'] = batch['target']['input_ids'].to(model.device)
+        batch['target']['attention_mask'] = batch['target']['attention_mask'].to(model.device)
+
         out, _, pre_output = model.forward(batch)
-        loss = loss_compute(pre_output, batch, batch_size)
+        loss = loss_compute(pre_output, batch['target']['input_ids'], batch_size)
         total_loss += loss
 
         # number of tokens in batch
@@ -70,8 +75,8 @@ def run_epoch(data_iter: Generator, model: EncoderDecoder, loss_compute: SimpleL
         if model.training and i % print_every == 0:
             elapsed = time.time() - start
             print(f'Epoch Step: {i} / {batches_num} '
-                  f'Loss: {loss / batch_size} '
-                  f'Tokens per Sec: {print_tokens / elapsed}')
+                  f'Loss: {loss / batch_size :.2f} '
+                  f'Tokens per Sec: {print_tokens / elapsed :.2f}')
             start = time.time()
             print_tokens = 0
     epoch_duration = time.time() - epoch_start
@@ -85,7 +90,7 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
     eos_index = tokenizer.eos_token_id
 
     with torch.no_grad():
-        encoder_hidden, encoder_final = model.encode(batch)
+        encoder_output, encoder_final = model.encode(batch)
         prev_y = torch.ones(1, 1).fill_(sos_index).type_as(batch['input_ids'])
         trg_mask = torch.ones_like(prev_y)
 
@@ -96,13 +101,13 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
     for i in range(max_len):
         with torch.no_grad():
             # TODO: prev_y argument?
-            out, hidden, pre_output = model.decode(batch['target'],
-                                                   encoder_hidden, encoder_final,
-                                                   batch['attention_mask'], hidden=hidden)
+            trg_embed = model.get_embeddings(prev_y, trg_mask)
+            out, hidden, pre_output = model.decode(batch['target'], encoder_output, encoder_final,
+                                                   batch['attention_mask'].unsqueeze(1), hidden=hidden,
+                                                   trg_embed=trg_embed, trg_mask=trg_mask)
             # we predict from the pre-output layer, which is
             # a combination of Decoder state, prev emb, and context
             prob = model.generator(pre_output[:, -1])
-
         _, next_word = torch.max(prob, dim=1)
         next_word = next_word.data.item()
         output.append(next_word)
@@ -110,12 +115,12 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
         attention_scores.append(model.decoder.attention.alphas.cpu().numpy())
 
     output = np.array(output)
-
+    print(output)
     # cut off everything starting from </s>
     first_eos = np.where(output == eos_index)[0]
     if len(first_eos) > 0:
         output = output[:first_eos[0]]
-
+    print(output)
     return output, np.concatenate(attention_scores, axis=1)
 
 
@@ -137,9 +142,7 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
         src = src[:-1] if src[-1] == eos_index else src
         trg = trg[:-1] if trg[-1] == eos_index else trg
 
-        result, _ = greedy_decode(
-            model, batch.src, batch.src_mask, batch.src_lengths,
-            max_len=max_len, sos_index=sos_index, eos_index=eos_index)
+        result, _ = greedy_decode(model, batch, tokenizer, max_len=max_len)
 
         print("Example #%d" % (i + 1))
         print("Src : ", tokenizer.decode(src, skip_special_tokens=True))
@@ -150,5 +153,3 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
         count += 1
         if count == n:
             break
-
-
