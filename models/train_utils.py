@@ -151,8 +151,7 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
         print("Example #%d" % (i + 1))
         print("Src : ", tokenizer.decode(src, skip_special_tokens=True))
         print("Trg : ", tokenizer.decode(trg, skip_special_tokens=True))
-        print("Pred: ", tokenizer.decode(result, skip_special_tokens=True))
-        print("Another try for pred: ", tokenizer.decode(result[0], skip_special_tokens=True))
+        print("Pred: ", tokenizer.decode(result[0], skip_special_tokens=True))
         print()
 
         count += 1
