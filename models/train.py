@@ -155,6 +155,10 @@ def main():
     train_loader = DataLoader(train_dataset_commit, batch_size=config['BATCH_SIZE'])
     val_loader = DataLoader(val_dataset_commit, batch_size=config['VAL_BATCH_SIZE'])
 
+    print("Train:", len(train_dataset_commit))
+    print("Val:", len(val_dataset_commit))
+    #print("Test:", len(test_dataset_commit))
+
     commit_message_generator = run_train(train_loader, val_loader,
                                          'commit_msg_generator', config=config)
     return commit_message_generator
