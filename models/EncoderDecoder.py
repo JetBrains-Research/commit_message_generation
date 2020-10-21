@@ -61,9 +61,8 @@ class EncoderDecoder(nn.Module):
         encoder_output, _, encoder_final = self.encoder(input_ids, attention_mask=attention_mask,
                                                         output_hidden_states=True)
         encoder_output = encoder_output.to(self.device)
-        t = encoder_final.shape[2] - 1
+        t = encoder_final[0].shape[1] - 1
         encoder_final = torch.stack(encoder_final)[:, :, t, :].to(self.device)
-
         return encoder_output, encoder_final
 
     def decode(self, batch, encoder_output, encoder_final, src_mask, decoder_hidden=None):
