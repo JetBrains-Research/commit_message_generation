@@ -15,23 +15,22 @@ class Decoder(nn.Module):
         self.attention = attention
         self.dropout = dropout
         # TODO: dimensions with attention output don't match if use any other # layers than 13?
-        # TODO: why prev_embed.size(-1) is 1?
-        self.rnn = nn.GRU(hidden_size_encoder + 1, hidden_size, num_layers=13,
+        self.rnn = nn.GRU(hidden_size_encoder + emb_size, hidden_size, num_layers=13,
                           batch_first=True, dropout=dropout)
 
         # to initialize from the final encoder state
         self.bridge = nn.Linear(hidden_size_encoder, hidden_size, bias=True) if bridge else None
 
         self.dropout_layer = nn.Dropout(p=dropout)
-        self.pre_output_layer = nn.Linear(hidden_size_encoder + hidden_size + 1,
+        self.pre_output_layer = nn.Linear(hidden_size_encoder + hidden_size + emb_size,
                                           hidden_size, bias=False)
 
     def forward_step(self, prev_embed, encoder_output, src_mask, proj_key, hidden):
         """Perform a single decoder step (1 word)
 
-        :param prev_embed: [B, 1, EmbCode] // Actual: [batch_size, 1, 1] TODO: what is EmbCode?
+        :param prev_embed: [batch_size, 1, hidden_size_encoder]
         :param encoder_output: [batch_size, sequence_length, hidden_size_encoder]
-        :param src_mask: [B, 1, SrcSeqLen] // Actual: [1, sequence_length]
+        :param src_mask: [batch_size, 1, sequence_length]
         :param proj_key: [batch_size, sequence_length, hidden_size_decoder]
         :param hidden: [batch_size, hidden_size_decoder]
         :return: Tuple[[batch_size, 1, hidden_size_decoder],
@@ -40,14 +39,11 @@ class Decoder(nn.Module):
 
         # compute context vector using attention mechanism
         query = hidden[-1].unsqueeze(1)  # [#layers, B, D] -> [B, 1, D]
-        print("Decoder forward step")
+
         context, attn_probs = self.attention(
             query=query, proj_key=proj_key,
             value=encoder_output, mask=src_mask)
-        print("prev_embed shape:", prev_embed.shape)
-        print("prev embed:", prev_embed)
-        print("context shape:", context.shape)
-        print("context:", context)
+
         # update rnn hidden state
         rnn_input = torch.cat([prev_embed, context], dim=2)
 
@@ -56,18 +52,17 @@ class Decoder(nn.Module):
         pre_output = torch.cat([prev_embed, output, context], dim=2)
         pre_output = self.dropout_layer(pre_output)
         pre_output = self.pre_output_layer(pre_output)
-
         return output, hidden, pre_output
 
-    def forward(self, batch, encoder_output, encoder_final,
+    def forward(self, trg_embed, trg_mask, encoder_output, encoder_final,
                 src_mask, hidden=None, max_len=None):
         """
         Unroll the decoder one step at a time.
-        TODO: check dimensions of arguments
-        :param batch:
+        :param trg_embed: [batch_size, target_sequence_length, hidden_size_encoder]
+        :param trg_mask: [batch_size, 1, target_sequence_length]
         :param encoder_output: [batch_size, sequence_length, hidden_size_encoder]
         :param encoder_final: [num_layers, batch_size, hidden_size_encoder]
-        :param src_mask: [B, 1, SrcSeqLen] // Actual: [1, sequence_length]
+        :param src_mask: [batch_size, 1, sequence_length]
         :param hidden: decoder hidden state
         :param max_len: the maximum number of steps to unroll the RNN
         :return: Tuple[
@@ -75,8 +70,7 @@ class Decoder(nn.Module):
                  [num_layers, batch_size, hidden_size_decoder],
                  [batch_size, target_sequence_length, hidden_size_decoder]]
         """
-        trg_embed = batch['input_ids'].unsqueeze(2)  # [B, TrgSeqLen, EmbCode]
-        trg_mask = batch['attention_mask'].unsqueeze(1)
+        trg_embed = trg_embed  # [B, TrgSeqLen, EmbCode]
 
         # the maximum number of steps to unroll the RNN
         if max_len is None:

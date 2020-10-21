@@ -9,7 +9,6 @@ from transformers import RobertaModel
 
 
 class EncoderDecoder(nn.Module):
-    # TODO: deal with layers dimensions properly in decoder, attention and generator
     """
     Model with Encoder-Decoder architecture.
 
@@ -27,15 +26,21 @@ class EncoderDecoder(nn.Module):
 
     def forward(self, batch):
         """Process masked src and target sequences."""
-        encoder_output, encoder_final = self.encode(batch)
-        return self.decode(batch['target'], encoder_output, encoder_final,
-                           src_mask=batch['attention_mask'].unsqueeze(1))
+        encoder_output, encoder_final = self.encode(batch['input_ids'], batch['attention_mask'])
+        # TODO: embeddings from RoBERTa as input to decoder?
+        trg_embed = self.get_embeddings(batch['target']['input_ids'], batch['target']['attention_mask'])
+        return self.decode(trg_embed=trg_embed,
+                           trg_mask=batch['target']['attention_mask'].unsqueeze(1).to(self.device),
+                           encoder_output=encoder_output,
+                           encoder_final=encoder_final,
+                           src_mask=batch['attention_mask'].unsqueeze(1).to(self.device))
 
-    def encode(self, batch) -> Tuple[Tensor, Tensor]:
+    def encode(self, input_ids, attention_mask) -> Tuple[Tensor, Tensor]:
         """
         Encodes prev and updated sequences.
 
-        :param batch: batch to process
+        :param input_ids
+        :param attention_mask
 
         :return: Tuple[[batch_size, sequence_length, hidden_size_encoder],
          [num_layers, batch_size, hidden_size_encoder]]
@@ -56,18 +61,26 @@ class EncoderDecoder(nn.Module):
         Then take hidden states for t = sequence_length: torch.FloatTensor of shape
         (num_layers, batch_size, hidden_size).
         """
-        input_ids = batch['input_ids'].to(self.device)
-        attention_mask = batch['attention_mask'].to(self.device)
-        encoder_output, _, encoder_final = self.encoder(input_ids, attention_mask=attention_mask,
+        encoder_output, _, encoder_final = self.encoder(input_ids=input_ids,
+                                                        attention_mask=attention_mask,
                                                         output_hidden_states=True)
-        encoder_output = encoder_output.to(self.device)
+        encoder_output = encoder_output
         t = encoder_final[0].shape[1] - 1
-        encoder_final = torch.stack(encoder_final)[:, :, t, :].to(self.device)
+        encoder_final = torch.stack(encoder_final)[:, :, t, :]
         return encoder_output, encoder_final
 
-    def decode(self, batch, encoder_output, encoder_final, src_mask, decoder_hidden=None):
-        src_mask = src_mask.to(self.device)
-        batch['input_ids'] = batch['input_ids'].to(self.device)
-        batch['attention_mask'] = batch['attention_mask'].to(self.device)
-        return self.decoder(batch, encoder_output, encoder_final,
-                            src_mask, hidden=decoder_hidden)
+    def get_embeddings(self, input_ids, attention_mask) -> Tuple[Tensor, Tensor]:
+        """
+        Returns embeddings for input sequence.
+
+        :param input_ids
+        :param attention_mask
+
+        :return: [batch_size, sequence_length, hidden_size_encoder]
+        """
+        output = self.encoder(input_ids, attention_mask=attention_mask)
+        return output[-1][-1]  # TODO: double-check that that is indeed RoBERTa embeddings
+
+    def decode(self, trg_embed, trg_mask, encoder_output, encoder_final, src_mask, hidden=None):
+        return self.decoder(trg_embed, trg_mask, encoder_output, encoder_final,
+                            src_mask, hidden=hidden)
