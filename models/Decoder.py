@@ -41,11 +41,13 @@ class Decoder(nn.Module):
         # compute context vector using attention mechanism
         query = hidden[-1].unsqueeze(1)  # [#layers, B, D] -> [B, 1, D]
         print("Decoder forward step")
-        print("Query shape:", query.shape)
         context, attn_probs = self.attention(
             query=query, proj_key=proj_key,
             value=encoder_output, mask=src_mask)
         print("prev_embed shape:", prev_embed.shape)
+        print("prev embed:", prev_embed)
+        print("context shape:", context.shape)
+        print("context:", context)
         # update rnn hidden state
         rnn_input = torch.cat([prev_embed, context], dim=2)
 
@@ -73,12 +75,8 @@ class Decoder(nn.Module):
                  [num_layers, batch_size, hidden_size_decoder],
                  [batch_size, target_sequence_length, hidden_size_decoder]]
         """
-        print("trg_embed shape before unsqueeze:", batch['input_ids'].shape)
-        trg_embed = batch['input_ids'].unsqueeze(2)
-        print("trg_embed shape after unsqueeze:", trg_embed.shape)  # [B, TrgSeqLen, EmbCode]
+        trg_embed = batch['input_ids'].unsqueeze(2)  # [B, TrgSeqLen, EmbCode]
         trg_mask = batch['attention_mask'].unsqueeze(1)
-        print("trg_mask shape", trg_mask.shape)
-        print("src_mask shape", src_mask.shape)
 
         # the maximum number of steps to unroll the RNN
         if max_len is None:
