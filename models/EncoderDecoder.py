@@ -61,7 +61,8 @@ class EncoderDecoder(nn.Module):
         encoder_output, _, encoder_final = self.encoder(input_ids, attention_mask=attention_mask,
                                                         output_hidden_states=True)
         encoder_output = encoder_output.to(self.device)
-        encoder_final = torch.stack(encoder_final)[:, :, 511, :].to(self.device)  # TODO: pass sequence_length
+        t = encoder_final.shape[2] - 1
+        encoder_final = torch.stack(encoder_final)[:, :, t, :].to(self.device)
 
         return encoder_output, encoder_final
 
