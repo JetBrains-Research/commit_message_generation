@@ -94,7 +94,7 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
         prev_y = torch.ones(1, 1).fill_(sos_index).type_as(batch['input_ids'])
         trg_mask = torch.ones_like(prev_y)
 
-    output = torch.zeros((batch.nseqs, max_len))
+    output = torch.zeros((1, max_len))
     attention_scores = []
     hidden = None
 
