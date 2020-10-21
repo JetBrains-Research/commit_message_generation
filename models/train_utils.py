@@ -90,7 +90,7 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
     eos_index = tokenizer.eos_token_id
 
     with torch.no_grad():
-        encoder_output, encoder_final = model.encode(batch)
+        encoder_output, encoder_final = model.encode(batch['input_ids'], batch['attention_mask'])
         prev_y = torch.ones(1, 1).fill_(sos_index).type_as(batch['input_ids'])
         trg_mask = torch.ones_like(prev_y)
 
