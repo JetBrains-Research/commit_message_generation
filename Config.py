@@ -25,7 +25,7 @@ class Config:
         'MAX_NUM_OF_EPOCHS': {'cmg': 5000},
         'WORD_EMBEDDING_SIZE': 512,  # used in pretrained CodeBERT
         'ENCODER_HIDDEN_SIZE': 768,  # used in pretrained CodeBERT
-        'DECODER_HIDDEN_SIZE': 256,
+        'DECODER_HIDDEN_SIZE': 32,
         'NUM_LAYERS': 2,
         'TEACHER_FORCING_RATIO': 0.9,
         'DROPOUT': 0.2,
@@ -39,7 +39,7 @@ class Config:
         'START_BEST_FROM_EPOCH': 0,
         'LEAVE_ONLY_CHANGED': True,
         'VERBOSE': True,
-        'BATCH_SIZE': 2,  # TODO: all model.forward() functions work differently for actual batches?
+        'BATCH_SIZE': 1,  # TODO: all model.forward() functions work differently for actual batches?
         'TSNE_BATCH_SIZE': 1024,
         'VAL_BATCH_SIZE': 1,
         'TEST_BATCH_SIZE': 1,
