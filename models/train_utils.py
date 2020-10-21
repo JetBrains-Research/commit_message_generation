@@ -147,6 +147,7 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
         trg = trg[:-1] if trg[-1] == eos_index else trg
 
         result = greedy_decode(model, batch, tokenizer, max_len=max_len)
+        print("Greedy decode result", result)
 
         print("Example #%d" % (i + 1))
         print("Src : ", tokenizer.decode(src, skip_special_tokens=True))

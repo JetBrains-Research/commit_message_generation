@@ -56,9 +56,9 @@ class CommitMessageGenerationDataset(Dataset):
                 msgs.append(msg_line)
         if small:
             return CommitMessageGenerationDataset(
-                src_encodings=codebert_tokenizer(prevs[:50], upds[:50], truncation=True,
+                src_encodings=codebert_tokenizer(prevs[:1000], upds[:1000], truncation=True,
                                                  padding=True, return_tensors='pt'),
-                trg_encodings=codebert_tokenizer(msgs[:50], truncation=True, padding=True,
+                trg_encodings=codebert_tokenizer(msgs[:1000], truncation=True, padding=True,
                                                  return_tensors='pt'))
         return CommitMessageGenerationDataset(src_encodings=codebert_tokenizer(prevs, upds, truncation=True,
                                                                                padding=True, return_tensors='pt'),
