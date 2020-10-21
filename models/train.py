@@ -62,7 +62,7 @@ def train(model: EncoderDecoder, tokenizer: RobertaTokenizer,
         model.eval()
         with torch.no_grad():
             print_examples(val_iter,
-                           model, tokenizer, max_len=config['TOKENS_CODE_CHUNK_MAX_LEN'], n=3)
+                           model, tokenizer, max_len=config['TOKENS_CODE_CHUNK_MAX_LEN'])
 
             val_perplexity = run_epoch(val_iter,
                                        model, val_loss_function,
@@ -147,9 +147,9 @@ def main():
     print('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n', end='')
     print("--Constructing datasets--")
     train_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'),
-                                                                    config, small=True)
+                                                                    config, size=1000)
     val_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'),
-                                                                  config, small=True)
+                                                                  config, size=100)
     #test_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'), config)
 
     train_loader = DataLoader(train_dataset_commit, batch_size=config['BATCH_SIZE'])

@@ -28,7 +28,7 @@ class CommitMessageGenerationDataset(Dataset):
         return len(self.src_encodings.input_ids)
 
     @staticmethod
-    def load_data(path: str, config: Config, small=False, verbose=False):
+    def load_data(path: str, config: Config, size=None, verbose=False):
         codebert_tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")
 
         filter_pred = create_filter_predicate_on_code_and_msg(config['TOKENS_CODE_CHUNK_MAX_LEN'],
@@ -54,11 +54,11 @@ class CommitMessageGenerationDataset(Dataset):
                 prevs.append(prev_line)
                 upds.append(updated_line)
                 msgs.append(msg_line)
-        if small:
+        if size:
             return CommitMessageGenerationDataset(
-                src_encodings=codebert_tokenizer(prevs[:1000], upds[:1000], truncation=True,
+                src_encodings=codebert_tokenizer(prevs[:size], upds[:size], truncation=True,
                                                  padding=True, return_tensors='pt'),
-                trg_encodings=codebert_tokenizer(msgs[:1000], truncation=True, padding=True,
+                trg_encodings=codebert_tokenizer(msgs[:size], truncation=True, padding=True,
                                                  return_tensors='pt'))
         return CommitMessageGenerationDataset(src_encodings=codebert_tokenizer(prevs, upds, truncation=True,
                                                                                padding=True, return_tensors='pt'),
