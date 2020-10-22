@@ -22,7 +22,7 @@ class Config:
         'DEVICE': torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
         'TOKEN_MIN_FREQ': 1,
         'LEARNING_RATE': 0.0001,
-        'MAX_NUM_OF_EPOCHS': 5,
+        'MAX_NUM_OF_EPOCHS': 2,
         'WORD_EMBEDDING_SIZE': 768,  # used in pretrained CodeBERT
         'ENCODER_HIDDEN_SIZE': 768,  # used in pretrained CodeBERT
         'DECODER_HIDDEN_SIZE': 256,
@@ -39,7 +39,7 @@ class Config:
         'START_BEST_FROM_EPOCH': 0,
         'LEAVE_ONLY_CHANGED': True,
         'VERBOSE': True,
-        'BATCH_SIZE': 8,
+        'BATCH_SIZE': 16,
         'TSNE_BATCH_SIZE': 1024,
         'VAL_BATCH_SIZE': 1,
         'TEST_BATCH_SIZE': 1,
