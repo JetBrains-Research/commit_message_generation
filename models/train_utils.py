@@ -1,6 +1,6 @@
 import math
 import time
-from typing import Generator
+from typing import Generator, Iterable, List, Iterator, Tuple
 from transformers import RobertaTokenizer
 from datetime import timedelta
 
@@ -107,6 +107,7 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
             # a combination of Decoder state, prev emb, and context
             prob = model.generator(pre_output[:, -1])  # [B, V]
         _, next_words = torch.max(prob, dim=1)
+        print("Max prob", tokenizer.decode(next_words))
         output[:, i] = next_words
         prev_y[:, 0] = next_words
 
@@ -131,7 +132,6 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
     print()
 
     eos_index = tokenizer.eos_token_id
-    sos_index = tokenizer.bos_token_id
 
     for i, batch in enumerate(example_iter):
         batch['input_ids'] = batch['input_ids'].to(model.device)
@@ -158,3 +158,51 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
         count += 1
         if count == n:
             break
+
+
+def calculate_accuracy(dataset_iterator: Iterable,
+                       model: EncoderDecoder,
+                       tokenizer: RobertaTokenizer,
+                       max_len: int,
+                       config: Config) -> float:
+    sos_index = tokenizer.bos_token_id
+    eos_index = tokenizer.eos_token_id
+
+    correct = 0
+    total = 0
+    for batch in dataset_iterator:
+        targets = remove_eos(batch, eos_index)
+
+        results = greedy_decode(model, batch, tokenizer, max_len)
+        for i in range(len(targets)):
+            if np.all(targets[i] == results[i]):
+                correct += 1
+            total += 1
+    return correct / total
+
+
+def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator, tokenizer: RobertaTokenizer,
+                             decode_method, eos_index) \
+        -> Tuple[List[int], int, List[List[str]]]:
+    correct = [0 for _ in range(len(topk_values))]
+    max_k = topk_values[-1]
+    total = 0
+    max_top_k_results = []
+    for batch in dataset_iterator:
+        targets = remove_eos(batch, eos_index)
+        results = decode_method(batch)
+        for example_id in range(len(results)):
+            target = targets[example_id]
+            example_top_k_results = results[example_id][:max_k]
+            decoded_tokens = [tokenizer.decode(result, skip_special_tokens=True) for result in example_top_k_results]
+            max_top_k_results.append(decoded_tokens)
+            tail_id = 0
+            for i, result in enumerate(example_top_k_results):
+                if i + 1 > topk_values[tail_id]:
+                    tail_id += 1
+                if len(result) == len(target) and np.all(result == target):
+                    for j in range(tail_id, len(correct)):
+                        correct[j] += 1
+                    break
+        total += len(batch)
+    return correct, total, max_top_k_results
