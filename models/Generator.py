@@ -15,5 +15,4 @@ class GeneratorModel(nn.Module):
         :return: [batch_size, target_sequence_length, vocab_size]
         """
         res = F.log_softmax(self.proj(x), dim=-1)
-        print("generator(x):", res.shape)
         return res
