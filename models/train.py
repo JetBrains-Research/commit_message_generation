@@ -30,7 +30,8 @@ def train(model: EncoderDecoder, tokenizer: RobertaTokenizer,
     :param config: config of execution
     :return: train and validation perplexities for each epoch
     """
-    criterion = nn.NLLLoss(reduction="sum")
+    pad_index = tokenizer.pad_token_id
+    criterion = nn.NLLLoss(reduction="sum", ignore_index=pad_index)
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=config['LEARNING_RATE'])
 
     train_batches_num: int = len(train_iter)
