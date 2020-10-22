@@ -2,9 +2,9 @@ import subprocess
 import tempfile
 from typing import List, Tuple
 
-from torchtext.data import Dataset
+from Config import Config
 
-from neural_editor.seq2seq.config import Config
+# TODO: test BleuCalculation
 
 
 def isfloat(value):
@@ -22,7 +22,7 @@ class BleuCalculation:
 
     def get_bleu_script_output(self, predictions, dataset) -> Tuple[str, str]:
         top_1_predictions = ['' if len(prediction) == 0 else ' '.join(prediction[0]) for prediction in predictions]
-        targets = [' '.join(example) for example in dataset]  # TODO
+        targets = [' '.join(example) for example in dataset]
         with tempfile.NamedTemporaryFile(mode='w') as file_with_targets:
             file_with_targets.write('\n'.join(targets))
             file_with_targets.flush()
@@ -31,13 +31,13 @@ class BleuCalculation:
             result = process.communicate(input=('\n'.join(top_1_predictions)).encode())
             return result
 
-    def conduct(self, predictions: List[List[List[str]]], dataset: Dataset, dataset_label: str) -> None:
+    def conduct(self, predictions: List[List[str]], dataset, dataset_label: str) -> None:
         print(f'Start conducting BLEU calculation experiment for {dataset_label}...')
         result = self.get_bleu_script_output(predictions, dataset)
         print(result[0])
         print(f'Errors: {result[1]}')
 
-    def get_bleu_score(self, predictions: List[List[List[str]]], dataset: Dataset) -> float:
+    def get_bleu_score(self, predictions: List[List[List[str]]], dataset) -> float:
         result = self.get_bleu_script_output(predictions, dataset)
         print(result[0])
         words = result[0].split()
