@@ -59,7 +59,7 @@ class Decoder(nn.Module):
         """
         Unroll the decoder one step at a time.
         :param trg_embed: [batch_size, target_sequence_length, hidden_size_encoder]
-        :param trg_mask: [batch_size, 1, target_sequence_length]
+        :param trg_mask: [batch_size, target_sequence_length]
         :param encoder_output: [batch_size, sequence_length, hidden_size_encoder]
         :param encoder_final: [num_layers, batch_size, hidden_size_encoder]
         :param src_mask: [batch_size, 1, sequence_length]

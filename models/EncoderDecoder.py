@@ -29,17 +29,8 @@ class EncoderDecoder(nn.Module):
         encoder_output, encoder_final = self.encode(batch['input_ids'], batch['attention_mask'])
         # TODO: embeddings from RoBERTa as input to decoder?
         trg_embed = self.get_embeddings(batch['target']['input_ids'], batch['target']['attention_mask'])
-        print("trg_embed in decoder")
-        print(trg_embed.shape)
-        print("trg_mask in decoder")
-        print(batch['target']['attention_mask'].unsqueeze(1).shape)
-        print("target[input_ids]")
-        print(batch['target']['input_ids'].shape)
-        print("target[attention_mask]")
-        print(batch['target']['attention_mask'].shape)
-        print()
         return self.decode(trg_embed=trg_embed,
-                           trg_mask=batch['target']['attention_mask'].unsqueeze(1).to(self.device),
+                           trg_mask=batch['target']['attention_mask'],
                            encoder_output=encoder_output,
                            encoder_final=encoder_final,
                            src_mask=batch['attention_mask'].unsqueeze(1).to(self.device))
