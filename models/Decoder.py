@@ -70,8 +70,6 @@ class Decoder(nn.Module):
                  [num_layers, batch_size, hidden_size_decoder],
                  [batch_size, target_sequence_length, hidden_size_decoder]]
         """
-        trg_embed = trg_embed  # [B, TrgSeqLen, EmbCode]
-
         # the maximum number of steps to unroll the RNN
         if max_len is None:
             max_len = trg_mask.size(-1)

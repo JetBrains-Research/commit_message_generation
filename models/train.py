@@ -147,9 +147,9 @@ def main():
     print('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n', end='')
     print("--Constructing datasets--")
     train_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'),
-                                                                    config)
+                                                                    config, size=1000)
     val_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'),
-                                                                  config)
+                                                                  config, size=100)
     #test_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'), config)
 
     train_loader = DataLoader(train_dataset_commit, batch_size=config['BATCH_SIZE'])

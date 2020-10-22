@@ -105,9 +105,13 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
                                                    batch['attention_mask'].unsqueeze(1), hidden=hidden)
             # we predict from the pre-output layer, which is
             # a combination of Decoder state, prev emb, and context
-            prob = model.generator(pre_output[:, -1])  # [B, V]
+            print("Pre_output:", pre_output.shape)
+            print(pre_output[:, -1])
+            print("Option 1", model.generator(pre_output[:, -1]).shape)
+            print("Option 2", model.generator(pre_output)[:, -1].shape)
+            print("Option 3", model.generator(pre_output).shape)
+            prob = model.generator(pre_output[:, -1])  # [batch_size, vocab_size]
         _, next_words = torch.max(prob, dim=1)
-        print("Max prob", tokenizer.decode(next_words))
         output[:, i] = next_words
         prev_y[:, 0] = next_words
 
@@ -126,7 +130,7 @@ def remove_eos(batch: np.array, eos_index: int):
 
 
 def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: RobertaTokenizer,
-                   n=2, max_len=100) -> None:
+                   n=10, max_len=100) -> None:
     """Prints N examples. Assumes batch size of 1."""
     count = 0
     print()

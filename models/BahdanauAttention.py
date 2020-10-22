@@ -39,9 +39,15 @@ class BahdanauAttention(nn.Module):
         scores = self.energy_layer(torch.tanh(query + proj_key))  # [batch_size, sequence_length, 1]
         scores = scores.squeeze(2).unsqueeze(1)  # [batch_size, 1, sequence_length]
 
+        print("scores before masked fill")
+        print(scores)
+
         # Mask out invalid positions.
         # The mask marks valid positions so we invert it using `mask & 0`.
         scores.data.masked_fill_(mask == 0, -float('inf'))
+
+        print("scores after masked fill")
+        print(scores)
 
         # Turn scores to probabilities.
         alphas = F.softmax(scores, dim=-1)
