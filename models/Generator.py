@@ -9,4 +9,11 @@ class GeneratorModel(nn.Module):
         self.proj = nn.Linear(hidden_size, vocab_size, bias=False)
 
     def forward(self, x):
-        return F.log_softmax(self.proj(x), dim=-1)
+        """
+        Projects hidden representation to vocabulary size vector and then softmax to probabilities.
+        :param x: [batch_size, target_sequence_length, hidden_size_decoder]
+        :return: [batch_size, target_sequence_length, vocab_size]
+        """
+        res = F.log_softmax(self.proj(x), dim=-1)
+        print("generator(x):", res.shape)
+        return res
