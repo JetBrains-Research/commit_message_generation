@@ -91,7 +91,7 @@ def save_model(model: nn.Module, model_suffix: str, config: Config) -> None:
 
 def load_weights_of_best_model_on_validation(model: nn.Module, suffix: str, config: Config) -> None:
     model.load_state_dict(torch.load(os.path.join(config['OUTPUT_PATH'],
-                                                  f'best_on_validation_{suffix}.pt')))
+                                                  f'best_on_validation_{suffix}')))
 
 
 def save_data_on_checkpoint(model: nn.Module,
@@ -147,7 +147,7 @@ def main():
     print('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n', end='')
     print("--Constructing datasets--")
     train_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'),
-                                                                    config, size=1000)
+                                                                    config, size=100)
     val_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'),
                                                                   config, size=100)
     #test_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'), config)
