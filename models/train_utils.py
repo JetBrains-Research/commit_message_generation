@@ -106,8 +106,9 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
                                                    batch['attention_mask'].unsqueeze(1), hidden=hidden)
             # we predict from the pre-output layer, which is
             # a combination of Decoder state, prev emb, and context
-            prob = model.generator(pre_output)[:, -1]  # [batch_size, vocab_size]
+            prob = model.generator(pre_output[:, -1])  # [batch_size, vocab_size]
         _, next_words = torch.topk(prob, 2)
+        print("top 2 probs", tokenizer.decode(next_words))
         # choose next value if <pad> has max probability
         # TODO: i think normally <pad> shouldn't have max probability :(
         next_words = next_words.squeeze()
@@ -116,6 +117,7 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
         prev_y[:, 0] = next_words
 
     output = output.cpu().long().numpy()
+    print("greedy decode output", output)
     return remove_eos(output, eos_index)
 
 
