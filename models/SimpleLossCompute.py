@@ -12,7 +12,10 @@ class SimpleLossCompute:
         :param norm: normalizing coefficient (usually batch size)
         :return: float
         """
-        x = self.generator(x)
+        x = self.generator(x)  # [batch_size, target_sequence_length, vocab_size]
+        print("Loss")
+        print(x.contiguous().view(-1, x.size(-1)))
+        print(y.contiguous().view(-1))
 
         loss = self.criterion(x.contiguous().view(-1, x.size(-1)),
                               y.contiguous().view(-1))
