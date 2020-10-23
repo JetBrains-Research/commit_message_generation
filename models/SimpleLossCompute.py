@@ -14,11 +14,13 @@ class SimpleLossCompute:
         """
         x = self.generator(x)  # [batch_size, target_sequence_length, vocab_size]
         print("Loss")
-        print(x.contiguous().view(-1, x.size(-1)))
-        print(y.contiguous().view(-1))
+        print(x.contiguous().view(-1, x.size(-1)).shape)
+        print(x.shape)
+        print(y.contiguous().view(-1).shape)
+        print(y.shape)
 
-        loss = self.criterion(x.contiguous().view(-1, x.size(-1)),
-                              y.contiguous().view(-1))
+        loss = self.criterion(x, y)
+
         loss = loss / norm
 
         if self.opt is not None:
