@@ -6,6 +6,12 @@ class SimpleLossCompute:
         self.opt = opt
 
     def __call__(self, x, y, norm):
+        """
+        :param x: [batch_size, target_sequence_length, decoder_hidden_size]
+        :param y: [batch_size, target_sequence_length]
+        :param norm: normalizing coefficient (usually batch size)
+        :return: float
+        """
         x = self.generator(x)
 
         loss = self.criterion(x.contiguous().view(-1, x.size(-1)),

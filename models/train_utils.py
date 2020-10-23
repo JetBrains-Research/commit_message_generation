@@ -88,6 +88,7 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
     """Greedily decode a sentence."""
     sos_index = tokenizer.bos_token_id
     eos_index = tokenizer.eos_token_id
+    pad_index = tokenizer.pad_token_id
 
     with torch.no_grad():
         encoder_output, encoder_final = model.encode(batch['input_ids'], batch['attention_mask'])
@@ -106,7 +107,11 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
             # we predict from the pre-output layer, which is
             # a combination of Decoder state, prev emb, and context
             prob = model.generator(pre_output)[:, -1]  # [batch_size, vocab_size]
-        _, next_words = torch.max(prob, dim=1)
+        _, next_words = torch.topk(prob, 2)
+        # choose next value if <pad> has max probability
+        # TODO: i think normally <pad> shouldn't have max probability :(
+        next_words = next_words.squeeze()
+        next_words = next_words[:1] if next_words[0] != pad_index else next_words[1:]
         output[:, i] = next_words
         prev_y[:, 0] = next_words
 
@@ -151,7 +156,7 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
         print("Example #%d" % (i + 1))
         print("Src : ", tokenizer.decode(src, skip_special_tokens=True))
         print("Trg : ", tokenizer.decode(trg, skip_special_tokens=True))
-        print("Pred: ", tokenizer.decode(result[0], skip_special_tokens=True))
+        print("Pred: ", tokenizer.decode(result[0]))
         print()
 
         count += 1
