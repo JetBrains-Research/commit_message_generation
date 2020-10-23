@@ -65,10 +65,10 @@ class Decoder(nn.Module):
         :param src_mask: [batch_size, 1, sequence_length]
         :param hidden: decoder hidden state
         :param max_len: the maximum number of steps to unroll the RNN
-        :return: Tuple[
-                 [batch_size, target_sequence_length, hidden_size_decoder],
-                 [num_layers, batch_size, hidden_size_decoder],
-                 [batch_size, target_sequence_length, hidden_size_decoder]]
+        :return: decoder_states: [batch_size, target_sequence_length, hidden_size_decoder],
+                 hidden: [num_layers, batch_size, hidden_size_decoder],
+                 pre_output: [batch_size, target_sequence_length, hidden_size_decoder]]
+                 (pre_output is a concatenation of prev_embed, output from RNN and context from attention)
         """
         # the maximum number of steps to unroll the RNN
         if max_len is None:
