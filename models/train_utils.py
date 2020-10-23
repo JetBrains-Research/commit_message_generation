@@ -108,10 +108,10 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
             # a combination of Decoder state, prev emb, and context
             prob = model.generator(pre_output[:, -1])  # [batch_size, vocab_size]
         _, next_words = torch.topk(prob, 2)
-        print("top 2 probs", tokenizer.decode(next_words))
         # choose next value if <pad> has max probability
         # TODO: i think normally <pad> shouldn't have max probability :(
         next_words = next_words.squeeze()
+        print("top 2 probs", tokenizer.decode(next_words))
         next_words = next_words[:1] if next_words[0] != pad_index else next_words[1:]
         output[:, i] = next_words
         prev_y[:, 0] = next_words
