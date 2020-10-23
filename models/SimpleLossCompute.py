@@ -13,14 +13,11 @@ class SimpleLossCompute:
         :return: float
         """
         x = self.generator(x)  # [batch_size, target_sequence_length, vocab_size]
-        print("Loss")
-        print(x.contiguous().view(-1, x.size(-1)).shape)
-        print(x.shape)
-        print(y.contiguous().view(-1).shape)
-        print(y.shape)
+        # x.contiguous().view(-1, x.size(-1) - [batch_size * target_sequence_length, vocab_size]
+        # y.contiguous().view(-1) - [batch_size * target_sequence_length]
 
-        loss = self.criterion(x, y)
-
+        loss = self.criterion(x.contiguous().view(-1, x.size(-1)),
+                              y.contiguous().view(-1))
         loss = loss / norm
 
         if self.opt is not None:
