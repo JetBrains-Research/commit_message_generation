@@ -115,7 +115,7 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
         prev_y[:, 0] = next_word  # change prev id to generated id
         attention_scores.append(model.decoder.attention.alphas.cpu().numpy())
 
-    output = output.cpu().long().numpy()
+    output = np.array(output)
     print("Greedy decode output", output)
     return output, np.concatenate(attention_scores, axis=1)
 
