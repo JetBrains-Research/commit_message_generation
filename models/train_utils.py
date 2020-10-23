@@ -88,14 +88,13 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
     """Greedily decode a sentence."""
     sos_index = tokenizer.bos_token_id
     eos_index = tokenizer.eos_token_id
-    pad_index = tokenizer.pad_token_id
 
     with torch.no_grad():
         encoder_output, encoder_final = model.encode(batch['input_ids'], batch['attention_mask'])
-        prev_y = torch.ones(1, 1).fill_(sos_index).type_as(batch['input_ids'])
+        prev_y = torch.tensor([[sos_index]]).type_as(batch['input_ids'])
         trg_mask = torch.ones_like(prev_y)
 
-    output = torch.zeros((1, max_len))
+    output = []
     attention_scores = []
     hidden = None
 
@@ -107,28 +106,18 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
             # we predict from the pre-output layer, which is
             # a combination of Decoder state, prev emb, and context
             prob = model.generator(pre_output[:, -1])  # [batch_size, vocab_size]
-        _, next_words = torch.topk(prob, 2)
-        # choose next value if <pad> has max probability
-        # TODO: i think normally <pad> shouldn't have max probability :(
-        next_words = next_words.squeeze()
-        print("top 2 probs", tokenizer.decode(next_words))
-        next_words = next_words[:1] if next_words[0] != pad_index else next_words[1:]
-        output[:, i] = next_words
-        prev_y[:, 0] = next_words
+        _, next_word = torch.max(prob, dim=1)
+        # stop when we reach first <EOS>
+        if next_word.item() == eos_index:
+            break
+        # TODO: i think normally <pad> and <s> shouldn't have max probability :(
+        output.append(next_word)
+        prev_y[:, 0] = next_word  # change prev id to generated id
+        attention_scores.append(model.decoder.attention.alphas.cpu().numpy())
 
     output = output.cpu().long().numpy()
-    print("greedy decode output", output)
-    return remove_eos(output, eos_index)
-
-
-def remove_eos(batch: np.array, eos_index: int):
-    result = []
-    for sequence in batch:
-        eos = np.where(sequence == eos_index)[0]
-        if eos.shape[0] > 0:
-            sequence = sequence[:eos[0]]
-        result.append(sequence)
-    return result
+    print("Greedy decode output", output)
+    return output, np.concatenate(attention_scores, axis=1)
 
 
 def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: RobertaTokenizer,
@@ -136,8 +125,6 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
     """Prints N examples. Assumes batch size of 1."""
     count = 0
     print()
-
-    eos_index = tokenizer.eos_token_id
 
     for i, batch in enumerate(example_iter):
         batch['input_ids'] = batch['input_ids'].to(model.device)
@@ -148,17 +135,12 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
         src = batch['input_ids'].cpu().numpy()[0, :]
         trg = batch['target']['input_ids'].cpu().numpy()[0, :]
 
-        # remove <s></s> (if it is there)
-        src = src[:-1] if src[-1] == eos_index else src
-        trg = trg[:-1] if trg[-1] == eos_index else trg
-
-        result = greedy_decode(model, batch, tokenizer, max_len=max_len)
-        print("Greedy decode result", result)
+        result, _ = greedy_decode(model, batch, tokenizer, max_len=max_len)
 
         print("Example #%d" % (i + 1))
-        print("Src : ", tokenizer.decode(src, skip_special_tokens=True))
-        print("Trg : ", tokenizer.decode(trg, skip_special_tokens=True))
-        print("Pred: ", tokenizer.decode(result[0]))
+        print("Src : ", tokenizer.decode(src))
+        print("Trg : ", tokenizer.decode(trg))
+        print("Pred: ", tokenizer.decode(result))
         print()
 
         count += 1
@@ -171,13 +153,10 @@ def calculate_accuracy(dataset_iterator: Iterable,
                        tokenizer: RobertaTokenizer,
                        max_len: int,
                        config: Config) -> float:
-    sos_index = tokenizer.bos_token_id
-    eos_index = tokenizer.eos_token_id
-
     correct = 0
     total = 0
     for batch in dataset_iterator:
-        targets = remove_eos(batch, eos_index)
+        targets = batch['target']['input_ids']
 
         results = greedy_decode(model, batch, tokenizer, max_len)
         for i in range(len(targets)):
@@ -195,7 +174,7 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
     total = 0
     max_top_k_results = []
     for batch in dataset_iterator:
-        targets = remove_eos(batch, eos_index)
+        targets = batch['targets']['input_ids']
         results = decode_method(batch)
         for example_id in range(len(results)):
             target = targets[example_id]
