@@ -141,13 +141,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--train_size', type=int)
     parser.add_argument('--val_size', type=int)
+    parser.add_argument('--num_epoch', type=int)
     args = parser.parse_args()
     train_size = args.train_size
     val_size = args.val_size
+    num_epoch = args.num_epoch
 
     print("Current working directory:", os.getcwd())
 
     config = Config()
+    if num_epoch:
+        config['MAX_NUM_OF_EPOCHS'] = num_epoch
     print('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n', end='')
     print("--Constructing datasets--")
     train_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'),
