@@ -33,8 +33,8 @@ def make_model(emb_size: int,
     codebert_tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")  # need for vocab size only
 
     attention = BahdanauAttention(hidden_size_decoder, key_size=hidden_size_encoder, query_size=hidden_size_decoder)
-    generator = GeneratorModel(hidden_size_decoder, codebert_tokenizer.vocab_size)
     decoder = Decoder(emb_size, hidden_size_decoder, hidden_size_encoder, attention, num_layers, dropout, use_bridge)
+    generator = GeneratorModel(hidden_size_decoder, codebert_tokenizer.vocab_size)
 
     model: EncoderDecoder = EncoderDecoder(
         codebert_model,

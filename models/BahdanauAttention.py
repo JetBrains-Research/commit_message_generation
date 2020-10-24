@@ -16,7 +16,6 @@ class BahdanauAttention(nn.Module):
         self.key_layer = nn.Linear(key_size, hidden_size, bias=False)
         self.query_layer = nn.Linear(query_size, hidden_size, bias=False)
         self.energy_layer = nn.Linear(hidden_size, 1, bias=False)
-
         # to store attention scores
         self.alphas = None
 
@@ -32,7 +31,6 @@ class BahdanauAttention(nn.Module):
         assert mask is not None, "mask is required"
         # We first project the query (the decoder state).
         # The projected keys (the encoder states) were already pre-computed.
-
         query = self.query_layer(query)  # [batch_size, 1, hidden_size_decoder]
 
         # Calculate scores.
@@ -45,6 +43,7 @@ class BahdanauAttention(nn.Module):
 
         # Turn scores to probabilities.
         alphas = F.softmax(scores, dim=-1)
+
         self.alphas = alphas  # [batch_size, 1, sequence_length]
 
         # The context vector is the weighted sum of the values.

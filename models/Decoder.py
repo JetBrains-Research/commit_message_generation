@@ -27,11 +27,19 @@ class Decoder(nn.Module):
     def forward_step(self, prev_embed, encoder_output, src_mask, proj_key, hidden):
         """Perform a single decoder step (1 word)
 
-        :param prev_embed: [batch_size, 1, hidden_size_encoder]
-        :param encoder_output: [batch_size, sequence_length, hidden_size_encoder]
-        :param src_mask: [batch_size, 1, sequence_length]
+        :param prev_embed: embedding of previous target token
+        (tensor of shape [batch_size, 1, hidden_size_encoder])
+
+        :param encoder_output: sequence of hidden-states at the output of the last layer of the encoder
+        (tensor of shape [batch_size, sequence_length, hidden_size_encoder])
+
+        :param src_mask: attention mask for encoder_output with 0 for pad tokens and 1 for all others
+        (tensor of shape [batch_size, 1, sequence_length])
+
         :param proj_key: [batch_size, sequence_length, hidden_size_decoder]
+
         :param hidden: [batch_size, hidden_size_decoder]
+
         :return: Tuple[[batch_size, 1, hidden_size_decoder],
                        [num_layers, batch_size, hidden_size_decoder],
                        [batch_size, 1, hidden_size_decoder]]"""

@@ -62,6 +62,8 @@ def train(model: EncoderDecoder, tokenizer: RobertaTokenizer,
 
         model.eval()
         with torch.no_grad():
+            print_small_example(model, tokenizer)
+
             print_examples(val_iter,
                            model, tokenizer, max_len=config['TOKENS_CODE_CHUNK_MAX_LEN'])
 
@@ -82,6 +84,58 @@ def train(model: EncoderDecoder, tokenizer: RobertaTokenizer,
             save_data_on_checkpoint(model, train_perplexities, val_perplexities, suffix_for_saving, config)
 
     return train_perplexities, val_perplexities
+
+
+def print_small_example(model, tok):
+    prev = ["Hello world", "mmm a / build . gradle <nl> subprojects { <nl> } <nl> project . ext { <nl> guavaVersion = ' 14 . 0 . 1 ' <nl> nettyVersion = ' 4 . 0 . 9 . Final ' <nl> slf4jVersion = ' 1 . 7 . 5 ' <nl> commonsIoVersion = ' 2 . 4 ' <nl>"]
+    upd = ["Goodbye world", "ppp b / build . gradle <nl> subprojects { <nl> } <nl> project . ext { <nl> guavaVersion = ' 15 . 0 ' <nl> nettyVersion = ' 4 . 0 . 9 . Final ' <nl> slf4jVersion = ' 1 . 7 . 5 ' <nl> commonsIoVersion = ' 2 . 4 ' <nl>"]
+    trg = ["Change greeting to farewell", "upgraded guava to 15 . 0"]
+
+    src_enc = tok(prev, upd, padding=True, truncation=True, return_tensors='pt')
+    trg_enc = tok(trg, padding=True, truncation=True, return_tensors='pt')
+    src_enc['input_ids'] = src_enc['input_ids'].to('cuda')
+    src_enc['attention_mask'] = src_enc['attention_mask'].to('cuda')
+    trg_enc['input_ids'] = trg_enc['input_ids'].to('cuda')
+    trg_enc['attention_mask'] = trg_enc['attention_mask'].to('cuda')
+
+    print("Batch size:", 2)
+    print("Src seq len:", src_enc['input_ids'].shape[1])
+    print("Trg seq len:", trg_enc['input_ids'].shape[1])
+    print()
+
+    out, fin = model.encode(input_ids=src_enc['input_ids'], attention_mask=src_enc['attention_mask'])
+    print("Encode")
+    print("encoder_output", out.shape)
+    print("encoder_final", fin.shape)
+    print()
+
+    trg_emb = model.get_embeddings(input_ids=trg_enc['input_ids'], attention_mask=trg_enc['attention_mask'])
+    print("trg_embed", trg_emb.shape)
+    print()
+
+    decoder_states, hidden, pre_output_vectors = model.decode(trg_emb, trg_enc['attention_mask'], out,
+                                                              fin, src_enc['attention_mask'].unsqueeze(1).to('cuda'))
+    print("Decode")
+    print("decoder_states", decoder_states.shape)
+    print("hidden", hidden.shape)
+    print("pre_output", pre_output_vectors.shape)
+    print()
+
+    gen = model.generator(pre_output_vectors)
+    print("Generate")
+    print("generator(pre_output)", gen.shape)
+
+    _, ind = torch.max(gen, dim=2)
+    print("Max probs", torch.exp(_))
+    print("Generated indices", ind)
+    print("Target indices", trg_enc['input_ids'])
+    print(tok.decode(ind[0]))
+    print(tok.decode(ind[1]))
+    print()
+
+    loss = nn.NLLLoss(reduction="sum", ignore_index=1)
+    print("Loss", loss(gen.view(-1, gen.size(-1)), trg_enc['input_ids'].view(-1)))
+    print()
 
 
 def save_model(model: nn.Module, model_suffix: str, config: Config) -> None:
