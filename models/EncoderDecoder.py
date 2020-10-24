@@ -43,14 +43,14 @@ class EncoderDecoder(nn.Module):
         :param attention_mask
 
         :return: Tuple[[batch_size, sequence_length, hidden_size_encoder],
-         [num_layers, batch_size, hidden_size_encoder]]
+         [decoder_num_layers, batch_size, hidden_size_encoder]]
 
         Returns a tuple of torch.FloatTensor:
 
         * encoder_output (torch.FloatTensor of shape (batch_size, sequence_length, hidden_size_encoder)) – Sequence of
         hidden-states at the output of the last layer of the models.
 
-        * encoder_final (torch.FloatTensor of shape (num_layers, batch_size, hidden_size_encoder)
+        * encoder_final (torch.FloatTensor of shape (decoder_num_layers, batch_size, hidden_size_encoder)
 
         From RobertaModel.forward() we get Tuple of torch.FloatTensor (one for the output of the embeddings + one for
         the output of each layer) of shape (batch_size, sequence_length, hidden_size_encoder) --- hidden-states of
@@ -59,7 +59,9 @@ class EncoderDecoder(nn.Module):
         Then convert it to torch.FloatTensor of shape (num_layers, batch_size, sequence_length, hidden_size_encoder).
 
         Then take hidden states for t = sequence_length: torch.FloatTensor of shape
-        (num_layers, batch_size, hidden_size).
+        (encoder_num_layers, batch_size, hidden_size).
+
+        And return last (decoder_num_layers, batch_size, hidden_size) of them.
         """
         encoder_output, _, encoder_final = self.encoder(input_ids=input_ids,
                                                         attention_mask=attention_mask,
@@ -67,7 +69,7 @@ class EncoderDecoder(nn.Module):
         encoder_output = encoder_output
         t = encoder_final[0].shape[1] - 1
         encoder_final = torch.stack(encoder_final)[:, :, t, :]
-        return encoder_output, encoder_final
+        return encoder_output, encoder_final[-self.decoder.num_layers:, :]
 
     def get_embeddings(self, input_ids, attention_mask) -> Tuple[Tensor, Tensor]:
         """

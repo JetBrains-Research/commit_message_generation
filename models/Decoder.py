@@ -14,8 +14,7 @@ class Decoder(nn.Module):
         self.num_layers = num_layers
         self.attention = attention
         self.dropout = dropout
-        # TODO: dimensions with attention output don't match if use any other # layers than 13?
-        self.rnn = nn.GRU(hidden_size_encoder + emb_size, hidden_size, num_layers=13,
+        self.rnn = nn.GRU(hidden_size_encoder + emb_size, hidden_size, num_layers=num_layers,
                           batch_first=True, dropout=dropout)
 
         # to initialize from the final encoder state
