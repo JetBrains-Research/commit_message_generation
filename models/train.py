@@ -127,10 +127,11 @@ def print_small_example(model, tok):
 
     _, ind = torch.max(gen, dim=2)
     print("Max probs", torch.exp(_))
-    print("Generated indices", ind)
-    print("Target indices", trg_enc['input_ids'])
-    print(tok.decode(ind[0]))
-    print(tok.decode(ind[1]))
+    print("Trg:", trg[0])
+    print("Pred:", tok.decode(ind[0]))
+
+    print("Trg:", trg[1])
+    print("Pred:", tok.decode(ind[1]))
     print()
 
     loss = nn.NLLLoss(reduction="sum", ignore_index=1)
