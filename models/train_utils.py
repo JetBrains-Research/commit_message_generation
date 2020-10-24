@@ -86,6 +86,7 @@ def run_epoch(data_iter: Generator, model: EncoderDecoder, loss_compute: SimpleL
 
 def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
     """Greedily decode a sentence."""
+    # TODO: i think normally <s> shouldn't have max probability :(
     sos_index = tokenizer.bos_token_id
     eos_index = tokenizer.eos_token_id
 
@@ -110,7 +111,6 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
         # stop when we reach first <EOS>
         if next_word.item() == eos_index:
             break
-        # TODO: i think normally <pad> and <s> shouldn't have max probability :(
         output.append(next_word)
         prev_y[:, 0] = next_word  # change prev id to generated id
         attention_scores.append(model.decoder.attention.alphas.cpu().numpy())
@@ -138,8 +138,8 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
         result, _ = greedy_decode(model, batch, tokenizer, max_len=max_len)
 
         print("Example #%d" % (i + 1))
-        print("Src : ", tokenizer.decode(src))
-        print("Trg : ", tokenizer.decode(trg))
+        print("Src : ", tokenizer.decode(src, skip_special_tokens=True))
+        print("Trg : ", tokenizer.decode(trg, skip_special_tokens=True))
         print("Pred: ", tokenizer.decode(result))
         print()
 
@@ -157,7 +157,6 @@ def calculate_accuracy(dataset_iterator: Iterable,
     total = 0
     for batch in dataset_iterator:
         targets = batch['target']['input_ids']
-
         results = greedy_decode(model, batch, tokenizer, max_len)
         for i in range(len(targets)):
             if np.all(targets[i] == results[i]):
@@ -167,8 +166,9 @@ def calculate_accuracy(dataset_iterator: Iterable,
 
 
 def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator, tokenizer: RobertaTokenizer,
-                             decode_method, eos_index) \
+                             decode_method) \
         -> Tuple[List[int], int, List[List[str]]]:
+    # TODO: decode_method?
     correct = [0 for _ in range(len(topk_values))]
     max_k = topk_values[-1]
     total = 0

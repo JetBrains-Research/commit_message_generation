@@ -56,7 +56,8 @@ class EncoderDecoder(nn.Module):
         the output of each layer) of shape (batch_size, sequence_length, hidden_size_encoder) --- hidden-states of
         the model at the output of each layer plus the initial embedding outputs.
 
-        Then convert it to torch.FloatTensor of shape (num_layers, batch_size, sequence_length, hidden_size_encoder).
+        Then convert it to torch.FloatTensor of shape (encoder_num_layers, batch_size, sequence_length,
+                                                       hidden_size_encoder).
 
         Then take hidden states for t = sequence_length: torch.FloatTensor of shape
         (encoder_num_layers, batch_size, hidden_size).
