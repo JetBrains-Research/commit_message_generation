@@ -151,7 +151,7 @@ def main():
 
     config = Config()
     if num_epoch:
-        config['MAX_NUM_OF_EPOCHS'] = num_epoch
+        config._CONFIG['MAX_NUM_OF_EPOCHS'] = num_epoch
     print('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n', end='')
     print("--Constructing datasets--")
     train_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'),

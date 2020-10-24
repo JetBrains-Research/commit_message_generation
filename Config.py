@@ -57,8 +57,6 @@ class Config:
             return self._CONFIG[key]['cmg']
         return self._CONFIG[key]
 
-    def set_cmg_mode(self, is_cmg_mode):
-        self._CONFIG['IS_COMMIT_GENERATION'] = is_cmg_mode
 
     def save(self) -> None:
         with open(os.path.join(self['OUTPUT_PATH'], 'config.pkl'), 'wb') as config_file:
@@ -74,6 +72,10 @@ class Config:
         self._CONFIG['DATASET_ROOT_COMMIT'] = \
             './data/CleanedJiang/'
         self._CONFIG['MAX_NUM_OF_EPOCHS'] = {'cmg': 3}
+
+    @property
+    def CONFIG(self):
+        return self._CONFIG
 
 
 def load_config(is_test: bool, path_to_config: Path = None) -> Config:
