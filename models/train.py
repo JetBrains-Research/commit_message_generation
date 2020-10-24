@@ -1,5 +1,5 @@
 import os
-import sys
+import argparse
 import pickle
 import pprint
 from typing import Tuple, List
@@ -133,24 +133,27 @@ def run_train(train_iter: DataLoader, val_iter: DataLoader,
     save_data_on_checkpoint(model, train_perplexities, val_perplexities, suffix_for_saving, config)
     save_perplexity_plot([train_perplexities, val_perplexities], ['train', 'validation'],
                          f'loss_{suffix_for_saving}.png', config)
-    load_weights_of_best_model_on_validation(model, suffix_for_saving, config)
-    return model
+    #load_weights_of_best_model_on_validation(model, suffix_for_saving, config)
+    #return model
 
 
 def main():
-    if len(sys.argv) > 1:
-        working = sys.argv[1]
-        os.chdir(working)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--train_size', type=int)
+    parser.add_argument('--val_size', type=int)
+    args = parser.parse_args()
+    train_size = args.train_size
+    val_size = args.val_size
 
-    print("pwd", os.getcwd())
+    print("Current working directory:", os.getcwd())
 
     config = Config()
     print('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n', end='')
     print("--Constructing datasets--")
     train_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'),
-                                                                    config, size=5000)
+                                                                    config, size=train_size)
     val_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'),
-                                                                  config, size=1000)
+                                                                  config, size=val_size)
     #test_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'), config)
 
     train_loader = DataLoader(train_dataset_commit, batch_size=config['BATCH_SIZE'])
