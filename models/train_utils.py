@@ -34,14 +34,13 @@ def make_model(emb_size: int,
 
     attention = BahdanauAttention(hidden_size_decoder, key_size=hidden_size_encoder, query_size=hidden_size_decoder)
     decoder = Decoder(emb_size, hidden_size_decoder, hidden_size_encoder, attention, num_layers, dropout, use_bridge,
-                      teacher_forcing_ratio=config['TEACHER_FORCING_RATIO'], embedding=None)
+                      teacher_forcing_ratio=config['TEACHER_FORCING_RATIO'])
     generator = GeneratorModel(hidden_size_decoder, codebert_tokenizer.vocab_size)
 
     model: EncoderDecoder = EncoderDecoder(
         codebert_model,
         decoder,
         generator)
-    decoder.embedding = model.get_embeddings  # TODO: think how to get embeddings for decoder generated sequences
     model.to(config['DEVICE'])
     return model
 
