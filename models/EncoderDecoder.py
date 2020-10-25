@@ -33,9 +33,7 @@ class EncoderDecoder(nn.Module):
                            trg_mask=batch['target']['attention_mask'],
                            encoder_output=encoder_output,
                            encoder_final=encoder_final,
-                           src_mask=batch['attention_mask'].unsqueeze(1).to(self.device),
-                           embedding=self.get_embeddings,
-                           generator=self.generator)
+                           src_mask=batch['attention_mask'].unsqueeze(1).to(self.device))
 
     def encode(self, input_ids, attention_mask) -> Tuple[Tensor, Tensor]:
         """
