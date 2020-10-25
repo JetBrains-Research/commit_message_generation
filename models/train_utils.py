@@ -33,13 +33,15 @@ def make_model(emb_size: int,
     codebert_tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")  # need for vocab size only
 
     attention = BahdanauAttention(hidden_size_decoder, key_size=hidden_size_encoder, query_size=hidden_size_decoder)
-    decoder = Decoder(emb_size, hidden_size_decoder, hidden_size_encoder, attention, num_layers, dropout, use_bridge)
+    decoder = Decoder(emb_size, hidden_size_decoder, hidden_size_encoder, attention, num_layers, dropout, use_bridge,
+                      teacher_forcing_ratio=config['TEACHER_FORCING_RATIO'], embedding=None)
     generator = GeneratorModel(hidden_size_decoder, codebert_tokenizer.vocab_size)
 
     model: EncoderDecoder = EncoderDecoder(
         codebert_model,
         decoder,
         generator)
+    decoder.embedding = model.get_embeddings  # TODO: think how to get embeddings for decoder generated sequences
     model.to(config['DEVICE'])
     return model
 
@@ -106,9 +108,9 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
                                                    batch['attention_mask'].unsqueeze(1), hidden=hidden)
             # we predict from the pre-output layer, which is
             # a combination of Decoder state, prev emb, and context
-            prob = model.generator(pre_output[:, -1])  # [batch_size, vocab_size]
-        print(torch.topk(prob, 5, dim=1)[1])
-        _, next_word = torch.max(prob, dim=1)
+            prob = model.generator(pre_output)  # [batch_size, trg_seq_len, vocab_size]
+        _, next_word = torch.max(prob, dim=2)
+        print(next_word)
         output.append(next_word)
         attention_scores.append(model.decoder.attention.alphas.cpu().numpy())
         # stop when we reach first <EOS>

@@ -1,19 +1,23 @@
 import torch
 from torch import nn
 from models import BahdanauAttention
+import random
+from typing import Callable
 
 
 class Decoder(nn.Module):
     """A conditional RNN decoder with attention."""
 
     def __init__(self, emb_size: int, hidden_size: int, hidden_size_encoder: int, attention: BahdanauAttention,
-                 num_layers: int, dropout: float, bridge: bool):
+                 num_layers: int, dropout: float, bridge: bool, teacher_forcing_ratio: float, embedding: Callable):
         super(Decoder, self).__init__()
 
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.attention = attention
         self.dropout = dropout
+        self.teacher_forcing_ratio = teacher_forcing_ratio
+        self.embedding = embedding
         self.rnn = nn.GRU(hidden_size_encoder + emb_size, hidden_size, num_layers=num_layers,
                           batch_first=True, dropout=dropout)
 
@@ -77,6 +81,9 @@ class Decoder(nn.Module):
                  pre_output: [batch_size, target_sequence_length, hidden_size_decoder]]
                  (pre_output is a concatenation of prev_embed, output from RNN and context from attention)
         """
+
+        use_teacher_forcing = True if random.random() < self.teacher_forcing_ratio else False
+
         # the maximum number of steps to unroll the RNN
         if max_len is None:
             max_len = trg_mask.size(-1)
@@ -96,7 +103,12 @@ class Decoder(nn.Module):
 
         # unroll the decoder RNN for max_len steps
         for i in range(max_len):
-            prev_embed = trg_embed[:, i].unsqueeze(1)
+            if use_teacher_forcing or i == 0:
+                prev_embed = trg_embed[:, i].unsqueeze(1)  # [B, 1, EmbCode]
+            else:
+                _, top_i = self.generator(pre_output_vectors[-1]).squeeze(1).topk(1)
+                top_i_mask = torch.ones_like(top_i)
+                prev_embed = self.embedding(top_i, top_i_mask)
             output, hidden, pre_output = self.forward_step(
                 prev_embed, encoder_output, src_mask, proj_key, hidden)
             decoder_states.append(output)
