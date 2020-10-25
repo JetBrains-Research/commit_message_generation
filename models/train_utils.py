@@ -109,14 +109,14 @@ def greedy_decode(model, batch, tokenizer: RobertaTokenizer, max_len=100):
             # a combination of Decoder state, prev emb, and context
             prob = model.generator(pre_output)  # [batch_size, trg_seq_len, vocab_size]
         _, next_word = torch.max(prob, dim=2)
-        print(next_word)
+        print("Probability of next word:", torch.exp(_))
         output.append(next_word)
         attention_scores.append(model.decoder.attention.alphas.cpu().numpy())
         # stop when we reach first <EOS>
         if next_word.item() == eos_index:
             break
         output.append(next_word)
-        prev_y[:, 0] = next_word  # change prev id to generated id
+        prev_y = next_word  # change prev id to generated id
 
     output = np.array(output)
     print("Greedy decode output", output)
