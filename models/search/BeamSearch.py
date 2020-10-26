@@ -3,7 +3,7 @@ from typing import List, Tuple
 
 import torch
 
-from models.Search import Search
+from models.search.Search import Search
 
 
 class BeamSearch(Search):
