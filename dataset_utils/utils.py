@@ -1,5 +1,6 @@
 from typing import List
 from torch.utils.data import Dataset
+from dataset_utils.CommitMessageGenerationDataset import CommitMessageGenerationDataset
 
 
 def tokenize_git_diff_output_string(git_diff_output: str) -> List[List[str]]:
@@ -40,6 +41,5 @@ def create_filter_predicate_on_code_and_msg(max_length_code, max_length_msg):
     return filter_predicate
 
 
-def take_part_from_dataset(dataset: Dataset, n: int):
-    from torch.utils.data import Dataset
-    return Dataset(dataset[:n])
+def take_part_from_dataset(dataset: CommitMessageGenerationDataset, n: int):
+    return CommitMessageGenerationDataset(dataset.src_encodings[:n], dataset.trg_encodings[:n])

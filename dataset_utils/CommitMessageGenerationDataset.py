@@ -20,8 +20,8 @@ class CommitMessageGenerationDataset(Dataset):
     def __getitem__(self, idx):
         # TODO: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach()
         #  or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor)
-        src = {key: torch.tensor(val[idx]) for key, val in self.src_encodings.items()}
-        src['target'] = {key: torch.tensor(val[idx]) for key, val in self.trg_encodings.items()}
+        src = {key: val[idx].detach().clone() for key, val in self.src_encodings.items()}
+        src['target'] = {key: val[idx].detach().clone() for key, val in self.trg_encodings.items()}
         return src
 
     def __len__(self):
