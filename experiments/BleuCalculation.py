@@ -22,9 +22,9 @@ class BleuCalculation:
 
     def get_bleu_script_output(self, predictions, dataset: dict) -> Tuple[str, str]:
         top_1_predictions = ['' if len(prediction) == 0 else ' '.join(prediction[0]) for prediction in predictions]
-        targets = dataset['target']['input_ids']
+        targets = dataset['target']['input_ids'].tolist()
         with tempfile.NamedTemporaryFile(mode='w') as file_with_targets:
-            file_with_targets.write('\n'.join((' '.join(inner) for inner in targets)))
+            file_with_targets.write('\n'.join([' '.join([str(i) for i in lst]) for lst in targets]))
             file_with_targets.flush()
             process = subprocess.Popen([self.config['BLEU_PERL_SCRIPT_PATH'], file_with_targets.name],
                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
