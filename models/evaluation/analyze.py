@@ -47,7 +47,7 @@ def test_commit_message_generation_model(model: EncoderDecoder, config: Config) 
     val_dataset = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'), config)
     test_dataset = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'), config)
 
-    accuracy_calculation_experiment = AccuracyCalculation(model, config)
+    accuracy_calculation_experiment = AccuracyCalculation(model, max_len=100, greedy=True, config=config)
     bleu_calculation_experiment = BleuCalculation(config)
 
     model.eval()

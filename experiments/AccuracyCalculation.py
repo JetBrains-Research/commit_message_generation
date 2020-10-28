@@ -10,25 +10,24 @@ from models.training.train_utils import calculate_top_k_accuracy, create_greedy_
 
 
 class AccuracyCalculation:
-    def __init__(self, model: EncoderDecoder, pad_index: int, sos_index: int, eos_index: int,  trg_vocab_size: int,
-                 max_len: int, greedy: bool, config: Config) -> None:
+    def __init__(self, model: EncoderDecoder, max_len: int, greedy: bool, config: Config) -> None:
         super().__init__()
         self.model = model
-        self.trg_vocab_size: int = trg_vocab_size
-        self.pad_index: int = pad_index
-        self.sos_index: int = sos_index
-        self.eos_index: int = eos_index
+        self.trg_vocab_size: int = config['VOCAB_SIZE']
+        self.pad_index: int = config['PAD_TOKEN_ID']
+        self.bos_index: int = config['BOS_TOKEN_ID']
+        self.eos_index: int = config['EOS_TOKEN_ID']
         self.config = config
         self.beam_size = self.config['BEAM_SIZE']
         self.topk_values = [1] if greedy else self.config['TOP_K']
         if greedy:
             self.decode_method = create_greedy_decode_method_with_batch_support(
-                self.model, max_len, self.sos_index, self.eos_index,
+                self.model, max_len, self.bos_index, self.eos_index,
                 self.trg_vocab.unk_index, len(self.trg_vocab)
             )
         else:
             self.decode_method = create_decode_method(
-                self.model, max_len, sos_index, self.eos_index,
+                self.model, max_len, bos_index, self.eos_index,
                 self.trg_vocab.unk_index, len(self.trg_vocab), self.beam_size,
                 self.config['NUM_GROUPS'], self.config['DIVERSITY_STRENGTH'],
                 verbose=False

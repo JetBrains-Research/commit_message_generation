@@ -14,7 +14,7 @@ from models.EncoderDecoder import EncoderDecoder
 from models.SimpleLossCompute import SimpleLossCompute
 from Config import Config
 from dataset_utils.CommitMessageGenerationDataset import CommitMessageGenerationDataset
-from models.training.train_utils import make_model, run_epoch, print_examples
+from models.training.train_utils import make_model, run_epoch, print_examples, add_special_tokens_to_config
 from models.evaluation.test_utils import save_perplexity_plot
 from models.evaluation.analyze import test_commit_message_generation_model
 
@@ -209,6 +209,7 @@ def main():
     print("Current working directory:", os.getcwd())
 
     config = Config()
+    add_special_tokens_to_config(RobertaTokenizer.from_pretrained('microsoft/codebert-base'), config)
     if num_epoch:
         config._CONFIG['MAX_NUM_OF_EPOCHS'] = num_epoch
     print('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n', end='')

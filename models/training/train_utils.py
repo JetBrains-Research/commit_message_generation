@@ -22,6 +22,7 @@ import Config
 def make_model(emb_size: int,
                hidden_size_encoder: int,
                hidden_size_decoder: int,
+               vocab_size: int,
                num_layers: int,
                dropout: float,
                use_bridge: bool,
@@ -30,12 +31,11 @@ def make_model(emb_size: int,
 
     codebert_config = RobertaConfig.from_pretrained("microsoft/codebert-base", output_hidden_states=True)
     codebert_model = RobertaModel.from_pretrained("microsoft/codebert-base", config=codebert_config)
-    codebert_tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")  # need for vocab size only
 
     attention = BahdanauAttention(hidden_size_decoder, key_size=hidden_size_encoder, query_size=hidden_size_decoder)
     decoder = Decoder(emb_size, hidden_size_decoder, hidden_size_encoder, attention, num_layers, dropout, use_bridge,
                       teacher_forcing_ratio=config['TEACHER_FORCING_RATIO'])
-    generator = GeneratorModel(hidden_size_decoder, codebert_tokenizer.vocab_size)
+    generator = GeneratorModel(hidden_size_decoder, config['VOCAB_SIZE'])
 
     model: EncoderDecoder = EncoderDecoder(
         codebert_model,
@@ -202,3 +202,10 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
                     break
         total += len(batch)
     return correct, total, max_top_k_results
+
+
+def add_special_tokens_to_config(tokenizer: RobertaTokenizer, config: Config):
+    config._CONFIG['PAD_TOKEN_ID'] = tokenizer.pad_token_id
+    config._CONFIG['EOS_TOKEN_ID'] = tokenizer.eos_token_id
+    config._CONFIG['BOS_TOKEN_ID'] = tokenizer.bos_token_id
+    config._CONFIG['VOCAB_SIZE'] = tokenizer.vocab_size
