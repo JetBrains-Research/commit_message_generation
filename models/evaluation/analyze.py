@@ -47,8 +47,6 @@ def test_commit_message_generation_model(model: EncoderDecoder, config: Config) 
     val_dataset = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'), config)
     test_dataset = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'), config)
 
-    train_dataset_test_size_part = take_part_from_dataset(train_dataset, len(test_dataset))
-
     accuracy_calculation_experiment = AccuracyCalculation(model, config)
     bleu_calculation_experiment = BleuCalculation(config)
 
@@ -73,15 +71,15 @@ def test_commit_message_generation_model(model: EncoderDecoder, config: Config) 
             lambda: bleu_calculation_experiment.conduct(val_max_top_k_predicted, val_dataset,
                                                         'Validation dataset')
         )
-
+        # TODO: test size approximation
         train_max_top_k_predicted = measure_experiment_time(
-            lambda: accuracy_calculation_experiment.conduct(train_dataset_test_size_part,
+            lambda: accuracy_calculation_experiment.conduct(train_dataset,
                                                             f'Train dataset (test size approximation)')
         )
         save_predicted(train_max_top_k_predicted, dataset_name='train_dataset_commit_message_generator', config=config)
 
         measure_experiment_time(
-            lambda: bleu_calculation_experiment.conduct(train_max_top_k_predicted, train_dataset_test_size_part,
+            lambda: bleu_calculation_experiment.conduct(train_max_top_k_predicted, train_dataset,
                                                         'Train dataset (test size approximation)')
         )
 
