@@ -6,7 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 from models.EncoderDecoder import EncoderDecoder
 from Config import Config
 from models.search.search_utils import create_decode_method
-from models.train_utils import calculate_top_k_accuracy, create_greedy_decode_method_with_batch_support
+from models.training.train_utils import calculate_top_k_accuracy, create_greedy_decode_method_with_batch_support
 
 
 class AccuracyCalculation:

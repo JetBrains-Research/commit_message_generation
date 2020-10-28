@@ -16,6 +16,7 @@ from Config import Config
 from dataset_utils.CommitMessageGenerationDataset import CommitMessageGenerationDataset
 from models.training.train_utils import make_model, run_epoch, print_examples
 from models.evaluation.test_utils import save_perplexity_plot
+from models.evaluation.analyze import test_commit_message_generation_model
 
 
 def train(model: EncoderDecoder, tokenizer: RobertaTokenizer,
@@ -189,7 +190,7 @@ def run_train(train_iter: DataLoader, val_iter: DataLoader,
     save_perplexity_plot([train_perplexities, val_perplexities], ['train', 'validation'],
                          f'loss_{suffix_for_saving}.png', config)
     #load_weights_of_best_model_on_validation(model, suffix_for_saving, config)
-    #return model
+    return model
 
 
 def main():
@@ -197,10 +198,13 @@ def main():
     parser.add_argument('--train_size', type=int)
     parser.add_argument('--val_size', type=int)
     parser.add_argument('--num_epoch', type=int)
+    parser.add_argument('--test', dest='test', default=False, action='store_true')
     args = parser.parse_args()
     train_size = args.train_size
     val_size = args.val_size
     num_epoch = args.num_epoch
+    test = args.test
+    print(test)
 
     print("Current working directory:", os.getcwd())
 
@@ -213,17 +217,21 @@ def main():
                                                                     config, size=train_size)
     val_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'),
                                                                   config, size=val_size)
-    #test_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'), config)
+    test_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'), config)
 
     train_loader = DataLoader(train_dataset_commit, batch_size=config['BATCH_SIZE'])
     val_loader = DataLoader(val_dataset_commit, batch_size=config['VAL_BATCH_SIZE'])
 
     print("Train:", len(train_dataset_commit))
     print("Val:", len(val_dataset_commit))
-    #print("Test:", len(test_dataset_commit))
+    print("Test:", len(test_dataset_commit))
 
     commit_message_generator = run_train(train_loader, val_loader,
                                          'commit_msg_generator', config=config)
+
+    if test:
+        print('\n====STARTING EVALUATION OF COMMIT MESSAGE GENERATOR====\n', end='')
+        test_commit_message_generation_model(commit_message_generator, config)
     return commit_message_generator
 
 
