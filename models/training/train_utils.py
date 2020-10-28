@@ -167,6 +167,10 @@ def calculate_accuracy(dataset_iterator: Iterable,
     correct = 0
     total = 0
     for batch in dataset_iterator:
+        batch['input_ids'] = batch['input_ids'].to('cuda')
+        batch['attention_mask'] = batch['attention_mask'].to('cuda')
+        batch['target']['input_ids'] = batch['target']['input_ids'].to('cuda')
+        batch['target']['attention_mask'] = batch['target']['attention_mask'].to('cuda')
         targets = batch['target']['input_ids']
         results = greedy_decode(model, batch, tokenizer, max_len)
         for i in range(len(targets)):
@@ -185,6 +189,10 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
     total = 0
     max_top_k_results = []
     for batch in dataset_iterator:
+        batch['input_ids'] = batch['input_ids'].to('cuda')
+        batch['attention_mask'] = batch['attention_mask'].to('cuda')
+        batch['target']['input_ids'] = batch['target']['input_ids'].to('cuda')
+        batch['target']['attention_mask'] = batch['target']['attention_mask'].to('cuda')
         targets = batch['target']['input_ids']
         results = decode_method(batch)
         for example_id in range(len(results)):
