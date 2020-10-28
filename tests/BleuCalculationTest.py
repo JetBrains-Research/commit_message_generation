@@ -4,7 +4,7 @@ from experiments.BleuCalculation import BleuCalculation
 
 
 class BleuChecking(unittest.TestCase):
-    CONFIG = {'BLEU_PERL_SCRIPT_PATH': '..\experiments\multi-bleu.perl'}
+    CONFIG = {'BLEU_PERL_SCRIPT_PATH': '.\experiments\multi-bleu.perl'}
     BLEU_CALCULATION_EXPERIMENT = BleuCalculation(CONFIG)
 
     def test_same_predicted_as_target(self):
