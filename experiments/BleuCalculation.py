@@ -20,7 +20,7 @@ class BleuCalculation:
         super().__init__()
         self.config = config
 
-    def get_bleu_script_output(self, predictions, dataset) -> Tuple[str, str]:
+    def get_bleu_script_output(self, predictions, dataset: dict) -> Tuple[str, str]:
         top_1_predictions = ['' if len(prediction) == 0 else ' '.join(prediction[0]) for prediction in predictions]
         targets = dataset['target']['input_ids']
         with tempfile.NamedTemporaryFile(mode='w') as file_with_targets:
@@ -33,11 +33,13 @@ class BleuCalculation:
 
     def conduct(self, predictions: List[List[str]], dataset, dataset_label: str) -> None:
         print(f'Start conducting BLEU calculation experiment for {dataset_label}...')
-        result = self.get_bleu_script_output(predictions, dataset)
+        data_iterator = DataLoader(dataset, batch_size=len(dataset))  # load whole dataset in one batch
+        for batch in data_iterator:
+            result = self.get_bleu_script_output(predictions, batch)
         print(result[0])
         print(f'Errors: {result[1]}')
 
-    def get_bleu_score(self, predictions: List[List[List[str]]], dataset) -> float:
+    def get_bleu_score(self, predictions: List[List[List[str]]], dataset: dict) -> float:
         result = self.get_bleu_script_output(predictions, dataset)
         print(result[0])
         words = result[0].split()
