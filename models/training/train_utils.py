@@ -107,9 +107,6 @@ def greedy_decode(model, batch, sos_index, eos_index, max_len=100):
             # a combination of Decoder state, prev emb, and context
             prob = model.generator(pre_output)  # [batch_size, trg_seq_len, vocab_size]
         _, next_word = torch.max(prob, dim=2)
-        print("Probability of next word:", torch.exp(_))
-        print("Next word:", next_word)
-        print()
         output.append(next_word)
         attention_scores.append(model.decoder.attention.alphas.cpu().numpy())
         # stop when we reach first <EOS>
@@ -196,6 +193,8 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
         targets = batch['target']['input_ids']
         results = decode_method(batch)
         for example_id in range(len(results)):
+            if example_id >= targets.shape[0]:
+                break
             target = targets[example_id]
             example_top_k_results = results[example_id][:max_k]
             decoded_tokens = [tokenizer.decode(result, skip_special_tokens=True) for result in example_top_k_results]

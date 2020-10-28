@@ -199,13 +199,14 @@ def main():
     parser.add_argument('--train_size', type=int)
     parser.add_argument('--val_size', type=int)
     parser.add_argument('--num_epoch', type=int)
+    parser.add_argument('--test_size', type=int)
     parser.add_argument('--test', dest='test', default=False, action='store_true')
     args = parser.parse_args()
     train_size = args.train_size
     val_size = args.val_size
+    test_size = args.test_size
     num_epoch = args.num_epoch
     test = args.test
-    print(test)
 
     print("Current working directory:", os.getcwd())
 
@@ -219,7 +220,8 @@ def main():
                                                                     config, size=train_size)
     val_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'),
                                                                   config, size=val_size)
-    test_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'), config)
+    test_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'),
+                                                                   config, size=test_size)
 
     train_loader = DataLoader(train_dataset_commit, batch_size=config['BATCH_SIZE'])
     val_loader = DataLoader(val_dataset_commit, batch_size=config['VAL_BATCH_SIZE'])
@@ -233,7 +235,7 @@ def main():
 
     if test:
         print('\n====STARTING EVALUATION OF COMMIT MESSAGE GENERATOR====\n', end='')
-        test_commit_message_generation_model(commit_message_generator, config)
+        test_commit_message_generation_model(commit_message_generator, train_size, val_size, test_size, config)
     return commit_message_generator
 
 

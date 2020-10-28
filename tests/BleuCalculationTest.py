@@ -17,10 +17,11 @@ class BleuChecking(unittest.TestCase):
                 'Fix typo'.split()
             ]
         ]
-        dataset = [
-            'Fix android_media_AudioSystem_getMasterMute return type .'.split(),
-            'Fix typo'.split()
-        ]
+        dataset = {'target': {
+                   'input_ids': [
+                       'Fix android_media_AudioSystem_getMasterMute return type .'.split(),
+                       'Fix typo'.split()
+                   ]}}
         BleuChecking.BLEU_CALCULATION_EXPERIMENT.conduct(predictions, dataset, 'test')
 
     def test_bleu_zero(self):
@@ -33,10 +34,11 @@ class BleuChecking(unittest.TestCase):
                 'Totally incorrect guess .'.split()
             ]
         ]
-        dataset = [
-            'Fix android_media_AudioSystem_getMasterMute return type .'.split(),
-            'Fix typo'.split()
-        ]
+        dataset = {'target': {
+                   'input_ids': [
+                         'Fix android_media_AudioSystem_getMasterMute return type .'.split(),
+                         'Fix typo'.split()
+        ]}}
         BleuChecking.BLEU_CALCULATION_EXPERIMENT.conduct(predictions, dataset, 'test')
 
     def test_only_one_example(self):
@@ -46,19 +48,21 @@ class BleuChecking(unittest.TestCase):
                 'Not fix android_media_AudioSystem_getMasterMute return type .'.split()
             ]
         ]
-        dataset = [
+        dataset = {'target': {
+                   'input_ids': [
             'Fix android_media_AudioSystem_getMasterMute return type .'.split()
-        ]
+        ]}}
         BleuChecking.BLEU_CALCULATION_EXPERIMENT.conduct(predictions, dataset, 'test')
 
     def test_no_predictions(self):
         predictions = [
             [], []
         ]
-        dataset = [
+        dataset = {'target': {
+                   'input_ids': [
             'Fix android_media_AudioSystem_getMasterMute return type .'.split(),
             'Fix typo'.split()
-        ]
+        ]}}
         BleuChecking.BLEU_CALCULATION_EXPERIMENT.conduct(predictions, dataset, 'test')
 
     def test_same_predicted_as_target_bleu_score(self):
@@ -71,10 +75,11 @@ class BleuChecking(unittest.TestCase):
                 'Fix typo'.split()
             ]
         ]
-        dataset = [
-            'Fix android_media_AudioSystem_getMasterMute return type .'.split(),
-            'Fix typo'.split()
-        ]
+        dataset = {'target': {
+                   'input_ids': [
+                         'Fix android_media_AudioSystem_getMasterMute return type .'.split(),
+                         'Fix typo'.split()
+        ]}}
         bleu_score = BleuChecking.BLEU_CALCULATION_EXPERIMENT.get_bleu_score(predictions, dataset)
         self.assertEqual(100.0, bleu_score)
 
@@ -88,10 +93,11 @@ class BleuChecking(unittest.TestCase):
                 'Totally incorrect guess .'.split()
             ]
         ]
-        dataset = [
+        dataset = {'target': {
+                   'input_ids': [
             'Fix android_media_AudioSystem_getMasterMute return type .'.split(),
             'Fix typo'.split()
-        ]
+        ]}}
         bleu_score = BleuChecking.BLEU_CALCULATION_EXPERIMENT.get_bleu_score(predictions, dataset)
         self.assertEqual(0.0, bleu_score)
 
@@ -102,9 +108,10 @@ class BleuChecking(unittest.TestCase):
                 'Not fix android_media_AudioSystem_getMasterMute return type .'.split()
             ]
         ]
-        dataset = [
+        dataset = {'target': {
+                   'input_ids': [
             'Fix android_media_AudioSystem_getMasterMute return type .'.split()
-        ]
+        ]}}
         bleu_score = BleuChecking.BLEU_CALCULATION_EXPERIMENT.get_bleu_score(predictions, dataset)
         self.assertEqual(100.0, bleu_score)
 
@@ -112,10 +119,11 @@ class BleuChecking(unittest.TestCase):
         predictions = [
             [], []
         ]
-        dataset = [
+        dataset = {'target': {
+                   'input_ids': [
             'Fix android_media_AudioSystem_getMasterMute return type .'.split(),
             'Fix typo'.split()
-        ]
+        ]}}
         bleu_score = BleuChecking.BLEU_CALCULATION_EXPERIMENT.get_bleu_score(predictions, dataset)
         self.assertEqual(0.0, bleu_score)
 

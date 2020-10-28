@@ -42,10 +42,13 @@ def save_predicted(max_top_k_predicted: List[List[List[str]]], dataset_name: str
         top_k_file.write('\n'.join(top_k_file_lines))
 
 
-def test_commit_message_generation_model(model: EncoderDecoder, config: Config) -> None:
-    train_dataset = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'), config)
-    val_dataset = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'), config)
-    test_dataset = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'), config)
+def test_commit_message_generation_model(model: EncoderDecoder, train_size: int, val_size: int, test_size: int, config: Config) -> None:
+    train_dataset = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'),
+                                                             config, size=train_size)
+    val_dataset = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'),
+                                                           config, size=val_size)
+    test_dataset = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'),
+                                                            config, size=test_size)
 
     accuracy_calculation_experiment = AccuracyCalculation(model, max_len=100, greedy=True, config=config)
     bleu_calculation_experiment = BleuCalculation(config)
