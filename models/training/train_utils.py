@@ -185,7 +185,7 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
     total = 0
     max_top_k_results = []
     for batch in dataset_iterator:
-        targets = batch['targets']['input_ids']
+        targets = batch['target']['input_ids']
         results = decode_method(batch)
         for example_id in range(len(results)):
             target = targets[example_id]
