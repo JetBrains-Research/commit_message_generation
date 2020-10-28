@@ -21,17 +21,14 @@ class AccuracyCalculation:
         self.beam_size = self.config['BEAM_SIZE']
         self.topk_values = [1] if greedy else self.config['TOP_K']
         if greedy:
-            self.decode_method = create_greedy_decode_method_with_batch_support(
-                self.model, max_len, self.bos_index, self.eos_index,
-                self.trg_vocab.unk_index, len(self.trg_vocab)
-            )
+            self.decode_method = create_greedy_decode_method_with_batch_support(self.model, max_len,
+                                                                                self.bos_index, self.eos_index)
         else:
             self.decode_method = create_decode_method(
-                self.model, max_len, bos_index, self.eos_index,
-                self.trg_vocab.unk_index, len(self.trg_vocab), self.beam_size,
+                self.model, max_len, self.bos_index, self.eos_index,
+                self.trg_vocab_size, self.beam_size,
                 self.config['NUM_GROUPS'], self.config['DIVERSITY_STRENGTH'],
-                verbose=False
-            )
+                verbose=False)
         self.batch_size = self.config['TEST_BATCH_SIZE'] if greedy else 1
 
     def conduct(self, dataset: Dataset, dataset_label: str) -> List[List[List[str]]]:

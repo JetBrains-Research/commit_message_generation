@@ -13,7 +13,6 @@ def create_decode_method(
         num_iterations: int,
         sos_index: int,
         eos_index: int,
-        unk_index: int,
         vocab_size: int,
         beam_size: int,
         num_groups: int,
@@ -21,7 +20,7 @@ def create_decode_method(
         verbose: bool = False
 ):
     def decode(batch) -> List[List[np.array]]:
-        result = perform_search(model, batch, num_iterations, sos_index, eos_index, unk_index, vocab_size,
+        result = perform_search(model, batch, num_iterations, sos_index, eos_index, vocab_size,
                                 beam_size, num_groups, diversity_strength, verbose)
         return [flat_map_and_sort_perform_search(result)]
     return decode
@@ -33,6 +32,7 @@ def perform_search(
         num_iterations: int,
         sos_index: int,
         terminal_id: int,
+        vocab_size: int,
         beam_size: int,
         num_groups: int,
         diversity_strength: float,
