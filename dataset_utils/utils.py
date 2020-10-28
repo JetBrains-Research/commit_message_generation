@@ -1,6 +1,5 @@
 from typing import List
-from torch.utils.data import Dataset
-from dataset_utils.CommitMessageGenerationDataset import CommitMessageGenerationDataset
+from dataset_utils import CommitMessageGenerationDataset
 
 
 def tokenize_git_diff_output_string(git_diff_output: str) -> List[List[str]]:
