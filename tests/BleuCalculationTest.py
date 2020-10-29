@@ -38,10 +38,10 @@ class BleuChecking(unittest.TestCase):
         BleuChecking.BLEU_CALCULATION_EXPERIMENT.conduct(predictions, dataset, 'test')
 
     def test_only_one_example(self):
-        predictions = [
+        predictions = [[
                 [1, 2, 3, 4],
                 [0, 1, 2, 3, 4]
-        ]
+        ]]
         dataset = CommitMessageGenerationDataset(src_encodings={}, trg_encodings={'input_ids': torch.tensor([
             [1, 2, 3, 4]])})
         BleuChecking.BLEU_CALCULATION_EXPERIMENT.conduct(predictions, dataset, 'test')
@@ -88,10 +88,10 @@ class BleuChecking(unittest.TestCase):
         self.assertEqual(0.0, bleu_score)
 
     def test_only_one_example_bleu_score(self):
-        predictions = [
+        predictions = [[
             [1, 2, 3, 4],
             [0, 1, 2, 3, 4]
-        ]
+        ]]
         dataset = CommitMessageGenerationDataset(src_encodings={}, trg_encodings={'input_ids': torch.tensor([
             [1, 2, 3, 4]])})
         bleu_score = BleuChecking.BLEU_CALCULATION_EXPERIMENT.get_bleu_score(predictions, dataset)

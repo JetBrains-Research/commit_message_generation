@@ -21,15 +21,18 @@ class BleuCalculation:
         self.config = config
 
     def get_bleu_script_output(self, predictions, dataset: dict) -> Tuple[str, str]:
-        top_1_predictions = ['' if len(prediction) == 0 else ' '.join(prediction[0]) for prediction in predictions]
-        print("bleu top 1 predictions", top_1_predictions)
+        top_1_predictions = ['' if len(prediction) == 0 else ' '.join([str(i) for i in prediction[0]]) for prediction in predictions]
+        pred_str = '\n'.join(top_1_predictions)
+        print("BLEU top 1 predictions", pred_str)
         targets = dataset['target']['input_ids'].tolist()
+        trg_str = '\n'.join([' '.join([str(i) for i in lst]) for lst in targets])
+        print("BLEU targets", trg_str)
         with tempfile.NamedTemporaryFile(mode='w') as file_with_targets:
-            file_with_targets.write('\n'.join([' '.join([str(i) for i in lst]) for lst in targets]))
+            file_with_targets.write(trg_str + '\n')
             file_with_targets.flush()
             process = subprocess.Popen([self.config['BLEU_PERL_SCRIPT_PATH'], file_with_targets.name],
                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            result = process.communicate(input=('\n'.join(top_1_predictions)).encode())
+            result = process.communicate(input=(pred_str+'\n').encode())
             return result
 
     def conduct(self, predictions: List[List[str]], dataset, dataset_label: str) -> None:
@@ -41,7 +44,9 @@ class BleuCalculation:
         print(f'Errors: {result[1]}')
 
     def get_bleu_score(self, predictions: List[List[List[str]]], dataset: dict) -> float:
-        result = self.get_bleu_script_output(predictions, dataset)
+        data_iterator = DataLoader(dataset, batch_size=len(dataset))
+        for batch in data_iterator:
+            result = self.get_bleu_script_output(predictions, batch)
         print(result[0])
         words = result[0].split()
         if len(words) > 2 and len(words[2]) > 0 and isfloat(words[2][:-1]):
