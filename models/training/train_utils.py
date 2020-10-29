@@ -107,7 +107,7 @@ def greedy_decode(model, batch, sos_index, eos_index, max_len=100):
             # a combination of Decoder state, prev emb, and context
             prob = model.generator(pre_output)  # [batch_size, trg_seq_len, vocab_size]
         _, next_word = torch.max(prob, dim=2)
-        output.append(next_word)
+        output.append(next_word.numpy())
         attention_scores.append(model.decoder.attention.alphas.cpu().numpy())
         # stop when we reach first <EOS>
         if next_word.item() == eos_index:
@@ -136,6 +136,8 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
 
         result, _ = greedy_decode(model, batch, sos_index=tokenizer.bos_token_id, eos_index=tokenizer.eos_token_id,
                                   max_len=max_len)
+        print("Greedy decode output", result)
+        print(result.shape)
 
         print("Example #%d" % (i + 1))
         print("Src : ", tokenizer.decode(src, skip_special_tokens=True))
@@ -152,8 +154,8 @@ def create_greedy_decode_method_with_batch_support(model: EncoderDecoder, max_le
                                                    eos_index: int):
     def decode(batch) -> List[List[np.array]]:
         predicted, _ = greedy_decode(model, batch, sos_index, eos_index, max_len)
-        #return [[el] for el in predicted]
-        return torch.stack(tuple(predicted))
+        #return [[el] for el in predicted] TODO: no batch support for now?
+        return predicted
     return decode
 
 
@@ -170,7 +172,7 @@ def calculate_accuracy(dataset_iterator: Iterable,
         batch['target']['input_ids'] = batch['target']['input_ids'].to('cuda')
         batch['target']['attention_mask'] = batch['target']['attention_mask'].to('cuda')
         targets = batch['target']['input_ids']
-        results = greedy_decode(model, batch, tokenizer, max_len)
+        results = greedy_decode(model, batch, tokenizer.bos_token_id, tokenizer.eos_token_id, max_len)
         for i in range(len(targets)):
             if np.all(targets[i] == results[i]):
                 correct += 1
@@ -180,7 +182,6 @@ def calculate_accuracy(dataset_iterator: Iterable,
 
 def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator, decode_method) \
         -> Tuple[List[int], int, List[List[str]]]:
-    # TODO: decode_method?
     tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")
     correct = [0 for _ in range(len(topk_values))]
     max_k = topk_values[-1]
@@ -191,11 +192,15 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
         batch['attention_mask'] = batch['attention_mask'].to('cuda')
         batch['target']['input_ids'] = batch['target']['input_ids'].to('cuda')
         batch['target']['attention_mask'] = batch['target']['attention_mask'].to('cuda')
-        targets = batch['target']['input_ids']
-        results = decode_method(batch)
-        for example_id in range(len(targets)):
-            target = targets[example_id]
-            example_top_k_results = results[example_id][:max_k]
+        targets = batch['target']['input_ids']  # [batch_size, trg_seq_len]
+        results = decode_method(batch)  # [trg_seq_len, batch_size, k]
+        print("targets", targets.shape)
+        print("results 1", results.shape)
+        results = results.reshape((targets.shape[0], -1, targets.shape[1]))  # [batch_size, k, trg_seq_len]
+        print("results 2", results.shape)
+        for example_id in range(len(results)):
+            target = targets[example_id]  # [trg_seq_len]
+            example_top_k_results = results[example_id][:max_k]  # [max_k, trg_seq_len]
             decoded_tokens = [tokenizer.decode(result, skip_special_tokens=True) for result in example_top_k_results]
             max_top_k_decoded.append(decoded_tokens)
             tail_id = 0
@@ -207,11 +212,9 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
                         correct[j] += 1
                     break
         total += len(batch)
-    print("results[:, :max_k]", [res for res in results[:, :max_k].tolist()])  # TODO: can be wrong in case with several examples (batch_size > 1)
-    print()
-    print("results", [res for res in results.tolist()])
-    print(max_k)
-    return correct, total, max_top_k_decoded, [res for res in results[:, :max_k].tolist()]
+    print("decoded tokens to return", max_top_k_decoded)
+    print("results to return", results[:, :max_k])
+    return correct, total, max_top_k_decoded, results[:, :max_k]
 
 
 def add_special_tokens_to_config(tokenizer: RobertaTokenizer, config: Config):
