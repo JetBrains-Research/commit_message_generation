@@ -38,4 +38,4 @@ class AccuracyCalculation:
             calculate_top_k_accuracy(self.topk_values, data_iterator, self.decode_method)
         for correct_top_k, k in zip(correct_all_k, self.topk_values):
             print(f'Top-{k} accuracy: {correct_top_k} / {total} = {correct_top_k / total}')
-        return max_top_k_not_decoded
+        return max_top_k_decoded
