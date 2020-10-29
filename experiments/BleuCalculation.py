@@ -1,7 +1,7 @@
 import subprocess
 import tempfile
 from typing import List, Tuple
-
+from torch.utils.data import DataLoader
 from Config import Config
 
 # TODO: test BleuCalculation
@@ -22,6 +22,7 @@ class BleuCalculation:
 
     def get_bleu_script_output(self, predictions, dataset: dict) -> Tuple[str, str]:
         top_1_predictions = ['' if len(prediction) == 0 else ' '.join(prediction[0]) for prediction in predictions]
+        print("bleu top 1 predictions", top_1_predictions)
         targets = dataset['target']['input_ids'].tolist()
         with tempfile.NamedTemporaryFile(mode='w') as file_with_targets:
             file_with_targets.write('\n'.join([' '.join([str(i) for i in lst]) for lst in targets]))
