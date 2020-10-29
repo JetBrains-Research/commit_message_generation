@@ -1,5 +1,4 @@
 from typing import List
-from dataset_utils import CommitMessageGenerationDataset
 
 
 def tokenize_git_diff_output_string(git_diff_output: str) -> List[List[str]]:
@@ -38,7 +37,3 @@ def create_filter_predicate_on_code_and_msg(max_length_code, max_length_msg):
                            f"{i}th element of example has length {len(element)} > {max_length_code}"
         return True, None
     return filter_predicate
-
-
-def take_part_from_dataset(dataset: CommitMessageGenerationDataset, n: int):
-    return CommitMessageGenerationDataset(dataset.src_encodings[:n], dataset.trg_encodings[:n])

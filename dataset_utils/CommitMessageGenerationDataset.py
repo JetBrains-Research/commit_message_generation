@@ -2,7 +2,7 @@ import os
 import sys
 
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset,Subset
 
 from dataset_utils.utils import create_filter_predicate_on_code_and_msg
 from Config import Config
@@ -66,6 +66,9 @@ class CommitMessageGenerationDataset(Dataset):
                                                                                padding=True,
                                                                                return_tensors='pt'))
 
+    @staticmethod
+    def take_first_n_from_dataset(dataset, n: int):
+        return Subset(dataset, range(n))
 
 if __name__ == "__main__":
     config = Config()
@@ -82,3 +85,6 @@ if __name__ == "__main__":
 
     print("Example")
     print(train_dataset[0])
+    print(len(CommitMessageGenerationDataset.take_first_n_from_dataset(train_dataset, 5)))
+    tok = RobertaTokenizer.from_pretrained('microsoft/codebert-base')
+    print(tok.decode(train_dataset[0]['target']['input_ids'], skip_special_tokens=True))

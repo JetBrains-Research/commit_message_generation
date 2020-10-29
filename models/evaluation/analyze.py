@@ -9,7 +9,6 @@ from typing import Any, List
 import torch
 
 from dataset_utils.CommitMessageGenerationDataset import CommitMessageGenerationDataset
-from dataset_utils.utils import take_part_from_dataset
 from models.EncoderDecoder import EncoderDecoder
 from Config import Config, load_config
 from experiments.AccuracyCalculation import AccuracyCalculation
@@ -50,6 +49,8 @@ def test_commit_message_generation_model(model: EncoderDecoder, train_size: int,
     test_dataset = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'),
                                                             config, size=test_size)
 
+    train_dataset_test_size = CommitMessageGenerationDataset.take_first_n_from_dataset(train_dataset, len(test_dataset))
+
     accuracy_calculation_experiment = AccuracyCalculation(model, max_len=100, greedy=True, config=config)
     bleu_calculation_experiment = BleuCalculation(config)
 
@@ -59,7 +60,6 @@ def test_commit_message_generation_model(model: EncoderDecoder, train_size: int,
             lambda: accuracy_calculation_experiment.conduct(test_dataset, 'Test dataset')
         )
         save_predicted(test_max_top_k_predicted, dataset_name='test_dataset_commit_message_generator', config=config)
-
         measure_experiment_time(
             lambda: bleu_calculation_experiment.conduct(test_max_top_k_predicted, test_dataset,
                                                         'Test dataset')
@@ -74,15 +74,14 @@ def test_commit_message_generation_model(model: EncoderDecoder, train_size: int,
             lambda: bleu_calculation_experiment.conduct(val_max_top_k_predicted, val_dataset,
                                                         'Validation dataset')
         )
-        # TODO: test size approximation
         train_max_top_k_predicted = measure_experiment_time(
-            lambda: accuracy_calculation_experiment.conduct(train_dataset,
+            lambda: accuracy_calculation_experiment.conduct(train_dataset_test_size,
                                                             f'Train dataset (test size approximation)')
         )
         save_predicted(train_max_top_k_predicted, dataset_name='train_dataset_commit_message_generator', config=config)
 
         measure_experiment_time(
-            lambda: bleu_calculation_experiment.conduct(train_max_top_k_predicted, train_dataset,
+            lambda: bleu_calculation_experiment.conduct(train_max_top_k_predicted, train_dataset_test_size,
                                                         'Train dataset (test size approximation)')
         )
 
