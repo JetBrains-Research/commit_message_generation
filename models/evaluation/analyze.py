@@ -30,10 +30,10 @@ def save_predicted(max_top_k_predicted: List[List[List[str]]], dataset_name: str
     top_k_file_lines = []
     max_k = config['TOP_K'][-1]
     for predictions in max_top_k_predicted:
-        top_1_file_lines.append("" if len(predictions) == 0 else ' '.join(predictions[0]))
+        top_1_file_lines.append("" if len(predictions) == 0 else ' '.join((str(i) for i in predictions[0])))
         top_k_file_lines.append('====NEW EXAMPLE====')
         for prediction in predictions[:max_k]:
-            top_k_file_lines.append(' '.join(prediction))
+            top_k_file_lines.append('' if len(prediction) == 0 else ' '.join(str(i) for i in prediction))
 
     top_1_path = os.path.join(config['OUTPUT_PATH'], f'{dataset_name}_predicted_top_1.txt')
     top_k_path = os.path.join(config['OUTPUT_PATH'], f'{dataset_name}_predicted_top_{max_k}.txt')

@@ -151,8 +151,9 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
 def create_greedy_decode_method_with_batch_support(model: EncoderDecoder, max_len: int, sos_index: int,
                                                    eos_index: int):
     def decode(batch) -> List[List[np.array]]:
-        predicted = greedy_decode(model, batch, sos_index, eos_index, max_len)
-        return [[el] for el in predicted]
+        predicted, _ = greedy_decode(model, batch, sos_index, eos_index, max_len)
+        #return [[el] for el in predicted]
+        return torch.stack(tuple(predicted))
     return decode
 
 
@@ -192,7 +193,7 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
         batch['target']['attention_mask'] = batch['target']['attention_mask'].to('cuda')
         targets = batch['target']['input_ids']
         results = decode_method(batch)
-        for example_id in range(len(results)):
+        for example_id in range(len(targets)):
             target = targets[example_id]
             example_top_k_results = results[example_id][:max_k]
             decoded_tokens = [tokenizer.decode(result, skip_special_tokens=True) for result in example_top_k_results]
@@ -206,7 +207,11 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
                         correct[j] += 1
                     break
         total += len(batch)
-    return correct, total, max_top_k_decoded, results
+    print("results[:, :max_k]", [res for res in results[:, :max_k].tolist()])  # TODO: can be wrong in case with several examples (batch_size > 1)
+    print()
+    print("results", [res for res in results.tolist()])
+    print(max_k)
+    return correct, total, max_top_k_decoded, [res for res in results[:, :max_k].tolist()]
 
 
 def add_special_tokens_to_config(tokenizer: RobertaTokenizer, config: Config):
