@@ -184,7 +184,7 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
     correct = [0 for _ in range(len(topk_values))]
     max_k = topk_values[-1]
     total = 0
-    max_top_k_results = []
+    max_top_k_decoded = []
     for batch in dataset_iterator:
         batch['input_ids'] = batch['input_ids'].to('cuda')
         batch['attention_mask'] = batch['attention_mask'].to('cuda')
@@ -193,12 +193,10 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
         targets = batch['target']['input_ids']
         results = decode_method(batch)
         for example_id in range(len(results)):
-            if example_id >= targets.shape[0]:
-                break
             target = targets[example_id]
             example_top_k_results = results[example_id][:max_k]
             decoded_tokens = [tokenizer.decode(result, skip_special_tokens=True) for result in example_top_k_results]
-            max_top_k_results.append(decoded_tokens)
+            max_top_k_decoded.append(decoded_tokens)
             tail_id = 0
             for i, result in enumerate(example_top_k_results):
                 if i + 1 > topk_values[tail_id]:
@@ -208,7 +206,7 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
                         correct[j] += 1
                     break
         total += len(batch)
-    return correct, total, max_top_k_results
+    return correct, total, max_top_k_decoded, results
 
 
 def add_special_tokens_to_config(tokenizer: RobertaTokenizer, config: Config):

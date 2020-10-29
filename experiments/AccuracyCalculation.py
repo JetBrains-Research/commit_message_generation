@@ -34,8 +34,8 @@ class AccuracyCalculation:
     def conduct(self, dataset: Dataset, dataset_label: str) -> List[List[List[str]]]:
         print(f'Start conducting accuracy calculation experiment for {dataset_label}...')
         data_iterator = DataLoader(dataset, batch_size=self.batch_size)
-        correct_all_k, total, max_top_k_predicted = \
+        correct_all_k, total, max_top_k_decoded, max_top_k_not_decoded = \
             calculate_top_k_accuracy(self.topk_values, data_iterator, self.decode_method)
         for correct_top_k, k in zip(correct_all_k, self.topk_values):
             print(f'Top-{k} accuracy: {correct_top_k} / {total} = {correct_top_k / total}')
-        return max_top_k_predicted
+        return max_top_k_not_decoded
