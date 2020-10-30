@@ -51,7 +51,7 @@ def test_commit_message_generation_model(model: EncoderDecoder, train_size: int,
 
     train_dataset_test_size = CommitMessageGenerationDataset.take_first_n_from_dataset(train_dataset, len(test_dataset))
 
-    accuracy_calculation_experiment = AccuracyCalculation(model, max_len=100, greedy=True, config=config)
+    accuracy_calculation_experiment = AccuracyCalculation(model, max_len=100, greedy=False, config=config)
     bleu_calculation_experiment = BleuCalculation(config)
 
     model.eval()

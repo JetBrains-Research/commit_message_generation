@@ -85,10 +85,8 @@ def run_epoch(data_iter: Generator, model: EncoderDecoder, loss_compute: SimpleL
     return math.exp(total_loss / float(total_tokens))
 
 
-def greedy_decode(model, batch, sos_index, eos_index):
+def greedy_decode(model, batch, sos_index, eos_index, max_len):
     """Greedily decode a sentence."""
-    # TODO: i think normally <s> shouldn't have max probability :(
-    max_len = batch['target']['input_ids'].shape[1]
     with torch.no_grad():
         encoder_output, encoder_final = model.encode(batch['input_ids'], batch['attention_mask'])
         prev_y = torch.tensor([[sos_index]]).type_as(batch['input_ids'])
@@ -132,7 +130,8 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
         src = batch['input_ids'].cpu().numpy()[0, :]
         trg = batch['target']['input_ids'].cpu().numpy()[0, :]
 
-        result, _ = greedy_decode(model, batch, sos_index=tokenizer.bos_token_id, eos_index=tokenizer.eos_token_id)
+        result, _ = greedy_decode(model, batch, sos_index=tokenizer.bos_token_id, eos_index=tokenizer.eos_token_id,
+                                  max_len=max_len)
         print("Greedy decode output", result.shape)
 
         print("Example #%d" % (i + 1))
@@ -149,9 +148,9 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
 def create_greedy_decode_method_with_batch_support(model: EncoderDecoder, max_len: int, sos_index: int,
                                                    eos_index: int):
     def decode(batch) -> List[List[np.array]]:
-        predicted, _ = greedy_decode(model, batch, sos_index, eos_index)
-        #return [[el] for el in predicted] TODO: no batch support for now?
-        return predicted
+        predicted, _ = greedy_decode(model, batch, sos_index, eos_index, max_len)
+        # TODO: no batch support for now?
+        return predicted.reshape((predicted.shape[1], -1, predicted.shape[0]))  # [batch_size, k, pred_seq_len]
     return decode
 
 
@@ -183,22 +182,24 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
     max_k = topk_values[-1]
     total = 0
     max_top_k_decoded = []
-    max_top_k = []
     for batch in dataset_iterator:
         batch['input_ids'] = batch['input_ids'].to('cuda')
         batch['attention_mask'] = batch['attention_mask'].to('cuda')
         batch['target']['input_ids'] = batch['target']['input_ids'].to('cuda')
         batch['target']['attention_mask'] = batch['target']['attention_mask'].to('cuda')
         targets = batch['target']['input_ids']  # [batch_size, trg_seq_len]
-        results = decode_method(batch)  # [trg_seq_len, batch_size, k]
-        results = results.reshape((results.shape[1], -1, results.shape[0]))  # [batch_size, k, trg_seq_len]
+        # TODO: test beam search
+        results = decode_method(batch)  # [batch_size, k, trg_seq_len]
+        print("Results of beam searh:", results.shape)
+        print()
         for example_id in range(len(results)):
             target = targets[example_id]  # [trg_seq_len]
             example_top_k_results = results[example_id][:max_k]  # [max_k, trg_seq_len]
+            print("target", target)
+            print("example_top_k_results", example_top_k_results)
+            print()
             decoded_tokens = [tokenizer.decode(result, skip_special_tokens=True) for result in example_top_k_results]
-            not_decoded_tokens = [list(result) for result in example_top_k_results]
             max_top_k_decoded.append(decoded_tokens)
-            max_top_k.append(not_decoded_tokens)
             tail_id = 0
             for i, result in enumerate(example_top_k_results):
                 if i + 1 > topk_values[tail_id]:
@@ -208,7 +209,8 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
                         correct[j] += 1
                     break
         total += len(batch)
-    return correct, total, max_top_k_decoded, max_top_k
+        print("Decoded tokens to return:", max_top_k_decoded)
+    return correct, total, max_top_k_decoded
 
 
 def add_special_tokens_to_config(tokenizer: RobertaTokenizer, config: Config):

@@ -65,7 +65,7 @@ def perform_search(
 
         # we predict from the pre-output layer, which is
         # a combination of Decoder state, prev emb, and context
-        log_probs = model.generator(pre_output)[:,-1]  # [B, V]
+        log_probs = model.generator(pre_output)[:, -1]  # [B, V]
 
     assert (
             log_probs.ndimension() == 2 and log_probs.size(0) == 1
