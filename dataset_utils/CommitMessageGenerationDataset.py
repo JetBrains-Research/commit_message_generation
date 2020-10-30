@@ -25,7 +25,7 @@ class CommitMessageGenerationDataset(Dataset):
         return src
 
     def __len__(self):
-        return len(self.src_encodings.input_ids)
+        return len(self.trg_encodings['input_ids'])
 
     @staticmethod
     def load_data(path: str, config: Config, size=None, verbose=False):

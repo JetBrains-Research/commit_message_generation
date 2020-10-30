@@ -1,5 +1,4 @@
 from typing import List, Tuple
-
 import torch
 
 
@@ -10,8 +9,8 @@ class Search(object):
     Results can be found in hypotheses
     """
 
-    def __init__(self, eos_ids: List[int], vocab_size: int, search_size: int):
-        self._eos_ids = eos_ids
+    def __init__(self, eos_id: int, vocab_size: int, search_size: int):
+        self._eos_id = eos_id
         self._search_size = search_size
         self._vocab_size = vocab_size
 
@@ -33,9 +32,7 @@ class Search(object):
             self._vocab_size,
         ), f"log_probs must have shape {(self.batch_size, self._vocab_size)}, but {log_probs.size()} was given"
 
-        assert all(
-            eos < self._vocab_size for eos in self._eos_ids
-        ), f"EOS ids must be less than vocab_size, but EOS ids: {self._eos_ids} and vocab_size: {self._vocab_size}"
+        assert (self._eos_id < self._vocab_size), f"EOS id must be less than vocab_size, but EOS id: {self._eos_id} and vocab_size: {self._vocab_size}"
 
     @property
     def hypotheses(self) -> List[List[Tuple[torch.Tensor, float]]]:

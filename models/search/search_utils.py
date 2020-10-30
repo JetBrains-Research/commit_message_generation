@@ -103,24 +103,18 @@ def perform_search(
     src_mask = batch['attention_mask'].repeat_interleave(search.batch_size * beam_size, dim=0)
     trg_mask = trg_mask.repeat_interleave(search.batch_size * beam_size, dim=0)
     encoder_output = encoder_output.repeat_interleave(search.batch_size * beam_size, dim=0)
-    encoder_final = (
-        encoder_final[0].repeat_interleave(search.batch_size * beam_size, dim=1),
-        encoder_final[1].repeat_interleave(search.batch_size * beam_size, dim=1)
-    )
-    hidden = (
-        hidden[0].repeat_interleave(search.batch_size * beam_size, dim=1),
-        hidden[1].repeat_interleave(search.batch_size * beam_size, dim=1)
-    )
+    encoder_final = encoder_final.repeat_interleave(search.batch_size * beam_size, dim=1)
+    hidden = hidden.repeat_interleave(search.batch_size * beam_size, dim=1)
 
     for _ in tqdm.trange(num_iterations, disable=not verbose):
         mask = search.step(log_probs, possible_infs=True).long()
         prev_y = search.last_predictions.unsqueeze(1)
         # pre_output: [B, TrgSeqLen, DecoderH]
         encoder_output = encoder_output[mask]
-        encoder_final = (encoder_final[0][:, mask, :], encoder_final[1][:, mask, :])
+        encoder_final = encoder_final[:, mask, :]
         src_mask = src_mask[mask]
         trg_mask = trg_mask[mask]
-        hidden = (hidden[0][:, mask, :], hidden[1][:, mask, :])
+        hidden = hidden[:, mask, :]
         trg_embed = model.get_embeddings(prev_y, trg_mask)
         out, hidden, pre_output = model.decode(trg_embed, trg_mask, encoder_output, encoder_final,
                                                batch['attention_mask'].unsqueeze(1), hidden=hidden)
@@ -128,7 +122,6 @@ def perform_search(
         # we predict from the pre-output layer, which is
         # a combination of Decoder state, prev emb, and context
         log_probs = model.generator(pre_output)[:, -1]  # [B, V]
-
     return search.hypotheses
 
 

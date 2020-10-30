@@ -9,8 +9,8 @@ from models.search.Search import Search
 class BeamSearch(Search):
     """Beam search algorithm with normalized by length scores"""
 
-    def __init__(self, eos_ids: List[int], vocab_size: int, beam_size: int, alpha=.0):
-        super().__init__(eos_ids, vocab_size, beam_size)
+    def __init__(self, eos_id: int, vocab_size: int, beam_size: int, alpha=.0):
+        super().__init__(eos_id, vocab_size, beam_size)
 
         self._length = 1.0
         self._scores = None
@@ -24,7 +24,7 @@ class BeamSearch(Search):
         self._device = device
         self._scores = torch.zeros(1, dtype=dtype, device=device)
         self._hypotheses = torch.empty(1, 0, dtype=torch.long, device=device)
-        self._eos_tensor = torch.tensor(self._eos_ids, dtype=torch.long, device=device).unsqueeze(1)
+        self._eos_tensor = torch.tensor([self._eos_id], dtype=torch.long, device=device).unsqueeze(1)
 
     def step(self, log_probs: torch.Tensor, possible_infs: bool = False) -> torch.Tensor:
         """Take a single search step.
@@ -43,12 +43,9 @@ class BeamSearch(Search):
 
         log_probs.add_(self._scores.unsqueeze(1))
         log_probs = log_probs.flatten()
-        sample_scores, samples = torch.topk(
-            log_probs,
+        sample_scores, samples = torch.topk(log_probs,
             # Take more to ensure that we will keep search_size not terminated
-            min((1 + len(self._eos_ids)) * self._search_size,
-                (log_probs != -math.inf).sum().item() if possible_infs else log_probs.size(0))
-        )
+            min((1 + self._search_size, (log_probs != -math.inf).sum().item() if possible_infs else log_probs.size(0))))
 
         sort_mask = torch.div(samples, self._vocab_size)
         samples.fmod_(self._vocab_size)

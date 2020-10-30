@@ -190,14 +190,9 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
         targets = batch['target']['input_ids']  # [batch_size, trg_seq_len]
         # TODO: test beam search
         results = decode_method(batch)  # [batch_size, k, trg_seq_len]
-        print("Results of beam searh:", results.shape)
-        print()
         for example_id in range(len(results)):
             target = targets[example_id]  # [trg_seq_len]
             example_top_k_results = results[example_id][:max_k]  # [max_k, trg_seq_len]
-            print("target", target)
-            print("example_top_k_results", example_top_k_results)
-            print()
             decoded_tokens = [tokenizer.decode(result, skip_special_tokens=True) for result in example_top_k_results]
             max_top_k_decoded.append(decoded_tokens)
             tail_id = 0

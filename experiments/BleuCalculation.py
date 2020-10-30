@@ -20,8 +20,8 @@ class BleuCalculation:
         self.config = config
 
     def get_bleu_script_output(self, pred_str, trg_str: str) -> Tuple[str, str]:
-        print("BLEU top 1 predictions", pred_str)
-        print("BLEU targets", trg_str)
+        print("BLEU top 1 predictions", pred_str, sep='\n')
+        print("BLEU targets", trg_str, sep='\n')
         with tempfile.NamedTemporaryFile(mode='w') as file_with_targets:
             file_with_targets.write(trg_str)
             file_with_targets.flush()
@@ -53,20 +53,19 @@ class BleuCalculation:
             return 0
 
     @staticmethod
-    def preprocess_dataset_for_bleu(dataset: Dataset, special_tokens_ids=[0,1,2]) -> str:
+    def preprocess_dataset_for_bleu(dataset: Dataset) -> str:
         data_iterator = DataLoader(dataset, batch_size=len(dataset))  # load whole dataset in one batch
         tok = RobertaTokenizer.from_pretrained('microsoft/codebert-base')
         for batch in data_iterator:
             targets = batch['target']['input_ids'].tolist()
-            # remove trailing pad tokens ids
+            # decode targets
             for i, el in enumerate(targets):
-                #targets[i] = [i for i in el if i not in special_tokens_ids]
-                targets[i] = tok.decode(el, skip_special_tokens=True)
+                targets[i] = tok.decode(el, clean_up_tokenization_spaces=False, skip_special_tokens=True)
             # separate elements in each row with spaces
             # separate rows with newline \n
             return '\n'.join(targets)
 
     @staticmethod
-    def preprocess_predictions_for_bleu(predictions: List[List[List[str]]], special_tokens_ids=[0,1,2]) -> str:
+    def preprocess_predictions_for_bleu(predictions: List[List[List[str]]]) -> str:
         top_1_predictions = ['' if len(prediction) == 0 else prediction[0] for prediction in predictions]
         return '\n'.join(top_1_predictions)
