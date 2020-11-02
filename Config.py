@@ -27,7 +27,7 @@ class Config:
         'ENCODER_HIDDEN_SIZE': 768,  # used in pretrained CodeBERT
         'DECODER_HIDDEN_SIZE': 256,
         'NUM_LAYERS': 2,
-        'TEACHER_FORCING_RATIO': 0.6,
+        'TEACHER_FORCING_RATIO': 0.9,
         'DROPOUT': 0.2,
         'USE_BRIDGE': True,
         'EARLY_STOPPING_ROUNDS': 80,

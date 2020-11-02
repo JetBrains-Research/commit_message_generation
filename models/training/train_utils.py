@@ -99,7 +99,7 @@ def greedy_decode(model, batch, sos_index, eos_index, max_len):
         prev_y = torch.tensor([[sos_index]]).type_as(batch['input_ids'])
         trg_mask = torch.ones_like(prev_y)
 
-    output = []
+    output = [prev_y.cpu().numpy()]
     attention_scores = []
     hidden = None
 
@@ -142,9 +142,9 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, bos_token_id
         print("Greedy decode output", result.shape)
 
         print("Example #%d" % (i + 1))
-        print("Src : ", decode_tokens(src, skip_special_tokens=True, clean_up_tokenization_spaces=True))
-        print("Trg : ", decode_tokens(trg, skip_special_tokens=True, clean_up_tokenization_spaces=True))
-        print("Pred: ", decode_tokens(result, skip_special_tokens=False, clean_up_tokenization_spaces=True))
+        print("Src : ", decode_tokens(src, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+        print("Trg : ", decode_tokens(trg, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+        print("Pred: ", decode_tokens(result, skip_special_tokens=False, clean_up_tokenization_spaces=False))
         print()
 
         count += 1
@@ -196,9 +196,14 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
         batch['target']['attention_mask'] = batch['target']['attention_mask'].to('cuda')
         targets = batch['target']['input_ids']  # [batch_size, trg_seq_len]
         results = decode_method(batch)  # [batch_size, k, trg_seq_len]
+        print("results", len(results))
+        print("results[0]", len(results[0]))
+        print("results[0][0]", len(results[0][0]))
         for example_id in range(len(results)):
+            print("example_id:", example_id)
             target = targets[example_id]  # [trg_seq_len]
             example_top_k_results = results[example_id][:max_k]  # [max_k, trg_seq_len]
+            print("example_top_k_results", example_top_k_results)
             decoded_tokens = [decode_tokens(result, skip_special_tokens=True, clean_up_tokenization_spaces=False)
                               for result in example_top_k_results]
             max_top_k_decoded.append(decoded_tokens)
@@ -211,8 +216,7 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
                         correct[j] += 1
                     break
         total += len(batch)
-        print("Decoded tokens to return:", max_top_k_decoded)
-    return correct, total, max_top_k_decoded
+    return correct, total, [max_top_k_decoded]
 
 
 def add_special_tokens_to_config(tokenizer: RobertaTokenizer, config: Config):

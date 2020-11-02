@@ -28,7 +28,7 @@ class AccuracyCalculation:
                 self.model, max_len, self.bos_index, self.eos_index,
                 self.trg_vocab_size, self.beam_size,
                 self.config['NUM_GROUPS'], self.config['DIVERSITY_STRENGTH'],
-                verbose=True)
+                verbose=False)
         self.batch_size = self.config['TEST_BATCH_SIZE'] if greedy else 1
 
     def conduct(self, dataset: Dataset, dataset_label: str) -> List[List[List[str]]]:

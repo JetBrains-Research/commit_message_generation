@@ -41,7 +41,7 @@ def save_predicted(max_top_k_predicted: List[List[List[str]]], dataset_name: str
         top_k_file.write('\n'.join(top_k_file_lines))
 
 
-def test_commit_message_generation_model(model: EncoderDecoder, train_size: int, val_size: int, test_size: int, config: Config) -> None:
+def test_commit_message_generation_model(model: EncoderDecoder, train_size: int, val_size: int, test_size: int, config: Config, greedy: bool) -> None:
     train_dataset = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'),
                                                              config, size=train_size)
     val_dataset = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'),
@@ -51,7 +51,7 @@ def test_commit_message_generation_model(model: EncoderDecoder, train_size: int,
 
     train_dataset_test_size = CommitMessageGenerationDataset.take_first_n_from_dataset(train_dataset, len(test_dataset))
 
-    accuracy_calculation_experiment = AccuracyCalculation(model, max_len=100, greedy=False, config=config)
+    accuracy_calculation_experiment = AccuracyCalculation(model, max_len=100, greedy=greedy, config=config)
     bleu_calculation_experiment = BleuCalculation(config)
 
     model.eval()

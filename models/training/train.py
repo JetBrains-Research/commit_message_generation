@@ -143,14 +143,13 @@ def print_small_example(model):
 
 
 def save_model(model: nn.Module, model_suffix: str, config: Config) -> None:
-    torch.save(model.state_dict(), os.path.join(config['OUTPUT_PATH'], f'model_state_dict_{model_suffix}.pt'))
-    torch.save(model, os.path.join(config['OUTPUT_PATH'], f'model_{model_suffix}.pt'))
+    torch.save(model.state_dict(), os.path.join(config['OUTPUT_PATH'], f'model_state_dict_{model_suffix}.bin'))
     print(f'Model saved {model_suffix}!')
 
 
 def load_weights_of_best_model_on_validation(model: nn.Module, suffix: str, config: Config) -> None:
     model.load_state_dict(torch.load(os.path.join(config['OUTPUT_PATH'],
-                                                  f'model_best_on_validation_{suffix}.pt')))
+                                                  f'model_state_dict_best_on_validation_{suffix}.bin')))
 
 
 def save_data_on_checkpoint(model: nn.Module,
@@ -210,31 +209,39 @@ def main():
     test = args.test
 
     print("Current working directory:", os.getcwd())
-
     config = Config()
     add_special_tokens_to_config(RobertaTokenizer.from_pretrained('microsoft/codebert-base'), config)
     if num_epoch:
         config._CONFIG['MAX_NUM_OF_EPOCHS'] = num_epoch
-    print('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n', end='')
-    print("--Constructing datasets--")
-    train_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'),
+    if not test:
+        print('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n', end='')
+        print("--Constructing datasets--")
+        train_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'),
                                                                     config, size=train_size)
-    val_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'),
+        val_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'),
                                                                   config, size=val_size)
-    test_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'test'),
-                                                                   config, size=test_size)
 
-    train_loader = DataLoader(train_dataset_commit, batch_size=config['BATCH_SIZE'])
-    val_loader = DataLoader(val_dataset_commit, batch_size=config['VAL_BATCH_SIZE'])
+        train_loader = DataLoader(train_dataset_commit, batch_size=config['BATCH_SIZE'])
+        val_loader = DataLoader(val_dataset_commit, batch_size=config['VAL_BATCH_SIZE'])
 
-    print("Train:", len(train_dataset_commit))
-    print("Val:", len(val_dataset_commit))
-    print("Test:", len(test_dataset_commit))
+        print("Train:", len(train_dataset_commit))
+        print("Val:", len(val_dataset_commit))
 
-    commit_message_generator = run_train(train_loader, val_loader,
+        commit_message_generator = run_train(train_loader, val_loader,
                                          'commit_msg_generator', config=config)
+    else:
+        commit_message_generator = make_model(emb_size=config['WORD_EMBEDDING_SIZE'],
+                                       hidden_size_encoder=config['ENCODER_HIDDEN_SIZE'],
+                                       hidden_size_decoder=config['DECODER_HIDDEN_SIZE'],
+                                       vocab_size=config['VOCAB_SIZE'],
+                                       num_layers=config['NUM_LAYERS'],
+                                       dropout=config['DROPOUT'],
+                                       use_bridge=config['USE_BRIDGE'],
+                                       teacher_forcing_ratio=config['TEACHER_FORCING_RATIO'],
+                                       config=config)
 
-    if test:
+        load_weights_of_best_model_on_validation(commit_message_generator, 'commit_msg_generator', config)
+
         print('\n====STARTING EVALUATION OF COMMIT MESSAGE GENERATOR====\n', end='')
         print('\n====BEAM SEARCH====\n')
         test_commit_message_generation_model(commit_message_generator, train_size, val_size, test_size,
