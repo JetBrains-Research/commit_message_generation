@@ -19,12 +19,19 @@ from models.Generator import GeneratorModel
 import Config
 
 
+def decode_tokens(seq, skip_special_tokens, clean_up_tokenization_spaces):
+    tok = RobertaTokenizer.from_pretrained('microsoft/codebert-base')
+    return tok.decode(seq, skip_special_tokens=skip_special_tokens,
+                      clean_up_tokenization_spaces=clean_up_tokenization_spaces)
+
+
 def make_model(emb_size: int,
                hidden_size_encoder: int,
                hidden_size_decoder: int,
                vocab_size: int,
                num_layers: int,
                dropout: float,
+               teacher_forcing_ratio,
                use_bridge: bool,
                config: Config) -> EncoderDecoder:
     """Helper function: Construct an EncoderDecoder model from hyperparameters."""
@@ -34,8 +41,8 @@ def make_model(emb_size: int,
 
     attention = BahdanauAttention(hidden_size_decoder, key_size=hidden_size_encoder, query_size=hidden_size_decoder)
     decoder = Decoder(emb_size, hidden_size_decoder, hidden_size_encoder, attention, num_layers, dropout, use_bridge,
-                      teacher_forcing_ratio=config['TEACHER_FORCING_RATIO'])
-    generator = GeneratorModel(hidden_size_decoder, config['VOCAB_SIZE'])
+                      teacher_forcing_ratio=teacher_forcing_ratio)
+    generator = GeneratorModel(hidden_size_decoder, vocab_size)
 
     model: EncoderDecoder = EncoderDecoder(
         codebert_model,
@@ -116,7 +123,7 @@ def greedy_decode(model, batch, sos_index, eos_index, max_len):
     return output, np.concatenate(attention_scores, axis=1)
 
 
-def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: RobertaTokenizer,
+def print_examples(example_iter: DataLoader, model: EncoderDecoder, bos_token_id: int, eos_token_id: int,
                    n=10, max_len=30) -> None:
     """Prints N examples. Assumes batch size of 1."""
     count = 0
@@ -130,14 +137,14 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, tokenizer: R
         src = batch['input_ids'].cpu().numpy()[0, :]
         trg = batch['target']['input_ids'].cpu().numpy()[0, :]
 
-        result, _ = greedy_decode(model, batch, sos_index=tokenizer.bos_token_id, eos_index=tokenizer.eos_token_id,
+        result, _ = greedy_decode(model, batch, sos_index=bos_token_id, eos_index=eos_token_id,
                                   max_len=max_len)
         print("Greedy decode output", result.shape)
 
         print("Example #%d" % (i + 1))
-        print("Src : ", tokenizer.decode(src, skip_special_tokens=True))
-        print("Trg : ", tokenizer.decode(trg, skip_special_tokens=True))
-        print("Pred: ", tokenizer.decode(result))
+        print("Src : ", decode_tokens(src, skip_special_tokens=True, clean_up_tokenization_spaces=True))
+        print("Trg : ", decode_tokens(trg, skip_special_tokens=True, clean_up_tokenization_spaces=True))
+        print("Pred: ", decode_tokens(result, skip_special_tokens=False, clean_up_tokenization_spaces=True))
         print()
 
         count += 1
@@ -151,14 +158,15 @@ def create_greedy_decode_method_with_batch_support(model: EncoderDecoder, max_le
         predicted, _ = greedy_decode(model, batch, sos_index, eos_index, max_len)
         # TODO: no batch support for now?
         return predicted.reshape((predicted.shape[1], -1, predicted.shape[0]))  # [batch_size, k, pred_seq_len]
+
     return decode
 
 
 def calculate_accuracy(dataset_iterator: Iterable,
                        model: EncoderDecoder,
-                       tokenizer: RobertaTokenizer,
                        max_len: int,
-                       config: Config) -> float:
+                       bos_token_id: int,
+                       eos_token_id: int) -> float:
     correct = 0
     total = 0
     for batch in dataset_iterator:
@@ -167,7 +175,7 @@ def calculate_accuracy(dataset_iterator: Iterable,
         batch['target']['input_ids'] = batch['target']['input_ids'].to('cuda')
         batch['target']['attention_mask'] = batch['target']['attention_mask'].to('cuda')
         targets = batch['target']['input_ids']
-        results = greedy_decode(model, batch, tokenizer.bos_token_id, tokenizer.eos_token_id, max_len)
+        results = greedy_decode(model, batch, bos_token_id, eos_token_id, max_len)
         for i in range(len(targets)):
             if np.all(targets[i] == results[i]):
                 correct += 1
@@ -177,7 +185,6 @@ def calculate_accuracy(dataset_iterator: Iterable,
 
 def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator, decode_method) \
         -> Tuple[List[int], int, List[List[str]]]:
-    tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")
     correct = [0 for _ in range(len(topk_values))]
     max_k = topk_values[-1]
     total = 0
@@ -188,12 +195,12 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
         batch['target']['input_ids'] = batch['target']['input_ids'].to('cuda')
         batch['target']['attention_mask'] = batch['target']['attention_mask'].to('cuda')
         targets = batch['target']['input_ids']  # [batch_size, trg_seq_len]
-        # TODO: test beam search
         results = decode_method(batch)  # [batch_size, k, trg_seq_len]
         for example_id in range(len(results)):
             target = targets[example_id]  # [trg_seq_len]
             example_top_k_results = results[example_id][:max_k]  # [max_k, trg_seq_len]
-            decoded_tokens = [tokenizer.decode(result, skip_special_tokens=True) for result in example_top_k_results]
+            decoded_tokens = [decode_tokens(result, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+                              for result in example_top_k_results]
             max_top_k_decoded.append(decoded_tokens)
             tail_id = 0
             for i, result in enumerate(example_top_k_results):

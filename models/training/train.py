@@ -10,17 +10,17 @@ from torch.utils.data import DataLoader
 
 from transformers import RobertaTokenizer
 
-from models.EncoderDecoder import EncoderDecoder
-from models.SimpleLossCompute import SimpleLossCompute
 from Config import Config
 from dataset_utils.CommitMessageGenerationDataset import CommitMessageGenerationDataset
+
+from models.EncoderDecoder import EncoderDecoder
+from models.SimpleLossCompute import SimpleLossCompute
 from models.training.train_utils import make_model, run_epoch, print_examples, add_special_tokens_to_config
 from models.evaluation.test_utils import save_perplexity_plot
 from models.evaluation.analyze import test_commit_message_generation_model
 
 
-def train(model: EncoderDecoder, tokenizer: RobertaTokenizer,
-          train_iter: DataLoader, val_iter: DataLoader, suffix_for_saving: str,
+def train(model: EncoderDecoder, train_iter: DataLoader, val_iter: DataLoader, suffix_for_saving: str,
           config: Config) -> Tuple[List[float], List[float]]:
     """
     :param suffix_for_saving:
@@ -31,7 +31,7 @@ def train(model: EncoderDecoder, tokenizer: RobertaTokenizer,
     :param config: config of execution
     :return: train and validation perplexities for each epoch
     """
-    pad_index = tokenizer.pad_token_id
+    pad_index = config['PAD_TOKEN_ID']
     criterion = nn.NLLLoss(reduction="sum", ignore_index=pad_index)
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=config['LEARNING_RATE'])
 
@@ -63,10 +63,10 @@ def train(model: EncoderDecoder, tokenizer: RobertaTokenizer,
 
         model.eval()
         with torch.no_grad():
-            print_small_example(model, tokenizer)
+            print_small_example(model)
 
-            print_examples(val_iter,
-                           model, tokenizer, max_len=config['TOKENS_CODE_CHUNK_MAX_LEN'])
+            print_examples(val_iter, model, bos_token_id=config['BOS_TOKEN_ID'], eos_token_id=config['EOS_TOKEN_ID'],
+                           max_len=config['TOKENS_CODE_CHUNK_MAX_LEN'])
 
             val_perplexity = run_epoch(val_iter,
                                        model, val_loss_function,
@@ -87,10 +87,12 @@ def train(model: EncoderDecoder, tokenizer: RobertaTokenizer,
     return train_perplexities, val_perplexities
 
 
-def print_small_example(model, tok):
+def print_small_example(model):
     prev = ["Hello world", "mmm a / build . gradle <nl> subprojects { <nl> } <nl> project . ext { <nl> guavaVersion = ' 14 . 0 . 1 ' <nl> nettyVersion = ' 4 . 0 . 9 . Final ' <nl> slf4jVersion = ' 1 . 7 . 5 ' <nl> commonsIoVersion = ' 2 . 4 ' <nl>"]
     upd = ["Goodbye world", "ppp b / build . gradle <nl> subprojects { <nl> } <nl> project . ext { <nl> guavaVersion = ' 15 . 0 ' <nl> nettyVersion = ' 4 . 0 . 9 . Final ' <nl> slf4jVersion = ' 1 . 7 . 5 ' <nl> commonsIoVersion = ' 2 . 4 ' <nl>"]
     trg = ["Change greeting to farewell", "upgraded guava to 15 . 0"]
+
+    tok = RobertaTokenizer.from_pretrained('microsoft/codebert-base')
 
     src_enc = tok(prev, upd, padding=True, truncation=True, return_tensors='pt')
     trg_enc = tok(trg, padding=True, truncation=True, return_tensors='pt')
@@ -175,14 +177,13 @@ def run_train(train_iter: DataLoader, val_iter: DataLoader,
                                        num_layers=config['NUM_LAYERS'],
                                        dropout=config['DROPOUT'],
                                        use_bridge=config['USE_BRIDGE'],
+                                       teacher_forcing_ratio=config['TEACHER_FORCING_RATIO'],
                                        config=config)
     print("----Created model----")
     print(model)
 
     print("----Training----")
-    # TODO: think how to fix chaotic usage of tokenizer in train-related functions
-    tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")
-    train_perplexities, val_perplexities = train(model, tokenizer, train_iter, val_iter, suffix_for_saving, config)
+    train_perplexities, val_perplexities = train(model, train_iter, val_iter, suffix_for_saving, config)
 
     print(train_perplexities)
     print(val_perplexities)
@@ -190,7 +191,7 @@ def run_train(train_iter: DataLoader, val_iter: DataLoader,
     save_data_on_checkpoint(model, train_perplexities, val_perplexities, suffix_for_saving, config)
     save_perplexity_plot([train_perplexities, val_perplexities], ['train', 'validation'],
                          f'loss_{suffix_for_saving}.png', config)
-    #load_weights_of_best_model_on_validation(model, suffix_for_saving, config)
+    load_weights_of_best_model_on_validation(model, suffix_for_saving, config)
     return model
 
 
@@ -235,7 +236,12 @@ def main():
 
     if test:
         print('\n====STARTING EVALUATION OF COMMIT MESSAGE GENERATOR====\n', end='')
-        test_commit_message_generation_model(commit_message_generator, train_size, val_size, test_size, config)
+        print('\n====BEAM SEARCH====\n')
+        test_commit_message_generation_model(commit_message_generator, train_size, val_size, test_size,
+                                             config, greedy=False)
+        print('\n====GREEDY====\n')
+        test_commit_message_generation_model(commit_message_generator, train_size, val_size, test_size,
+                                             config, greedy=True)
     return commit_message_generator
 
 

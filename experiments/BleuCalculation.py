@@ -2,8 +2,9 @@ import subprocess
 import tempfile
 from typing import List, Tuple
 from torch.utils.data import Dataset, DataLoader
-from transformers import RobertaTokenizer
+
 from Config import Config
+from models.training.train_utils import decode_tokens
 
 
 def isfloat(value):
@@ -55,12 +56,11 @@ class BleuCalculation:
     @staticmethod
     def preprocess_dataset_for_bleu(dataset: Dataset) -> str:
         data_iterator = DataLoader(dataset, batch_size=len(dataset))  # load whole dataset in one batch
-        tok = RobertaTokenizer.from_pretrained('microsoft/codebert-base')
         for batch in data_iterator:
             targets = batch['target']['input_ids'].tolist()
             # decode targets
             for i, el in enumerate(targets):
-                targets[i] = tok.decode(el, clean_up_tokenization_spaces=False, skip_special_tokens=True)
+                targets[i] = decode_tokens(el, clean_up_tokenization_spaces=False, skip_special_tokens=True)
             # separate elements in each row with spaces
             # separate rows with newline \n
             return '\n'.join(targets)
