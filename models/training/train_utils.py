@@ -19,7 +19,7 @@ from models.Generator import GeneratorModel
 import Config
 
 
-def decode_tokens(seq, skip_special_tokens, clean_up_tokenization_spaces):
+def decode_tokens(seq, skip_special_tokens=True, clean_up_tokenization_spaces=True):
     tok = RobertaTokenizer.from_pretrained('microsoft/codebert-base')
     return tok.decode(seq, skip_special_tokens=skip_special_tokens,
                       clean_up_tokenization_spaces=clean_up_tokenization_spaces)
@@ -187,7 +187,10 @@ def calculate_accuracy(dataset_iterator: Iterable,
 def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator, decode_method) \
         -> Tuple[List[int], int, List[List[str]]]:
     correct = [0 for _ in range(len(topk_values))]
-    max_k = topk_values[-1]
+    if len(topk_values) > 1:
+        max_k = topk_values[-2]
+    else:
+        max_k = topk_values[-1]
     total = 0
     max_top_k_decoded = []
     for batch in dataset_iterator:
@@ -197,27 +200,25 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
         batch['target']['attention_mask'] = batch['target']['attention_mask'].to('cuda')
         targets = batch['target']['input_ids']  # [batch_size, trg_seq_len]
         results = decode_method(batch)  # [batch_size, k, trg_seq_len]
-        print("results", len(results))
-        print("results[0]", len(results[0]))
-        print("results[0][0]", len(results[0][0]))
         for example_id in range(len(results)):
-            print("example_id:", example_id)
-            target = targets[example_id]  # [trg_seq_len]
+            target = decode_tokens(targets[example_id], skip_special_tokens=True, clean_up_tokenization_spaces=False).split()  # [trg_seq_len]
             example_top_k_results = results[example_id][:max_k]  # [max_k, trg_seq_len]
-            print("example_top_k_results", example_top_k_results)
-            decoded_tokens = [decode_tokens(result, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+            decoded_tokens = [[decode_tokens(result, skip_special_tokens=True, clean_up_tokenization_spaces=False)]
                               for result in example_top_k_results]
             max_top_k_decoded.append(decoded_tokens)
             tail_id = 0
+            print("trg:", target)
             for i, result in enumerate(example_top_k_results):
+                result = decode_tokens(result, skip_special_tokens=True, clean_up_tokenization_spaces=False).split()
+                print("pred:", result)
                 if i + 1 > topk_values[tail_id]:
                     tail_id += 1
                 if len(result) == len(target) and np.all(result == target):
                     for j in range(tail_id, len(correct)):
                         correct[j] += 1
                     break
-        total += len(batch)
-    return correct, total, [max_top_k_decoded]
+        total += len(batch['target']['input_ids'])
+    return correct, total, max_top_k_decoded
 
 
 def add_special_tokens_to_config(tokenizer: RobertaTokenizer, config: Config):

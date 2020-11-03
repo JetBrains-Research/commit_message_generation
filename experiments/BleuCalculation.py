@@ -63,9 +63,9 @@ class BleuCalculation:
                 targets[i] = decode_tokens(el, clean_up_tokenization_spaces=False, skip_special_tokens=True)
             # separate elements in each row with spaces
             # separate rows with newline \n
-            return '\n'.join(targets) + '\n'
+            return '\n'.join(targets)
 
     @staticmethod
     def preprocess_predictions_for_bleu(predictions: List[List[List[str]]]) -> str:
         top_1_predictions = ['' if len(prediction) == 0 else ' '.join(prediction[0]) for prediction in predictions]
-        return '\n'.join(top_1_predictions) + '\n'
+        return '\n'.join(top_1_predictions)

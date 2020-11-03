@@ -22,7 +22,6 @@ def create_decode_method(
     def decode(batch) -> List[List[np.array]]:
         result = perform_search(model, batch, num_iterations, sos_index, eos_index, vocab_size,
                                 beam_size, num_groups, diversity_strength, verbose)
-        print("result before flat_map_and_sort_perform_search", result)
         return [flat_map_and_sort_perform_search(result)]
     return decode
 
@@ -128,6 +127,9 @@ def perform_search(
 
 def flat_map_and_sort_perform_search(
         hypotheses: List[List[Tuple[torch.Tensor, float]]]) -> List[np.array]:
+    #print("hypotheses:", len(hypotheses))
+    #print("hypotheses[0]:", len(hypotheses[0]))
+    #print("hypotheses[0][0][0]:", hypotheses[0][0][0].shape)
     flat_mapped = [answer for hypothesis in hypotheses for answer in hypothesis]
     flat_mapped_and_sorted = sorted(flat_mapped, key=lambda answer: answer[1], reverse=True)
     return list(map(lambda answer: answer[0].detach().cpu().numpy()[:-1], flat_mapped_and_sorted))

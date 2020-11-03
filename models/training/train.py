@@ -6,7 +6,7 @@ from typing import Tuple, List
 
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, RandomSampler
 
 from transformers import RobertaTokenizer
 
@@ -223,8 +223,9 @@ def main():
                                                                         config, size=train_size)
         val_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'),
                                                                       config, size=val_size)
-
-        train_loader = DataLoader(train_dataset_commit, batch_size=config['BATCH_SIZE'])
+        
+        train_sampler = RandomSampler(train_dataset_commit)
+        train_loader = DataLoader(train_dataset_commit, sampler=train_sampler, batch_size=config['BATCH_SIZE'])
         val_loader = DataLoader(val_dataset_commit, batch_size=config['VAL_BATCH_SIZE'])
 
         print("Train:", len(train_dataset_commit))

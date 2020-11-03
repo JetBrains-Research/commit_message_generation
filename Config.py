@@ -31,7 +31,7 @@ class Config:
         'DROPOUT': 0.2,
         'USE_BRIDGE': True,
         'EARLY_STOPPING_ROUNDS': 80,
-        'BEAM_SIZE': 50,
+        'BEAM_SIZE': 10,
         'NUM_GROUPS': 1,
         'DIVERSITY_STRENGTH': None,
         'TOP_K': [1, 3, 5, 10, 50],
