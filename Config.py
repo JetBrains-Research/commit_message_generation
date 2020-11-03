@@ -43,7 +43,7 @@ class Config:
         'TSNE_BATCH_SIZE': 1024,
         'VAL_BATCH_SIZE': 1,
         'TEST_BATCH_SIZE': 1,
-        'SAVE_MODEL_EVERY': 5,
+        'SAVE_MODEL_EVERY': 10,
         'PRINT_EVERY_iTH_BATCH': 5,
         'MAKE_CUDA_REPRODUCIBLE': False,
     }
@@ -56,7 +56,6 @@ class Config:
         if isinstance(self._CONFIG[key], dict) and 'cmg' in self._CONFIG[key]:
             return self._CONFIG[key]['cmg']
         return self._CONFIG[key]
-
 
     def save(self) -> None:
         with open(os.path.join(self['OUTPUT_PATH'], 'config.pkl'), 'wb') as config_file:

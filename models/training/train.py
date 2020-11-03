@@ -33,7 +33,7 @@ def train(model: EncoderDecoder, train_iter: DataLoader, val_iter: DataLoader, s
     """
     pad_index = config['PAD_TOKEN_ID']
     criterion = nn.NLLLoss(reduction="sum", ignore_index=pad_index)
-    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=config['LEARNING_RATE'])
+    optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=config['LEARNING_RATE'])
 
     train_batches_num: int = len(train_iter)
     train_loss_function = SimpleLossCompute(model.generator, criterion, optimizer)
@@ -55,8 +55,9 @@ def train(model: EncoderDecoder, train_iter: DataLoader, val_iter: DataLoader, s
         print(f'Epoch {epoch + 1} / {epochs_num}')
         model.train()
         train_perplexity = run_epoch(train_iter,
-                                     model, train_loss_function,
-                                     train_batches_num, config['BATCH_SIZE'],
+                                     model,
+                                     train_loss_function,
+                                     train_batches_num,
                                      print_every=config['PRINT_EVERY_iTH_BATCH'])
         print(f'Train perplexity: {train_perplexity}')
         train_perplexities.append(train_perplexity)
@@ -70,7 +71,7 @@ def train(model: EncoderDecoder, train_iter: DataLoader, val_iter: DataLoader, s
 
             val_perplexity = run_epoch(val_iter,
                                        model, val_loss_function,
-                                       val_batches_num, config['VAL_BATCH_SIZE'],
+                                       val_batches_num,
                                        print_every=config['PRINT_EVERY_iTH_BATCH'])
             print(f'Validation perplexity: {val_perplexity}')
             val_perplexities.append(val_perplexity)
@@ -88,8 +89,10 @@ def train(model: EncoderDecoder, train_iter: DataLoader, val_iter: DataLoader, s
 
 
 def print_small_example(model):
-    prev = ["Hello world", "mmm a / build . gradle <nl> subprojects { <nl> } <nl> project . ext { <nl> guavaVersion = ' 14 . 0 . 1 ' <nl> nettyVersion = ' 4 . 0 . 9 . Final ' <nl> slf4jVersion = ' 1 . 7 . 5 ' <nl> commonsIoVersion = ' 2 . 4 ' <nl>"]
-    upd = ["Goodbye world", "ppp b / build . gradle <nl> subprojects { <nl> } <nl> project . ext { <nl> guavaVersion = ' 15 . 0 ' <nl> nettyVersion = ' 4 . 0 . 9 . Final ' <nl> slf4jVersion = ' 1 . 7 . 5 ' <nl> commonsIoVersion = ' 2 . 4 ' <nl>"]
+    prev = ["Hello world",
+            "mmm a / build . gradle <nl> subprojects { <nl> } <nl> project . ext { <nl> guavaVersion = ' 14 . 0 . 1 ' <nl> nettyVersion = ' 4 . 0 . 9 . Final ' <nl> slf4jVersion = ' 1 . 7 . 5 ' <nl> commonsIoVersion = ' 2 . 4 ' <nl>"]
+    upd = ["Goodbye world",
+           "ppp b / build . gradle <nl> subprojects { <nl> } <nl> project . ext { <nl> guavaVersion = ' 15 . 0 ' <nl> nettyVersion = ' 4 . 0 . 9 . Final ' <nl> slf4jVersion = ' 1 . 7 . 5 ' <nl> commonsIoVersion = ' 2 . 4 ' <nl>"]
     trg = ["Change greeting to farewell", "upgraded guava to 15 . 0"]
 
     tok = RobertaTokenizer.from_pretrained('microsoft/codebert-base')
@@ -217,9 +220,9 @@ def main():
         print('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n', end='')
         print("--Constructing datasets--")
         train_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'),
-                                                                    config, size=train_size)
+                                                                        config, size=train_size)
         val_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'),
-                                                                  config, size=val_size)
+                                                                      config, size=val_size)
 
         train_loader = DataLoader(train_dataset_commit, batch_size=config['BATCH_SIZE'])
         val_loader = DataLoader(val_dataset_commit, batch_size=config['VAL_BATCH_SIZE'])
@@ -228,27 +231,28 @@ def main():
         print("Val:", len(val_dataset_commit))
 
         commit_message_generator = run_train(train_loader, val_loader,
-                                         'commit_msg_generator', config=config)
+                                             'commit_msg_generator', config=config)
     else:
         commit_message_generator = make_model(emb_size=config['WORD_EMBEDDING_SIZE'],
-                                       hidden_size_encoder=config['ENCODER_HIDDEN_SIZE'],
-                                       hidden_size_decoder=config['DECODER_HIDDEN_SIZE'],
-                                       vocab_size=config['VOCAB_SIZE'],
-                                       num_layers=config['NUM_LAYERS'],
-                                       dropout=config['DROPOUT'],
-                                       use_bridge=config['USE_BRIDGE'],
-                                       teacher_forcing_ratio=config['TEACHER_FORCING_RATIO'],
-                                       config=config)
+                                              hidden_size_encoder=config['ENCODER_HIDDEN_SIZE'],
+                                              hidden_size_decoder=config['DECODER_HIDDEN_SIZE'],
+                                              vocab_size=config['VOCAB_SIZE'],
+                                              num_layers=config['NUM_LAYERS'],
+                                              dropout=config['DROPOUT'],
+                                              use_bridge=config['USE_BRIDGE'],
+                                              teacher_forcing_ratio=config['TEACHER_FORCING_RATIO'],
+                                              config=config)
 
         load_weights_of_best_model_on_validation(commit_message_generator, 'commit_msg_generator', config)
 
         print('\n====STARTING EVALUATION OF COMMIT MESSAGE GENERATOR====\n', end='')
-        print('\n====BEAM SEARCH====\n')
-        test_commit_message_generation_model(commit_message_generator, train_size, val_size, test_size,
-                                             config, greedy=False)
         print('\n====GREEDY====\n')
         test_commit_message_generation_model(commit_message_generator, train_size, val_size, test_size,
                                              config, greedy=True)
+        print('\n====BEAM SEARCH====\n')
+        test_commit_message_generation_model(commit_message_generator, train_size, val_size, test_size,
+                                             config, greedy=False)
+
     return commit_message_generator
 
 

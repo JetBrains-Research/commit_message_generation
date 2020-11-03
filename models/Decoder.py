@@ -6,7 +6,7 @@ from typing import Callable
 
 
 class Decoder(nn.Module):
-    """A conditional RNN decoder with attention."""
+    """A conditional GRU decoder with attention."""
 
     def __init__(self, emb_size: int, hidden_size: int, hidden_size_encoder: int, attention: BahdanauAttention,
                  num_layers: int, dropout: float, bridge: bool, teacher_forcing_ratio: float):
@@ -110,8 +110,7 @@ class Decoder(nn.Module):
                 _, top_i = generator(pre_output_vectors[-1]).squeeze(1).topk(1)
                 top_i_mask = torch.ones_like(top_i)
                 prev_embed = embedding(top_i, top_i_mask)
-            output, hidden, pre_output = self.forward_step(
-                prev_embed, encoder_output, src_mask, proj_key, hidden)
+            output, hidden, pre_output = self.forward_step(prev_embed, encoder_output, src_mask, proj_key, hidden)
             decoder_states.append(output)
             pre_output_vectors.append(pre_output)
 

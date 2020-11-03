@@ -53,7 +53,7 @@ def make_model(emb_size: int,
 
 
 def run_epoch(data_iter: Generator, model: EncoderDecoder, loss_compute: SimpleLossCompute,
-              batches_num: int, batch_size: int, print_every: int) -> float:
+              batches_num: int, print_every: int) -> float:
     """
     1 epoch of training.
     :return: loss per token
@@ -66,6 +66,8 @@ def run_epoch(data_iter: Generator, model: EncoderDecoder, loss_compute: SimpleL
     total_loss = 0
 
     for i, batch in enumerate(data_iter, 1):
+        batch_size = len(batch['target']['input_ids'])
+
         batch['input_ids'] = batch['input_ids'].to(model.device)
         batch['attention_mask'] = batch['attention_mask'].to(model.device)
         batch['target']['input_ids'] = batch['target']['input_ids'].to(model.device)
@@ -139,11 +141,10 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, bos_token_id
 
         result, _ = greedy_decode(model, batch, sos_index=bos_token_id, eos_index=eos_token_id,
                                   max_len=max_len)
-        print("Greedy decode output", result.shape)
 
         print("Example #%d" % (i + 1))
-        print("Src : ", decode_tokens(src, skip_special_tokens=True, clean_up_tokenization_spaces=False))
-        print("Trg : ", decode_tokens(trg, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+        print("Src : ", decode_tokens(src, skip_special_tokens=False, clean_up_tokenization_spaces=False))
+        print("Trg : ", decode_tokens(trg, skip_special_tokens=False, clean_up_tokenization_spaces=False))
         print("Pred: ", decode_tokens(result, skip_special_tokens=False, clean_up_tokenization_spaces=False))
         print()
 

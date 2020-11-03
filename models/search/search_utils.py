@@ -22,6 +22,7 @@ def create_decode_method(
     def decode(batch) -> List[List[np.array]]:
         result = perform_search(model, batch, num_iterations, sos_index, eos_index, vocab_size,
                                 beam_size, num_groups, diversity_strength, verbose)
+        print("result before flat_map_and_sort_perform_search", result)
         return [flat_map_and_sort_perform_search(result)]
     return decode
 
