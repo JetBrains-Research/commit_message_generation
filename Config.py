@@ -25,9 +25,9 @@ class Config:
         'MAX_NUM_OF_EPOCHS': 2,
         'WORD_EMBEDDING_SIZE': 768,  # used in pretrained CodeBERT
         'ENCODER_HIDDEN_SIZE': 768,  # used in pretrained CodeBERT
-        'DECODER_HIDDEN_SIZE': 256,
+        'DECODER_HIDDEN_SIZE': 768,
         'NUM_LAYERS': 2,
-        'TEACHER_FORCING_RATIO': 0.9,
+        'TEACHER_FORCING_RATIO': 0.75,
         'DROPOUT': 0.2,
         'USE_BRIDGE': True,
         'EARLY_STOPPING_ROUNDS': 80,
@@ -41,8 +41,8 @@ class Config:
         'VERBOSE': True,
         'BATCH_SIZE': 8,
         'TSNE_BATCH_SIZE': 1024,
-        'VAL_BATCH_SIZE': 1,
-        'TEST_BATCH_SIZE': 1,
+        'VAL_BATCH_SIZE': 8,
+        'TEST_BATCH_SIZE': 8,
         'SAVE_MODEL_EVERY': 10,
         'PRINT_EVERY_iTH_BATCH': 5,
         'MAKE_CUDA_REPRODUCIBLE': False,

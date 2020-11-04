@@ -9,7 +9,6 @@ class SimpleLossCompute:
         """
         :param x: [batch_size, target_sequence_length, decoder_hidden_size]
         :param y: [batch_size, target_sequence_length]
-        :param norm: normalizing coefficient (usually batch size)
         :return: float
         """
         x = self.generator(x)  # [batch_size, target_sequence_length, vocab_size]

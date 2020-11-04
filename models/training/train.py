@@ -232,7 +232,7 @@ def main():
         print("Val:", len(val_dataset_commit))
 
         commit_message_generator = run_train(train_loader, val_loader,
-                                             'commit_msg_generator', config=config)
+                                             'commit_msg_generator_experiment', config=config)
     else:
         commit_message_generator = make_model(emb_size=config['WORD_EMBEDDING_SIZE'],
                                               hidden_size_encoder=config['ENCODER_HIDDEN_SIZE'],

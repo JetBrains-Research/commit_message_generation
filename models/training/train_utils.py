@@ -98,10 +98,9 @@ def greedy_decode(model, batch, sos_index, eos_index, max_len):
     """Greedily decode a sentence."""
     with torch.no_grad():
         encoder_output, encoder_final = model.encode(batch['input_ids'], batch['attention_mask'])
-        prev_y = torch.tensor([[sos_index]]).type_as(batch['input_ids'])
+        prev_y = torch.ones(len(batch['target']['input_ids']), 1).fill_(sos_index).type_as(batch['input_ids'])
         trg_mask = torch.ones_like(prev_y)
-
-    output = [prev_y.cpu().numpy()]
+    output = torch.zeros((batch['input_ids'].shape[0], max_len))
     attention_scores = []
     hidden = None
 
@@ -112,21 +111,17 @@ def greedy_decode(model, batch, sos_index, eos_index, max_len):
                                                    batch['attention_mask'].unsqueeze(1), hidden=hidden)
             # we predict from the pre-output layer, which is
             # a combination of Decoder state, prev emb, and context
-            prob = model.generator(pre_output)  # [batch_size, trg_seq_len, vocab_size]
-        _, next_word = torch.max(prob, dim=2)
-        output.append(next_word.cpu().numpy())
+            prob = model.generator(pre_output)[:, -1] # [batch_size, vocab_size]
+        _, next_word = torch.max(prob, dim=1)
+        output[:, i] = next_word
+        prev_y[:, 0] = next_word  # change prev id to generated id
         attention_scores.append(model.decoder.attention.alphas.cpu().numpy())
-        # stop when we reach first <EOS>
-        if next_word.item() == eos_index:
-            break
-        prev_y = next_word  # change prev id to generated id
-
-    output = np.array(output)
+    output = output.cpu().long().numpy()
     return output, np.concatenate(attention_scores, axis=1)
 
 
 def print_examples(example_iter: DataLoader, model: EncoderDecoder, bos_token_id: int, eos_token_id: int,
-                   n=10, max_len=30) -> None:
+                   n=5, max_len=30) -> None:
     """Prints N examples. Assumes batch size of 1."""
     count = 0
 
@@ -143,9 +138,9 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, bos_token_id
                                   max_len=max_len)
 
         print("Example #%d" % (i + 1))
-        print("Src : ", decode_tokens(src, skip_special_tokens=False, clean_up_tokenization_spaces=False))
-        print("Trg : ", decode_tokens(trg, skip_special_tokens=False, clean_up_tokenization_spaces=False))
-        print("Pred: ", decode_tokens(result, skip_special_tokens=False, clean_up_tokenization_spaces=False))
+        print("Src : ", decode_tokens(src, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+        print("Trg : ", decode_tokens(trg, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+        print("Pred: ", decode_tokens(result[0, :], skip_special_tokens=True, clean_up_tokenization_spaces=False))
         print()
 
         count += 1
@@ -158,7 +153,7 @@ def create_greedy_decode_method_with_batch_support(model: EncoderDecoder, max_le
     def decode(batch) -> List[List[np.array]]:
         predicted, _ = greedy_decode(model, batch, sos_index, eos_index, max_len)
         # TODO: no batch support for now?
-        return predicted.reshape((predicted.shape[1], -1, predicted.shape[0]))  # [batch_size, k, pred_seq_len]
+        return predicted.reshape(predicted.shape[0], 1, -1)  # [batch_size, k, pred_seq_len]
 
     return decode
 
@@ -199,8 +194,8 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
         batch['target']['input_ids'] = batch['target']['input_ids'].to('cuda')
         batch['target']['attention_mask'] = batch['target']['attention_mask'].to('cuda')
         targets = batch['target']['input_ids']  # [batch_size, trg_seq_len]
-        results = decode_method(batch)  # [batch_size, k, trg_seq_len]
-        for example_id in range(len(results)):
+        results = decode_method(batch)  # [batch_size, k, trg_seq_len])
+        for example_id in range(len(targets)):
             target = decode_tokens(targets[example_id], skip_special_tokens=True, clean_up_tokenization_spaces=False).split()  # [trg_seq_len]
             example_top_k_results = results[example_id][:max_k]  # [max_k, trg_seq_len]
             decoded_tokens = [[decode_tokens(result, skip_special_tokens=True, clean_up_tokenization_spaces=False)]

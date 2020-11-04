@@ -81,9 +81,10 @@ class EncoderDecoder(nn.Module):
 
         :return: [batch_size, sequence_length, hidden_size_encoder]
         """
-        output = self.encoder(input_ids, attention_mask=attention_mask)
-        return output[-1][-1]  # TODO: double-check that that is indeed RoBERTa embeddings
-
+        output = self.encoder(input_ids=input_ids,
+                              attention_mask=attention_mask,
+                              output_hidden_states=True)
+        return output[-1][0]
     def decode(self, trg_embed, trg_mask, encoder_output, encoder_final, src_mask, hidden=None):
         return self.decoder(trg_embed, trg_mask, encoder_output, encoder_final,
                             src_mask, hidden=hidden, embedding=self.get_embeddings, generator=self.generator)
