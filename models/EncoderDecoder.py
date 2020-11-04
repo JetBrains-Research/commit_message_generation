@@ -84,7 +84,8 @@ class EncoderDecoder(nn.Module):
         output = self.encoder(input_ids=input_ids,
                               attention_mask=attention_mask,
                               output_hidden_states=True)
-        return output[-1][0]
+        return output[0]
+
     def decode(self, trg_embed, trg_mask, encoder_output, encoder_final, src_mask, hidden=None):
         return self.decoder(trg_embed, trg_mask, encoder_output, encoder_final,
                             src_mask, hidden=hidden, embedding=self.get_embeddings, generator=self.generator)
