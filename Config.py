@@ -34,7 +34,7 @@ class Config:
         'BEAM_SIZE': 10,
         'NUM_GROUPS': 1,
         'DIVERSITY_STRENGTH': None,
-        'TOP_K': [1, 3, 5, 10, 50],
+        'TOP_K': [1, 3, 5, 10],
         'BEST_ON': 'BLEU',
         'START_BEST_FROM_EPOCH': 0,
         'LEAVE_ONLY_CHANGED': True,

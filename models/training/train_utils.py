@@ -53,7 +53,7 @@ def make_model(emb_size: int,
 
 
 def run_epoch(data_iter: Generator, model: EncoderDecoder, loss_compute: SimpleLossCompute,
-              batches_num: int, print_every: int) -> float:
+              batches_num: int, print_every: int, logger) -> float:
     """
     1 epoch of training.
     :return: loss per token
@@ -84,13 +84,13 @@ def run_epoch(data_iter: Generator, model: EncoderDecoder, loss_compute: SimpleL
 
         if model.training and i % print_every == 0:
             elapsed = time.time() - start
-            print(f'Epoch Step: {i} / {batches_num} '
-                  f'Loss: {loss / batch_size :.2f} '
-                  f'Tokens per Sec: {print_tokens / elapsed :.2f}')
+            logger.info(f'Epoch Step: {i} / {batches_num} '
+                        f'Loss: {loss / batch_size :.2f} '
+                        f'Tokens per Sec: {print_tokens / elapsed :.2f}')
             start = time.time()
             print_tokens = 0
     epoch_duration = time.time() - epoch_start
-    print(f'Epoch ended with duration {str(timedelta(seconds=epoch_duration))}')
+    logger.info(f'Epoch ended with duration {str(timedelta(seconds=epoch_duration))}')
     return math.exp(total_loss / float(total_tokens))
 
 
@@ -111,7 +111,7 @@ def greedy_decode(model, batch, sos_index, eos_index, max_len):
                                                    batch['attention_mask'].unsqueeze(1), hidden=hidden)
             # we predict from the pre-output layer, which is
             # a combination of Decoder state, prev emb, and context
-            prob = model.generator(pre_output)[:, -1] # [batch_size, vocab_size]
+            prob = model.generator(pre_output)[:, -1]  # [batch_size, vocab_size]
         _, next_word = torch.max(prob, dim=1)
         output[:, i] = next_word
         prev_y[:, 0] = next_word  # change prev id to generated id
@@ -120,7 +120,7 @@ def greedy_decode(model, batch, sos_index, eos_index, max_len):
     return output, np.concatenate(attention_scores, axis=1)
 
 
-def print_examples(example_iter: DataLoader, model: EncoderDecoder, bos_token_id: int, eos_token_id: int,
+def print_examples(example_iter: DataLoader, model: EncoderDecoder, bos_token_id: int, eos_token_id: int, logger,
                    n=5, max_len=30) -> None:
     """Prints N examples. Assumes batch size of 1."""
     count = 0
@@ -137,11 +137,11 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, bos_token_id
         result, _ = greedy_decode(model, batch, sos_index=bos_token_id, eos_index=eos_token_id,
                                   max_len=max_len)
 
-        print("Example #%d" % (i + 1))
-        print("Src : ", decode_tokens(src, skip_special_tokens=True, clean_up_tokenization_spaces=False))
-        print("Trg : ", decode_tokens(trg, skip_special_tokens=True, clean_up_tokenization_spaces=False))
-        print("Pred: ", decode_tokens(result[0, :], skip_special_tokens=True, clean_up_tokenization_spaces=False))
-        print()
+        logger.info("Example #%d" % (i + 1))
+        logger.info("Src : ", decode_tokens(src, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+        logger.info("Trg : ", decode_tokens(trg, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+        logger.info("Pred: ", decode_tokens(result[0, :], skip_special_tokens=True, clean_up_tokenization_spaces=False))
+        logger.info()
 
         count += 1
         if count == n:
@@ -182,10 +182,6 @@ def calculate_accuracy(dataset_iterator: Iterable,
 def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator, decode_method) \
         -> Tuple[List[int], int, List[List[str]]]:
     correct = [0 for _ in range(len(topk_values))]
-    if len(topk_values) > 1:
-        max_k = topk_values[-2]
-    else:
-        max_k = topk_values[-1]
     total = 0
     max_top_k_decoded = []
     for batch in dataset_iterator:
@@ -196,7 +192,8 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
         targets = batch['target']['input_ids']  # [batch_size, trg_seq_len]
         results = decode_method(batch)  # [batch_size, k, trg_seq_len])
         for example_id in range(len(targets)):
-            target = decode_tokens(targets[example_id], skip_special_tokens=True, clean_up_tokenization_spaces=False).split()  # [trg_seq_len]
+            target = decode_tokens(targets[example_id], skip_special_tokens=True,
+                                   clean_up_tokenization_spaces=False).split()  # [trg_seq_len]
             example_top_k_results = results[example_id][:max_k]  # [max_k, trg_seq_len]
             decoded_tokens = [[decode_tokens(result, skip_special_tokens=True, clean_up_tokenization_spaces=False)]
                               for result in example_top_k_results]

@@ -19,6 +19,10 @@ from models.training.train_utils import make_model, run_epoch, print_examples, a
 from models.evaluation.test_utils import save_perplexity_plot
 from models.evaluation.analyze import test_commit_message_generation_model
 
+from models.training.logger import create_logger
+
+# set a logger file
+logger = create_logger(path="./experiments/last_execution/", file="training.log")
 
 def train(model: EncoderDecoder, train_iter: DataLoader, val_iter: DataLoader, suffix_for_saving: str,
           config: Config) -> Tuple[List[float], List[float]]:
@@ -49,17 +53,18 @@ def train(model: EncoderDecoder, train_iter: DataLoader, val_iter: DataLoader, s
     early_stopping_rounds: int = config['EARLY_STOPPING_ROUNDS']
     for epoch in range(epochs_num):
         if num_not_decreasing_steps == early_stopping_rounds:
-            print(f'Training was early stopped on epoch {epoch} with early stopping rounds {early_stopping_rounds}')
+            logger.info(f'Training was early stopped on epoch {epoch} with early stopping rounds {early_stopping_rounds}')
             break
 
-        print(f'Epoch {epoch + 1} / {epochs_num}')
+        logger.info(f'Epoch {epoch + 1} / {epochs_num}')
         model.train()
         train_perplexity = run_epoch(train_iter,
                                      model,
                                      train_loss_function,
                                      train_batches_num,
-                                     print_every=config['PRINT_EVERY_iTH_BATCH'])
-        print(f'Train perplexity: {train_perplexity}')
+                                     print_every=config['PRINT_EVERY_iTH_BATCH'],
+                                     logger=logger)
+        logger.info(f'Train perplexity: {train_perplexity}')
         train_perplexities.append(train_perplexity)
 
         model.eval()
@@ -67,13 +72,13 @@ def train(model: EncoderDecoder, train_iter: DataLoader, val_iter: DataLoader, s
             print_small_example(model)
 
             print_examples(val_iter, model, bos_token_id=config['BOS_TOKEN_ID'], eos_token_id=config['EOS_TOKEN_ID'],
-                           max_len=config['TOKENS_CODE_CHUNK_MAX_LEN'])
+                           max_len=config['TOKENS_CODE_CHUNK_MAX_LEN'], logger=logger)
 
             val_perplexity = run_epoch(val_iter,
                                        model, val_loss_function,
                                        val_batches_num,
                                        print_every=config['PRINT_EVERY_iTH_BATCH'])
-            print(f'Validation perplexity: {val_perplexity}')
+            logger.info(f'Validation perplexity: {val_perplexity}')
             val_perplexities.append(val_perplexity)
             if val_perplexity < min_val_perplexity:
                 save_model(model, f'best_on_validation_{suffix_for_saving}', config)
@@ -147,7 +152,7 @@ def print_small_example(model):
 
 def save_model(model: nn.Module, model_suffix: str, config: Config) -> None:
     torch.save(model.state_dict(), os.path.join(config['OUTPUT_PATH'], f'model_state_dict_{model_suffix}.bin'))
-    print(f'Model saved {model_suffix}!')
+    logger.info(f'Model saved {model_suffix}!')
 
 
 def load_weights_of_best_model_on_validation(model: nn.Module, suffix: str, config: Config) -> None:
@@ -181,14 +186,14 @@ def run_train(train_iter: DataLoader, val_iter: DataLoader,
                                        use_bridge=config['USE_BRIDGE'],
                                        teacher_forcing_ratio=config['TEACHER_FORCING_RATIO'],
                                        config=config)
-    print("----Created model----")
-    print(model)
+    logger.info("----Created model----")
+    logger.info(model)
 
-    print("----Training----")
+    logger.info("----Training----")
     train_perplexities, val_perplexities = train(model, train_iter, val_iter, suffix_for_saving, config)
 
-    print(train_perplexities)
-    print(val_perplexities)
+    logger.info(train_perplexities)
+    logger.info(val_perplexities)
 
     save_data_on_checkpoint(model, train_perplexities, val_perplexities, suffix_for_saving, config)
     save_perplexity_plot([train_perplexities, val_perplexities], ['train', 'validation'],
@@ -211,14 +216,14 @@ def main():
     num_epoch = args.num_epoch
     test = args.test
 
-    print("Current working directory:", os.getcwd())
+    logger.info("Current working directory:", os.getcwd())
     config = Config()
     add_special_tokens_to_config(RobertaTokenizer.from_pretrained('microsoft/codebert-base'), config)
     if num_epoch:
         config._CONFIG['MAX_NUM_OF_EPOCHS'] = num_epoch
     if not test:
-        print('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n', end='')
-        print("--Constructing datasets--")
+        logger.info('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n', end='')
+        logger.info("--Constructing datasets--")
         train_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'),
                                                                         config, size=train_size)
         val_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'val'),
@@ -228,8 +233,8 @@ def main():
         train_loader = DataLoader(train_dataset_commit, sampler=train_sampler, batch_size=config['BATCH_SIZE'])
         val_loader = DataLoader(val_dataset_commit, batch_size=config['VAL_BATCH_SIZE'])
 
-        print("Train:", len(train_dataset_commit))
-        print("Val:", len(val_dataset_commit))
+        logger.info("Train:", len(train_dataset_commit))
+        logger.info("Val:", len(val_dataset_commit))
 
         commit_message_generator = run_train(train_loader, val_loader,
                                              'commit_msg_generator_experiment', config=config)
@@ -246,11 +251,11 @@ def main():
 
         load_weights_of_best_model_on_validation(commit_message_generator, 'commit_msg_generator', config)
 
-        print('\n====STARTING EVALUATION OF COMMIT MESSAGE GENERATOR====\n', end='')
-        print('\n====GREEDY====\n')
+        logger.info('\n====STARTING EVALUATION OF COMMIT MESSAGE GENERATOR====\n', end='')
+        logger.info('\n====GREEDY====\n')
         test_commit_message_generation_model(commit_message_generator, train_size, val_size, test_size,
                                              config, greedy=True)
-        print('\n====BEAM SEARCH====\n')
+        logger.info('\n====BEAM SEARCH====\n')
         test_commit_message_generation_model(commit_message_generator, train_size, val_size, test_size,
                                              config, greedy=False)
 
