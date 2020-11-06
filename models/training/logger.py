@@ -17,8 +17,7 @@ def create_logger(path, file):
     # check if the file exist
     log_file = os.path.join(path, file)
 
-    if not os.path.isfile(log_file):
-        open(log_file, "w+").close()
+    open(log_file, "w").close()
 
     console_logging_format = "%(levelname)s %(message)s"
     file_logging_format = "%(levelname)s: %(asctime)s: %(message)s"

@@ -10,9 +10,12 @@ import torch
 
 from dataset_utils.CommitMessageGenerationDataset import CommitMessageGenerationDataset
 from models.EncoderDecoder import EncoderDecoder
+from models.training.logger import create_logger
 from Config import Config, load_config
 from experiments.AccuracyCalculation import AccuracyCalculation
 from experiments.BleuCalculation import BleuCalculation
+
+logger = create_logger("./experiments/last_execution", "evaluation.log")
 
 
 def measure_experiment_time(func) -> Any:
@@ -51,8 +54,8 @@ def test_commit_message_generation_model(model: EncoderDecoder, train_size: int,
 
     train_dataset_test_size = CommitMessageGenerationDataset.take_first_n_from_dataset(train_dataset, len(test_dataset))
 
-    accuracy_calculation_experiment = AccuracyCalculation(model, max_len=100, greedy=greedy, config=config)
-    bleu_calculation_experiment = BleuCalculation(config)
+    accuracy_calculation_experiment = AccuracyCalculation(model, max_len=100, greedy=greedy, config=config, logger=logger)
+    bleu_calculation_experiment = BleuCalculation(config, logger=logger)
 
     model.eval()
     with torch.no_grad():

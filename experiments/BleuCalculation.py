@@ -16,13 +16,16 @@ def isfloat(value):
 
 
 class BleuCalculation:
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, logger) -> None:
         super().__init__()
         self.config = config
+        self.logger = logger
 
     def get_bleu_script_output(self, pred_str, trg_str: str) -> Tuple[str, str]:
-        print("BLEU top 1 predictions", pred_str, sep='\n')
-        print("BLEU targets", trg_str, sep='\n')
+        self.logger.info(f"BLEU top 1 predictions")
+        self.logger.info(pred_str)
+        self.logger.info(f"BLEU targets")
+        self.logger.info(trg_str)
         with tempfile.NamedTemporaryFile(mode='w') as file_with_targets:
             file_with_targets.write(trg_str)
             file_with_targets.flush()
@@ -32,12 +35,12 @@ class BleuCalculation:
             return result
 
     def conduct(self, predictions: List[List[str]], dataset, dataset_label: str) -> None:
-        print(f'Start conducting BLEU calculation experiment for {dataset_label}...')
+        self.logger.info(f'Start conducting BLEU calculation experiment for {dataset_label}...')
         trg_str = self.preprocess_dataset_for_bleu(dataset)
         pred_str = self.preprocess_predictions_for_bleu(predictions)
         result = self.get_bleu_script_output(pred_str, trg_str)
-        print(result[0])
-        print(f'Errors: {result[1]}')
+        self.logger.info(result[0])
+        self.logger.info(f'Errors: {result[1]}')
 
     def get_bleu_score(self, predictions: List[List[List[str]]], dataset: Dataset) -> float:
         trg_str = self.preprocess_dataset_for_bleu(dataset)
@@ -49,8 +52,8 @@ class BleuCalculation:
             bleu_score = float(result[0].split()[2][:-1])
             return bleu_score
         else:
-            print('Warning: something wrong with bleu score')
-            print(f'Errors: {result[1]}')
+            self.logger.info('Warning: something wrong with bleu score')
+            self.logger.info(f'Errors: {result[1]}')
             return 0
 
     @staticmethod

@@ -27,8 +27,7 @@ class EncoderDecoder(nn.Module):
     def forward(self, batch):
         """Process masked src and target sequences."""
         encoder_output, encoder_final = self.encode(batch['input_ids'], batch['attention_mask'])
-        # TODO: embeddings from RoBERTa as input to decoder?
-        trg_embed = self.get_embeddings(batch['target']['input_ids'], batch['target']['attention_mask'])
+        trg_embed = self.decoder.embedding(batch['target']['input_ids'])
         return self.decode(trg_embed=trg_embed,
                            trg_mask=batch['target']['attention_mask'],
                            encoder_output=encoder_output,
@@ -72,20 +71,6 @@ class EncoderDecoder(nn.Module):
         encoder_final = torch.stack(encoder_final)[:, :, t, :]
         return encoder_output, encoder_final[-self.decoder.num_layers:, :]
 
-    def get_embeddings(self, input_ids, attention_mask) -> Tuple[Tensor, Tensor]:
-        """
-        Returns embeddings for input sequence.
-
-        :param input_ids
-        :param attention_mask
-
-        :return: [batch_size, sequence_length, hidden_size_encoder]
-        """
-        output = self.encoder(input_ids=input_ids,
-                              attention_mask=attention_mask,
-                              output_hidden_states=True)
-        return output[0]
-
     def decode(self, trg_embed, trg_mask, encoder_output, encoder_final, src_mask, hidden=None):
         return self.decoder(trg_embed, trg_mask, encoder_output, encoder_final,
-                            src_mask, hidden=hidden, embedding=self.get_embeddings, generator=self.generator)
+                            src_mask, hidden=hidden, generator=self.generator)

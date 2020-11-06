@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.nn import Embedding
 from models import BahdanauAttention
 import random
 from typing import Callable
@@ -8,13 +9,14 @@ from typing import Callable
 class Decoder(nn.Module):
     """A conditional GRU decoder with attention."""
 
-    def __init__(self, emb_size: int, hidden_size: int, hidden_size_encoder: int, attention: BahdanauAttention,
+    def __init__(self, emb_size: int, hidden_size: int, hidden_size_encoder: int, embedding: Embedding, attention: BahdanauAttention,
                  num_layers: int, dropout: float, bridge: bool, teacher_forcing_ratio: float):
         super(Decoder, self).__init__()
 
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.attention = attention
+        self.embedding = embedding
         self.dropout = dropout
         self.teacher_forcing_ratio = teacher_forcing_ratio
         self.rnn = nn.GRU(hidden_size_encoder + emb_size, hidden_size, num_layers=num_layers,
@@ -65,7 +67,7 @@ class Decoder(nn.Module):
         return output, hidden, pre_output
 
     def forward(self, trg_embed, trg_mask, encoder_output, encoder_final,
-                src_mask, embedding, generator, hidden=None, max_len=None):
+                src_mask, generator, hidden=None, max_len=None):
         """
         Unroll the decoder one step at a time.
         :param trg_embed: [batch_size, target_sequence_length, hidden_size_encoder]
@@ -108,8 +110,7 @@ class Decoder(nn.Module):
                 prev_embed = trg_embed[:, i].unsqueeze(1)  # [B, 1, EmbCode]
             else:
                 _, top_i = generator(pre_output_vectors[-1]).squeeze(1).topk(1)
-                top_i_mask = torch.ones_like(top_i)
-                prev_embed = embedding(top_i, top_i_mask)
+                prev_embed = self.embedding(top_i)
             output, hidden, pre_output = self.forward_step(prev_embed, encoder_output, src_mask, proj_key, hidden)
             decoder_states.append(output)
             pre_output_vectors.append(pre_output)

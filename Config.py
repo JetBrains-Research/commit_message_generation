@@ -44,7 +44,7 @@ class Config:
         'VAL_BATCH_SIZE': 8,
         'TEST_BATCH_SIZE': 8,
         'SAVE_MODEL_EVERY': 10,
-        'PRINT_EVERY_iTH_BATCH': 5,
+        'PRINT_EVERY_iTH_BATCH': 50,
         'MAKE_CUDA_REPRODUCIBLE': False,
     }
 

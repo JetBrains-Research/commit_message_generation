@@ -7,7 +7,7 @@ from datetime import timedelta
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-
+from torch.nn import Embedding
 from transformers import RobertaModel, RobertaConfig
 
 from models import SimpleLossCompute
@@ -26,21 +26,23 @@ def decode_tokens(seq, skip_special_tokens=True, clean_up_tokenization_spaces=Tr
 
 
 def make_model(emb_size: int,
+               pad_token_id: int,
                hidden_size_encoder: int,
                hidden_size_decoder: int,
                vocab_size: int,
                num_layers: int,
                dropout: float,
-               teacher_forcing_ratio,
+               teacher_forcing_ratio: float,
                use_bridge: bool,
                config: Config) -> EncoderDecoder:
     """Helper function: Construct an EncoderDecoder model from hyperparameters."""
 
     codebert_config = RobertaConfig.from_pretrained("microsoft/codebert-base", output_hidden_states=True)
     codebert_model = RobertaModel.from_pretrained("microsoft/codebert-base", config=codebert_config)
-
+    
+    embed = Embedding(vocab_size, emb_size, padding_idx=pad_token_id)
     attention = BahdanauAttention(hidden_size_decoder, key_size=hidden_size_encoder, query_size=hidden_size_decoder)
-    decoder = Decoder(emb_size, hidden_size_decoder, hidden_size_encoder, attention, num_layers, dropout, use_bridge,
+    decoder = Decoder(emb_size, hidden_size_decoder, hidden_size_encoder, embed, attention, num_layers, dropout, use_bridge,
                       teacher_forcing_ratio=teacher_forcing_ratio)
     generator = GeneratorModel(hidden_size_decoder, vocab_size)
 
@@ -106,7 +108,7 @@ def greedy_decode(model, batch, sos_index, eos_index, max_len):
 
     for i in range(max_len):
         with torch.no_grad():
-            trg_embed = model.get_embeddings(prev_y, trg_mask)
+            trg_embed = model.decoder.embedding(prev_y)
             out, hidden, pre_output = model.decode(trg_embed, trg_mask, encoder_output, encoder_final,
                                                    batch['attention_mask'].unsqueeze(1), hidden=hidden)
             # we predict from the pre-output layer, which is
@@ -137,11 +139,10 @@ def print_examples(example_iter: DataLoader, model: EncoderDecoder, bos_token_id
         result, _ = greedy_decode(model, batch, sos_index=bos_token_id, eos_index=eos_token_id,
                                   max_len=max_len)
 
-        logger.info("Example #%d" % (i + 1))
-        logger.info("Src : ", decode_tokens(src, skip_special_tokens=True, clean_up_tokenization_spaces=False))
-        logger.info("Trg : ", decode_tokens(trg, skip_special_tokens=True, clean_up_tokenization_spaces=False))
-        logger.info("Pred: ", decode_tokens(result[0, :], skip_special_tokens=True, clean_up_tokenization_spaces=False))
-        logger.info()
+        logger.info(f"Example #{i+1}")
+        logger.info(f"Src : {decode_tokens(src, skip_special_tokens=True, clean_up_tokenization_spaces=False)}")
+        logger.info(f"Trg : {decode_tokens(trg, skip_special_tokens=True, clean_up_tokenization_spaces=False)}")
+        logger.info(f"Pred: {decode_tokens(result[0, :], skip_special_tokens=True, clean_up_tokenization_spaces=False)}")
 
         count += 1
         if count == n:
@@ -179,10 +180,11 @@ def calculate_accuracy(dataset_iterator: Iterable,
     return correct / total
 
 
-def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator, decode_method) \
+def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator, decode_method, logger) \
         -> Tuple[List[int], int, List[List[str]]]:
     correct = [0 for _ in range(len(topk_values))]
     total = 0
+    max_k = topk_values[-1]
     max_top_k_decoded = []
     for batch in dataset_iterator:
         batch['input_ids'] = batch['input_ids'].to('cuda')
@@ -199,10 +201,10 @@ def calculate_top_k_accuracy(topk_values: List[int], dataset_iterator: Iterator,
                               for result in example_top_k_results]
             max_top_k_decoded.append(decoded_tokens)
             tail_id = 0
-            print("trg:", target)
+            logger.info(f"trg: {target}")
             for i, result in enumerate(example_top_k_results):
                 result = decode_tokens(result, skip_special_tokens=True, clean_up_tokenization_spaces=False).split()
-                print("pred:", result)
+                logger.info(f"pred: {result}")
                 if i + 1 > topk_values[tail_id]:
                     tail_id += 1
                 if len(result) == len(target) and np.all(result == target):

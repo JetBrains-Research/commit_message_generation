@@ -77,7 +77,8 @@ def train(model: EncoderDecoder, train_iter: DataLoader, val_iter: DataLoader, s
             val_perplexity = run_epoch(val_iter,
                                        model, val_loss_function,
                                        val_batches_num,
-                                       print_every=config['PRINT_EVERY_iTH_BATCH'])
+                                       print_every=config['PRINT_EVERY_iTH_BATCH'],
+                                       logger=logger)
             logger.info(f'Validation perplexity: {val_perplexity}')
             val_perplexities.append(val_perplexity)
             if val_perplexity < min_val_perplexity:
@@ -120,7 +121,7 @@ def print_small_example(model):
     print("encoder_final", fin.shape)
     print()
 
-    trg_emb = model.get_embeddings(input_ids=trg_enc['input_ids'], attention_mask=trg_enc['attention_mask'])
+    trg_emb = model.decoder.embedding(trg_enc['input_ids'])
     print("trg_embed", trg_emb.shape)
     print()
 
@@ -174,10 +175,11 @@ def save_data_on_checkpoint(model: nn.Module,
 def run_train(train_iter: DataLoader, val_iter: DataLoader,
               suffix_for_saving: str, config: Config) -> EncoderDecoder:
     print("-------Config--------")
-    pprint.pprint(config.get_config())
+    logger.info(config.get_config())
     config.save()
 
-    model: EncoderDecoder = make_model(emb_size=config['WORD_EMBEDDING_SIZE'],
+    model: EncoderDecoder = make_model(pad_token_id=config['PAD_TOKEN_ID'],
+                                       emb_size=config['WORD_EMBEDDING_SIZE'],
                                        hidden_size_encoder=config['ENCODER_HIDDEN_SIZE'],
                                        hidden_size_decoder=config['DECODER_HIDDEN_SIZE'],
                                        vocab_size=config['VOCAB_SIZE'],
@@ -216,13 +218,13 @@ def main():
     num_epoch = args.num_epoch
     test = args.test
 
-    logger.info("Current working directory:", os.getcwd())
+    logger.info(f"Current working directory: {os.getcwd()}")
     config = Config()
     add_special_tokens_to_config(RobertaTokenizer.from_pretrained('microsoft/codebert-base'), config)
     if num_epoch:
         config._CONFIG['MAX_NUM_OF_EPOCHS'] = num_epoch
     if not test:
-        logger.info('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n', end='')
+        logger.info('\n====STARTING TRAINING OF COMMIT MESSAGE GENERATOR====\n')
         logger.info("--Constructing datasets--")
         train_dataset_commit = CommitMessageGenerationDataset.load_data(os.path.join(config['DATASET_ROOT'], 'train'),
                                                                         config, size=train_size)
@@ -233,8 +235,8 @@ def main():
         train_loader = DataLoader(train_dataset_commit, sampler=train_sampler, batch_size=config['BATCH_SIZE'])
         val_loader = DataLoader(val_dataset_commit, batch_size=config['VAL_BATCH_SIZE'])
 
-        logger.info("Train:", len(train_dataset_commit))
-        logger.info("Val:", len(val_dataset_commit))
+        logger.info(f"Train: {len(train_dataset_commit)}")
+        logger.info(f"Val: {len(val_dataset_commit)}")
 
         commit_message_generator = run_train(train_loader, val_loader,
                                              'commit_msg_generator_experiment', config=config)
@@ -249,17 +251,16 @@ def main():
                                               teacher_forcing_ratio=config['TEACHER_FORCING_RATIO'],
                                               config=config)
 
-        load_weights_of_best_model_on_validation(commit_message_generator, 'commit_msg_generator', config)
+        load_weights_of_best_model_on_validation(commit_message_generator, 'commit_msg_generator_experiment', config)
 
-        logger.info('\n====STARTING EVALUATION OF COMMIT MESSAGE GENERATOR====\n', end='')
-        logger.info('\n====GREEDY====\n')
+        print('\n====STARTING EVALUATION OF COMMIT MESSAGE GENERATOR====\n')
+        print('\n====GREEDY====\n')
         test_commit_message_generation_model(commit_message_generator, train_size, val_size, test_size,
                                              config, greedy=True)
-        logger.info('\n====BEAM SEARCH====\n')
-        test_commit_message_generation_model(commit_message_generator, train_size, val_size, test_size,
-                                             config, greedy=False)
-
-    return commit_message_generator
+        #print('\n====BEAM SEARCH====\n')
+        #test_commit_message_generation_model(commit_message_generator, train_size, val_size, test_size,
+                                            # config, greedy=False)
+        return commit_message_generator
 
 
 if __name__ == "__main__":
