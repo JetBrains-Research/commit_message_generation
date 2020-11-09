@@ -21,7 +21,7 @@ class Config:
 
         'EMBEDDING_SIZE': 768,
         'HIDDEN_SIZE_ENCODER': 768,  # used in pretrained CodeBERT
-        'HIDDEN_SIZE_DECODER': 768,
+        'HIDDEN_SIZE_DECODER': 256,
         'NUM_LAYERS': 2,
         'NUM_HEADS': 8,
         'TEACHER_FORCING_RATIO': 0.75,
@@ -34,9 +34,9 @@ class Config:
         'MAX_EPOCHS': 10,
         'SAVE_MODEL_EVERY': 10,
         'PRINT_EVERY_iTH_BATCH': 5,
-        'TRAIN_BATCH_SIZE': 8,
-        'VAL_BATCH_SIZE': 8,
-        'TEST_BATCH_SIZE': 8,
+        'TRAIN_BATCH_SIZE': 4,
+        'VAL_BATCH_SIZE': 4,
+        'TEST_BATCH_SIZE': 4,
 
         'TOP_K': [1, 3, 5, 10],
         'BEST_ON': 'BLEU',

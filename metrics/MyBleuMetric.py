@@ -8,7 +8,7 @@ class MyBleuMetric(Metric):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
         self.n_gram = n_gram
-        self.add_state("bleu", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("bleu", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
     def update(self, preds, targets):

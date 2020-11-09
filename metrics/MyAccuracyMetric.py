@@ -12,7 +12,6 @@ class MyAccuracyMetric(Metric):
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
     def update(self, preds: torch.Tensor, targets: torch.Tensor):
-        preds, targets = self._input_format(preds, targets)
         assert preds.shape == targets.shape
 
         # TODO: should we compute accuracy with token indices or is it better to compare decoded strings like in bleu?

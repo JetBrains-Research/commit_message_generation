@@ -16,13 +16,14 @@ from metrics.MyBleuMetric import MyBleuMetric
 class EncoderDecoderModule(pl.LightningModule):
     def __init__(self, embedding_dim, vocab_size, hidden_size_decoder, hidden_size_encoder,
                  num_heads, num_layers, dropout, bridge, teacher_forcing_ratio, learning_rate,
-                 max_len, pad_token_id, tokenizer, model_name_or_path, **kwargs):
+                 max_len, pad_token_id, bos_token_id, tokenizer, model_name_or_path, **kwargs):
         super().__init__()
 
         self.tokenizer = tokenizer
         self.save_hyperparameters()
         self.learning_rate = learning_rate
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
 
         self.encoder_config = RobertaConfig.from_pretrained(model_name_or_path)
         self.encoder = RobertaModel.from_pretrained(model_name_or_path, config=self.encoder_config)
@@ -74,7 +75,7 @@ class EncoderDecoderModule(pl.LightningModule):
         self.log('val_loss', val_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return val_loss
 
-    def test_step(self, batch):
+    def test_step(self, batch, batch_idx):
         # TODO: implement beam search and add choice between beam search/greedy approaches
         src, trg = batch
         encoder_output, _, encoder_final = self.encoder(input_ids=src['input_ids'],
@@ -83,32 +84,30 @@ class EncoderDecoderModule(pl.LightningModule):
         t = encoder_final[0].shape[1] - 1
         encoder_final = torch.stack(encoder_final)[:, :, t, :][-self.decoder.num_layers:, :]
 
-        prev_y = torch.ones(len(trg), 1)
+        prev_y = torch.ones(src['input_ids'].shape[0], 1).fill_(self.bos_token_id).type_as(src['input_ids'])
         prev_y_mask = torch.ones_like(prev_y)
 
-        preds = torch.zeros((batch['input_ids'].shape[0], self.hparams.max_len))
+        preds = torch.zeros((src['input_ids'].shape[0], trg['input_ids'].shape[1]))
         hidden = None
 
-        for i in range(self.hparams.max_len):
+        for i in range(trg['input_ids'].shape[1]):
             decoder_states, hidden, output = self.decoder(prev_y,
                                                           prev_y_mask,
                                                           encoder_output, encoder_final,
-                                                          torch.logical_not(src['attention_mask'], hidden=hidden))
+                                                          torch.logical_not(src['attention_mask']), hidden=hidden)
             _, next_word = torch.max(output, dim=2)
-            preds[:, i] = next_word
-            prev_y[:, 0] = next_word  # change prev id to generated id
+            preds[:, i] = torch.flatten(next_word)
+            prev_y = next_word  # change prev id to generated id
         preds = preds.detach().cpu()
         return {'preds': preds, 'targets': trg['input_ids']}
 
-    def on_test_epoch_end(self, outputs):
-        loss = torch.stack([x['loss'] for x in outputs]).mean()
-
+    def test_epoch_end(self, outputs):
         # TODO: should we compute accuracy on decoded strings or with token ids (probably faster)?
         # compute accuracy with tensors
         preds = torch.cat([x['preds'] for x in outputs]).detach().cpu()
         targets = torch.cat([x['targets'] for x in outputs]).detach().cpu()
 
-        acc = self.accuracy.compute(preds, targets)
+        acc = self.accuracy(preds, targets)
 
         # compute BLEU with decoded strings
         targets = [
@@ -118,12 +117,10 @@ class EncoderDecoderModule(pl.LightningModule):
         preds = [self.tokenizer.decode(example, skip_special_tokens=True, clean_up_tokenization_spaces=False).split(' ')
                  for example in preds.tolist()]
 
-        bleu = self.bleu.compute(translate_corpus=preds, reference_corpus=targets)
+        bleu = self.bleu(preds, targets)
 
-        self.log('val_accuracy', acc, prog_bar=True, logger=True)
-        self.log('val_bleu', bleu, prog_bar=True, logger=True)
-        self.log('val_loss', loss, prog_bar=True, logger=True)
-        return loss
+        self.log('test_accuracy', acc, prog_bar=True, logger=True)
+        self.log('test_bleu', bleu, prog_bar=True, logger=True)
 
     def configure_optimizers(self):
         return AdamW(self.parameters(), lr=self.learning_rate)
@@ -144,4 +141,5 @@ class EncoderDecoderModule(pl.LightningModule):
         parser.add_argument("--learning_rate", default=config['LEARNING_RATE'], type=float)
         parser.add_argument("--max_len", default=config['MSG_MAX_LEN'] * 2, type=int)
         parser.add_argument("--pad_token_id", default=config['PAD_TOKEN_ID'], type=int)
+        parser.add_argument("--bos_token_id", default=config['BOS_TOKEN_ID'], type=int)
         return parser

@@ -44,10 +44,10 @@ class CMGDataModule(pl.LightningDataModule):
                                              msg_max_len=self.config['MSG_MAX_LEN'])
 
     def train_dataloader(self):
-        return DataLoader(self.train, batch_size=self.train_batch_size)
+        return DataLoader(self.train, batch_size=self.train_batch_size, num_workers=4)
 
     def val_dataloader(self):
-        return DataLoader(self.val, batch_size=self.val_batch_size)
+        return DataLoader(self.val, batch_size=self.val_batch_size, num_workers=4)
 
     def test_dataloader(self):
-        return DataLoader(self.test, batch_size=self.test_batch_size)
+        return DataLoader(self.test, batch_size=self.test_batch_size, num_workers=4)
