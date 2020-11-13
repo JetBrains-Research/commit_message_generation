@@ -6,8 +6,8 @@ from torch.utils.data import DataLoader
 
 from transformers import RobertaTokenizer
 
-from dataset_utils.CMGDataset import CMGDataset
-from dataset_utils.DiffPreprocessor import DiffPreprocessor
+from dataset_utils.cmg_dataset import CMGDataset
+from dataset_utils.diff_preprocessor import DiffPreprocessor
 
 
 class CMGDataModule(pl.LightningDataModule):

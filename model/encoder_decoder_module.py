@@ -7,10 +7,10 @@ import torch.nn.functional as F
 
 from transformers import RobertaConfig, RobertaModel, AdamW
 
-from model.Decoder import Decoder
+from model.decoder import Decoder
 
-from metrics.MyAccuracyMetric import MyAccuracyMetric
-from metrics.MyBleuMetric import MyBleuMetric
+from metrics import AccuracyMetric
+from metrics import BleuMetric
 
 
 class EncoderDecoderModule(pl.LightningModule):
@@ -38,8 +38,8 @@ class EncoderDecoderModule(pl.LightningModule):
                                bridge=bridge,
                                teacher_forcing_ratio=teacher_forcing_ratio)
 
-        self.accuracy = MyAccuracyMetric(self.pad_token_id)
-        self.bleu = MyBleuMetric()
+        self.accuracy = AccuracyMetric(self.pad_token_id)
+        self.bleu = BleuMetric()
 
     def forward(self, batch):
         src, trg = batch

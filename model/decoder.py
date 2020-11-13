@@ -41,7 +41,7 @@ class Decoder(nn.Module):
     def forward_step(self, prev_embed, encoder_output, src_mask, hidden):
         """Perform a single decoder step (1 word)
         :param prev_embed: embedding of previous target tokens
-        (tensor of shape [batch_size, #step, embed_dim])
+        (tensor of shape [batch_size, 1, embed_dim])
         :param encoder_output: sequence of hidden-states at the output of the last layer of the encoder
         (tensor of shape [batch_size, src_sequence_length, hidden_size_encoder])
         :param src_mask: attention mask for encoder_output with 0 for pad tokens and 1 for all others
@@ -75,11 +75,11 @@ class Decoder(nn.Module):
                 src_attention_mask, hidden=None, max_len=None):
         """
         Unroll the decoder one step at a time.
-        :param input_ids: [batch_size, target_sequence_length, hidden_size_encoder]
+        :param input_ids: [batch_size, target_sequence_length]
         :param attention_mask: [batch_size, target_sequence_length]
-        :param encoder_output: [batch_size, sequence_length, hidden_size_encoder]
+        :param encoder_output: [batch_size, src_sequence_length, hidden_size_encoder]
         :param encoder_final: [num_layers, batch_size, hidden_size_encoder]
-        :param src_attention_mask: [batch_size, sequence_length]
+        :param src_attention_mask: [batch_size, src_sequence_length]
         :param hidden: decoder hidden state
         :param max_len: the maximum number of steps to unroll the RNN
         :return: decoder_states: [batch_size, target_sequence_length, hidden_size_decoder],
