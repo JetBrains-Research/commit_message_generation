@@ -1,0 +1,13 @@
+# @package _group_
+dataset_root: raw_data/CleanedJiang
+diff_max_len: 100
+msg_max_len: 30
+train_dataloader_conf:
+  batch_size: 8
+  num_workers: 4
+val_dataloader_conf:
+  batch_size: 8
+  num_workers: 4
+test_dataloader_conf:
+  batch_size: 8
+  num_workers: 4

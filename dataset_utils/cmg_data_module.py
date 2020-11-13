@@ -6,48 +6,62 @@ from torch.utils.data import DataLoader
 
 from transformers import RobertaTokenizer
 
+import hydra
+from omegaconf import DictConfig
+
 from dataset_utils.cmg_dataset import CMGDataset
 from dataset_utils.diff_preprocessor import DiffPreprocessor
 
 
 class CMGDataModule(pl.LightningDataModule):
-    def __init__(self, config):
+    def __init__(self,
+                 dataset_root: str,
+                 diff_max_len: int,
+                 msg_max_len: int,
+                 train_dataloader_conf: DictConfig,
+                 val_dataloader_conf: DictConfig,
+                 test_dataloader_conf: DictConfig):
         super().__init__()
-        self.config = config
-        self.train_batch_size = config['TRAIN_BATCH_SIZE']
-        self.val_batch_size = config['VAL_BATCH_SIZE']
-        self.test_batch_size = config['TEST_BATCH_SIZE']
+
+        self.dataset_root = hydra.utils.to_absolute_path(dataset_root)
+
+        self.train_data_dir = os.path.join(self.dataset_root, 'train')
+        self.val_data_dir = os.path.join(self.dataset_root, 'val')
+        self.test_data_dir = os.path.join(self.dataset_root, 'test')
+
+        self.diff_max_len = diff_max_len
+        self.msg_max_len = msg_max_len
+
+        self.train_dataloader_conf = train_dataloader_conf
+        self.val_dataloader_conf = val_dataloader_conf
+        self.test_dataloader_conf = test_dataloader_conf
 
         self.tokenizer = RobertaTokenizer.from_pretrained('microsoft/codebert-base')
-        self.config._CONFIG['PAD_TOKEN_ID'] = self.tokenizer.pad_token_id
-        self.config._CONFIG['BOS_TOKEN_ID'] = self.tokenizer.bos_token_id
-        self.config._CONFIG['EOS_TOKEN_ID'] = self.tokenizer.eos_token_id
-        self.config._CONFIG['VOCAB_SIZE'] = self.tokenizer.vocab_size
 
     def prepare_data(self):
         # called only on 1 GPU
-        if 'prev.txt' not in os.listdir(os.path.join(self.config['DATASET_ROOT'], 'train')):
-            DiffPreprocessor.create_files(self.config['DATASET_ROOT'])
+        if 'prev.txt' not in os.listdir(self.train_data_dir):
+            DiffPreprocessor.create_files(self.dataset_root)
 
     def setup(self, stage=None):
         # called on every GPU
         if stage == 'fit' or stage is None:
-            self.train = CMGDataset.load_data(self.tokenizer, path=os.path.join(self.config['DATASET_ROOT'], 'train'),
-                                              diff_max_len=self.config['DIFF_MAX_LEN'],
-                                              msg_max_len=self.config['MSG_MAX_LEN'])
-            self.val = CMGDataset.load_data(self.tokenizer, path=os.path.join(self.config['DATASET_ROOT'], 'val'),
-                                            diff_max_len=self.config['DIFF_MAX_LEN'],
-                                            msg_max_len=self.config['MSG_MAX_LEN'])
+            self.train = CMGDataset.load_data(self.tokenizer, path=self.train_data_dir,
+                                              diff_max_len=self.diff_max_len,
+                                              msg_max_len=self.msg_max_len)
+            self.val = CMGDataset.load_data(self.tokenizer, path=self.val_data_dir,
+                                            diff_max_len=self.diff_max_len,
+                                            msg_max_len=self.msg_max_len)
         if stage == 'test' or stage is None:
-            self.test = CMGDataset.load_data(self.tokenizer, path=os.path.join(self.config['DATASET_ROOT'], 'test'),
-                                             diff_max_len=self.config['DIFF_MAX_LEN'],
-                                             msg_max_len=self.config['MSG_MAX_LEN'])
+            self.test = CMGDataset.load_data(self.tokenizer, path=self.test_data_dir,
+                                             diff_max_len=self.diff_max_len,
+                                             msg_max_len=self.msg_max_len)
 
     def train_dataloader(self):
-        return DataLoader(self.train, batch_size=self.train_batch_size, num_workers=4)
+        return DataLoader(self.train, **self.train_dataloader_conf)
 
     def val_dataloader(self):
-        return DataLoader(self.val, batch_size=self.val_batch_size, num_workers=4)
+        return DataLoader(self.val, **self.val_dataloader_conf)
 
     def test_dataloader(self):
-        return DataLoader(self.test, batch_size=self.test_batch_size, num_workers=4)
+        return DataLoader(self.test, **self.test_dataloader_conf)

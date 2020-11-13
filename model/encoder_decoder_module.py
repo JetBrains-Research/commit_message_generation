@@ -14,22 +14,32 @@ from metrics import BleuMetric
 
 
 class EncoderDecoderModule(pl.LightningModule):
-    def __init__(self, embedding_dim, vocab_size, hidden_size_decoder, hidden_size_encoder,
-                 num_heads, num_layers, dropout, bridge, teacher_forcing_ratio, learning_rate,
-                 max_len, pad_token_id, bos_token_id, tokenizer, model_name_or_path, **kwargs):
+    def __init__(self,
+                 embedding_dim,
+                 hidden_size_decoder,
+                 hidden_size_encoder,
+                 num_heads,
+                 num_layers,
+                 dropout,
+                 bridge,
+                 teacher_forcing_ratio,
+                 learning_rate,
+                 model_name_or_path,
+                 tokenizer,
+                 **kwargs):
         super().__init__()
 
         self.tokenizer = tokenizer
         self.save_hyperparameters()
         self.learning_rate = learning_rate
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
+        self.pad_token_id = tokenizer.pad_token_id
+        self.bos_token_id = tokenizer.bos_token_id
 
         self.encoder_config = RobertaConfig.from_pretrained(model_name_or_path)
         self.encoder = RobertaModel.from_pretrained(model_name_or_path, config=self.encoder_config)
 
         self.decoder = Decoder(embed_dim=embedding_dim,
-                               vocab_size=vocab_size,
+                               vocab_size=tokenizer.vocab_size,
                                hidden_size=hidden_size_decoder,
                                hidden_size_encoder=hidden_size_encoder,
                                num_heads=num_heads,
@@ -124,22 +134,3 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def configure_optimizers(self):
         return AdamW(self.parameters(), lr=self.learning_rate)
-
-    @staticmethod
-    def add_model_specific_args(parent_parser, config):
-        parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument("--model_name_or_path", default=config['MODEL_NAME_OR_PATH'], type=str)
-        parser.add_argument("--embedding_dim", default=config['EMBEDDING_SIZE'], type=int)
-        parser.add_argument("--vocab_size", default=config['VOCAB_SIZE'], type=int)
-        parser.add_argument("--hidden_size_decoder", default=config['HIDDEN_SIZE_DECODER'], type=int)
-        parser.add_argument("--hidden_size_encoder", default=config['HIDDEN_SIZE_ENCODER'], type=int)
-        parser.add_argument("--num_heads", default=config['NUM_HEADS'], type=int)
-        parser.add_argument("--num_layers", default=config['NUM_LAYERS'], type=int)
-        parser.add_argument("--dropout", default=config['DROPOUT'], type=float)
-        parser.add_argument("--bridge", default=config['USE_BRIDGE'], type=bool)
-        parser.add_argument("--teacher_forcing_ratio", default=config['TEACHER_FORCING_RATIO'], type=float)
-        parser.add_argument("--learning_rate", default=config['LEARNING_RATE'], type=float)
-        parser.add_argument("--max_len", default=config['MSG_MAX_LEN'] * 2, type=int)
-        parser.add_argument("--pad_token_id", default=config['PAD_TOKEN_ID'], type=int)
-        parser.add_argument("--bos_token_id", default=config['BOS_TOKEN_ID'], type=int)
-        return parser

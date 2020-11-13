@@ -1,0 +1,5 @@
+defaults:
+  - dataset: cleaned_jiang
+  - logger: wandb
+  - model: encoder_decoder
+  - trainer: fast_run
