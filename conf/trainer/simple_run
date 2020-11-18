@@ -1,4 +1,0 @@
-# @package _group_
-gpus: 1
-max_epochs: 10
-learning_rate: 1e-4

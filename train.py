@@ -13,14 +13,20 @@ def main(cfg: DictConfig) -> None:
     # -----------------------
     #          init         -
     # -----------------------
+    pl.seed_everything(42)
+
     print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
 
     dm = CMGDataModule(**cfg.dataset)
 
-    encoder_decoder = EncoderDecoderModule(**cfg.model, tokenizer=dm.tokenizer)
+    encoder_decoder = EncoderDecoderModule(**cfg.model, tokenizer=dm._tokenizer)
 
     trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
     trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger)
+    # -----------------------
+    #       tune lr         -
+    # -----------------------
+    trainer.tune(model=encoder_decoder, datamodule=dm)
     # -----------------------
     #         train         -
     # -----------------------

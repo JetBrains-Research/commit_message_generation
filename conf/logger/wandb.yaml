@@ -1,4 +1,0 @@
-# @package _group_
-_target_: pytorch_lightning.loggers.WandbLogger
-name: kinda_hello_world
-project: commit_message_generation

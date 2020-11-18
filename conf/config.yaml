@@ -1,5 +1,35 @@
-defaults:
-  - dataset: cleaned_jiang
-  - logger: wandb
-  - model: encoder_decoder
-  - trainer: fast_run
+dataset:
+  dataset_root: raw_data/CleanedJiang
+  diff_max_len: 100
+  msg_max_len: 30
+  train_dataloader_conf:
+    batch_size: 8
+    shuffle: true
+    num_workers: 4
+  val_dataloader_conf:
+    batch_size: 8
+    num_workers: 4
+  test_dataloader_conf:
+    batch_size: 8
+    num_workers: 4
+logger:
+  _target_: pytorch_lightning.loggers.WandbLogger
+  name: adamw reduction_mean auto_lr_find no_tf
+  project: commit_message_generation
+model:
+  embedding_dim: 768
+  hidden_size_decoder: 256
+  hidden_size_encoder: 768
+  num_heads: 8
+  num_layers: 2
+  dropout: 0.2
+  bridge: true
+  teacher_forcing_ratio: -1.0
+  learning_rate: 1e-3
+  reduction: mean
+  model_name_or_path: microsoft/codebert-base
+trainer:
+  gpus: 1
+  max_epochs: 10
+  auto_lr_find: true
+  limit_train_batches: 250

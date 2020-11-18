@@ -36,7 +36,7 @@ class CMGDataModule(pl.LightningDataModule):
         self.val_dataloader_conf = val_dataloader_conf
         self.test_dataloader_conf = test_dataloader_conf
 
-        self.tokenizer = RobertaTokenizer.from_pretrained('microsoft/codebert-base')
+        self._tokenizer = RobertaTokenizer.from_pretrained('microsoft/codebert-base')
 
     def prepare_data(self):
         # called only on 1 GPU
@@ -46,14 +46,14 @@ class CMGDataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # called on every GPU
         if stage == 'fit' or stage is None:
-            self.train = CMGDataset.load_data(self.tokenizer, path=self.train_data_dir,
+            self.train = CMGDataset.load_data(self._tokenizer, path=self.train_data_dir,
                                               diff_max_len=self.diff_max_len,
                                               msg_max_len=self.msg_max_len)
-            self.val = CMGDataset.load_data(self.tokenizer, path=self.val_data_dir,
+            self.val = CMGDataset.load_data(self._tokenizer, path=self.val_data_dir,
                                             diff_max_len=self.diff_max_len,
                                             msg_max_len=self.msg_max_len)
         if stage == 'test' or stage is None:
-            self.test = CMGDataset.load_data(self.tokenizer, path=self.test_data_dir,
+            self.test = CMGDataset.load_data(self._tokenizer, path=self.test_data_dir,
                                              diff_max_len=self.diff_max_len,
                                              msg_max_len=self.msg_max_len)
 

@@ -15,9 +15,8 @@ class AccuracyMetric(Metric):
     def update(self, preds: torch.Tensor, targets: torch.Tensor):
         assert preds.shape == targets.shape
 
-        # TODO: should we count <s> and </s> tokens or not?
-        # correct --- # of equal tokens in pred and target without padding
-        self.correct += torch.sum(torch.logical_and(targets != self.pad_token_id, targets == preds))
+        # correct --- # of equal tokens in pred and target without <s> </s> <pad>
+        self.correct += torch.sum(torch.logical_and(targets > self.pad_token_id, targets == preds))
         # total --- # of tokens in target without padding
         self.total += torch.sum(targets != self.pad_token_id)
 

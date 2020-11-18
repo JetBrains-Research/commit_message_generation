@@ -32,7 +32,7 @@ class Decoder(nn.Module):
         self.rnn = nn.GRU(hidden_size_encoder + embed_dim,
                           hidden_size,
                           num_layers=num_layers,
-                          batch_first=True, dropout=dropout)
+                          batch_first=True)
         self.dropout_layer = nn.Dropout(p=dropout)
         self.pre_output_layer = nn.Linear(hidden_size_encoder + hidden_size + embed_dim, hidden_size, bias=False)
         self.output_layer = nn.Linear(hidden_size, vocab_size, bias=False)
@@ -40,18 +40,16 @@ class Decoder(nn.Module):
 
     def forward_step(self, prev_embed, encoder_output, src_mask, hidden):
         """Perform a single decoder step (1 word)
-        :param prev_embed: embedding of previous target tokens
+        :param prev_embed: embedding of previous target token
         (tensor of shape [batch_size, 1, embed_dim])
         :param encoder_output: sequence of hidden-states at the output of the last layer of the encoder
-        (tensor of shape [batch_size, src_sequence_length, hidden_size_encoder])
+        (tensor of shape [src_sequence_length, batch_size, hidden_size_encoder])
         :param src_mask: attention mask for encoder_output with 0 for pad tokens and 1 for all others
         (tensor of shape [batch_size, src_sequence_length])
-        :param proj_key: [batch_size, sequence_length, hidden_size_decoder]
         :param hidden: [batch_size, hidden_size_decoder]
         :return: Tuple[[batch_size, 1, hidden_size_decoder],
                        [num_layers, batch_size, hidden_size_decoder],
                        [batch_size, 1, hidden_size_decoder]]"""
-
 
         context, attn_w = self.attention(prev_embed.reshape(prev_embed.shape[1], prev_embed.shape[0], -1),
                                          encoder_output,

@@ -3,9 +3,11 @@ from argparse import ArgumentParser
 import pytorch_lightning as pl
 
 import torch
+from torch import nn
 import torch.nn.functional as F
 
-from transformers import RobertaConfig, RobertaModel, AdamW
+
+from transformers import RobertaConfig, RobertaModel, RobertaTokenizer, AdamW
 
 from model.decoder import Decoder
 
@@ -15,21 +17,22 @@ from metrics import BleuMetric
 
 class EncoderDecoderModule(pl.LightningModule):
     def __init__(self,
-                 embedding_dim,
-                 hidden_size_decoder,
-                 hidden_size_encoder,
-                 num_heads,
-                 num_layers,
-                 dropout,
-                 bridge,
-                 teacher_forcing_ratio,
-                 learning_rate,
-                 model_name_or_path,
-                 tokenizer,
+                 embedding_dim: int,
+                 hidden_size_decoder: int,
+                 hidden_size_encoder: int,
+                 num_heads: int,
+                 num_layers: int,
+                 dropout: float,
+                 bridge: bool,
+                 teacher_forcing_ratio: float,
+                 learning_rate: float,
+                 reduction: str,
+                 model_name_or_path: str,
+                 tokenizer: RobertaTokenizer,
                  **kwargs):
         super().__init__()
 
-        self.tokenizer = tokenizer
+        self._tokenizer = tokenizer
         self.save_hyperparameters()
         self.learning_rate = learning_rate
         self.pad_token_id = tokenizer.pad_token_id
@@ -47,6 +50,8 @@ class EncoderDecoderModule(pl.LightningModule):
                                dropout=dropout,
                                bridge=bridge,
                                teacher_forcing_ratio=teacher_forcing_ratio)
+
+        self.loss = nn.NLLLoss(reduction=reduction, ignore_index=self.pad_token_id)
 
         self.accuracy = AccuracyMetric(self.pad_token_id)
         self.bleu = BleuMetric()
@@ -68,24 +73,29 @@ class EncoderDecoderModule(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         src, trg = batch
         decoder_states, hidden, output = self(batch)
-
-        train_loss = F.nll_loss(output.view(-1, output.size(-1)), trg['input_ids'].view(-1),
-                                reduction='mean', ignore_index=self.pad_token_id)
-
-        self.log('train_loss', train_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        train_loss = self.loss(output.view(-1, output.size(-1)), trg['input_ids'].view(-1))
+        self.log('train_loss', train_loss, on_step=True, on_epoch=True, logger=True)
         return train_loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         src, trg = batch
         decoder_states, hidden, output = self(batch)
 
-        val_loss = F.nll_loss(output.view(-1, output.size(-1)), trg['input_ids'].view(-1),
-                              reduction='mean', ignore_index=self.pad_token_id)
+        val_loss = self.loss(output.view(-1, output.size(-1)), trg['input_ids'].view(-1))
 
-        self.log('val_loss', val_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-        return val_loss
+        acc, bleu = self.greedy_decode(batch)
+        self.log('val_loss', val_loss, logger=True)
+        self.log('val_accuracy', acc, on_epoch=True, prog_bar=True, logger=True)
+        self.log('val_bleu', bleu, on_epoch=True, prog_bar=True, logger=True)
+        return {"val_loss": val_loss, "val_accuracy": acc, "val_bleu": bleu}
 
     def test_step(self, batch, batch_idx):
+        acc, bleu = self.greedy_decode(batch)
+        self.log('test_accuracy', acc, on_epoch=True, prog_bar=True, logger=True)
+        self.log('test_bleu', bleu, on_epoch=True, prog_bar=True, logger=True)
+        return {"test_accuracy": acc, "test_bleu": bleu}
+
+    def greedy_decode(self, batch):
         # TODO: implement beam search and add choice between beam search/greedy approaches
         src, trg = batch
         encoder_output, _, encoder_final = self.encoder(input_ids=src['input_ids'],
@@ -96,8 +106,7 @@ class EncoderDecoderModule(pl.LightningModule):
 
         prev_y = torch.ones(src['input_ids'].shape[0], 1).fill_(self.bos_token_id).type_as(src['input_ids'])
         prev_y_mask = torch.ones_like(prev_y)
-
-        preds = torch.zeros((src['input_ids'].shape[0], trg['input_ids'].shape[1]))
+        preds = torch.zeros((src['input_ids'].shape[0], trg['input_ids'].shape[1])).type_as(src['input_ids'])
         hidden = None
 
         for i in range(trg['input_ids'].shape[1]):
@@ -107,30 +116,21 @@ class EncoderDecoderModule(pl.LightningModule):
                                                           torch.logical_not(src['attention_mask']), hidden=hidden)
             _, next_word = torch.max(output, dim=2)
             preds[:, i] = torch.flatten(next_word)
-            prev_y = next_word  # change prev id to generated id
-        preds = preds.detach().cpu()
-        return {'preds': preds, 'targets': trg['input_ids']}
+            prev_y = next_word
 
-    def test_epoch_end(self, outputs):
-        # TODO: should we compute accuracy on decoded strings or with token ids (probably faster)?
         # compute accuracy with tensors
-        preds = torch.cat([x['preds'] for x in outputs]).detach().cpu()
-        targets = torch.cat([x['targets'] for x in outputs]).detach().cpu()
-
-        acc = self.accuracy(preds, targets)
+        acc = self.accuracy(preds, trg['input_ids'])
 
         # compute BLEU with decoded strings
         targets = [
-            self.tokenizer.decode(example, skip_special_tokens=True, clean_up_tokenization_spaces=False).split(' ')
-            for example in targets.tolist()]
+            self._tokenizer.decode(example, skip_special_tokens=True, clean_up_tokenization_spaces=False).split(' ')
+            for example in trg['input_ids'].tolist()]
 
-        preds = [self.tokenizer.decode(example, skip_special_tokens=True, clean_up_tokenization_spaces=False).split(' ')
+        preds = [self._tokenizer.decode(example, skip_special_tokens=True, clean_up_tokenization_spaces=False).split(' ')
                  for example in preds.tolist()]
 
         bleu = self.bleu(preds, targets)
-
-        self.log('test_accuracy', acc, prog_bar=True, logger=True)
-        self.log('test_bleu', bleu, prog_bar=True, logger=True)
+        return acc, bleu
 
     def configure_optimizers(self):
         return AdamW(self.parameters(), lr=self.learning_rate)
