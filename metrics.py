@@ -33,8 +33,9 @@ class BleuMetric(Metric):
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
     def update(self, preds, targets):
-        self.bleu += bleu_score(translate_corpus=preds, reference_corpus=targets, n_gram=self.n_gram)
-        self.total += 1
+        for pred, trg in zip(preds, targets):
+            self.bleu += bleu_score(translate_corpus=[pred], reference_corpus=[[trg]], n_gram=self.n_gram, smooth=True)
+            self.total += 1
 
     def compute(self):
         return self.bleu / self.total

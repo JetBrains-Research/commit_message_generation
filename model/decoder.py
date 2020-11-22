@@ -34,8 +34,8 @@ class Decoder(nn.Module):
                           num_layers=num_layers,
                           batch_first=True)
         self.dropout_layer = nn.Dropout(p=dropout)
-        self.pre_output_layer = nn.Linear(hidden_size_encoder + hidden_size + embed_dim, hidden_size, bias=False)
-        self.output_layer = nn.Linear(hidden_size, vocab_size, bias=False)
+        self.pre_output_layer = nn.Linear(hidden_size_encoder + hidden_size + embed_dim, hidden_size)
+        self.output_layer = nn.Linear(hidden_size, vocab_size)
         self.log_softmax = nn.LogSoftmax(dim=-1)
 
     def forward_step(self, prev_embed, encoder_output, src_mask, hidden):
@@ -51,11 +51,11 @@ class Decoder(nn.Module):
                        [num_layers, batch_size, hidden_size_decoder],
                        [batch_size, 1, hidden_size_decoder]]"""
 
-        context, attn_w = self.attention(prev_embed.reshape(prev_embed.shape[1], prev_embed.shape[0], -1),
+        context, attn_w = self.attention(prev_embed.transpose(0, 1),
                                          encoder_output,
                                          encoder_output,
                                          key_padding_mask=src_mask)
-        context = context.reshape(context.shape[1], context.shape[0], -1)
+        context = context.transpose(0, 1)
 
         # update rnn hidden state
         rnn_input = torch.cat([prev_embed, context], dim=2)
@@ -97,7 +97,7 @@ class Decoder(nn.Module):
 
         trg_embed = self.embedding(input_ids)
 
-        encoder_output = encoder_output.reshape(encoder_output.shape[1], encoder_output.shape[0], -1)
+        encoder_output = encoder_output.transpose(0, 1)
 
         # here we store all intermediate hidden states and pre-output vectors
         decoder_states = []

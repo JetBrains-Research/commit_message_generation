@@ -4,10 +4,10 @@ import pytorch_lightning as pl
 
 import torch
 from torch import nn
-import torch.nn.functional as F
-
 
 from transformers import RobertaConfig, RobertaModel, RobertaTokenizer, AdamW
+
+import wandb
 
 from model.decoder import Decoder
 
@@ -63,7 +63,7 @@ class EncoderDecoderModule(pl.LightningModule):
                                                         attention_mask=src['attention_mask'],
                                                         output_hidden_states=True)
         t = encoder_final[0].shape[1] - 1
-        encoder_final = torch.stack(encoder_final)[:, :, t, :][-self.decoder.num_layers:, :]
+        encoder_final = torch.stack(encoder_final)[:, :, t, :][-self.decoder.num_layers:]
         # decode step
         return self.decoder(trg['input_ids'],
                             trg['attention_mask'],
@@ -74,26 +74,39 @@ class EncoderDecoderModule(pl.LightningModule):
         src, trg = batch
         decoder_states, hidden, output = self(batch)
         train_loss = self.loss(output.view(-1, output.size(-1)), trg['input_ids'].view(-1))
-        self.log('train_loss', train_loss, on_step=True, on_epoch=True, logger=True)
+        self.logger.experiment.log({"train_loss_step": train_loss})
         return train_loss
+
+    def training_epoch_end(self, outputs):
+        train_loss_mean = torch.stack([x['loss'] for x in outputs]).mean().item()
+        self.logger.experiment.log({"train_loss_epoch": train_loss_mean})
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         src, trg = batch
         decoder_states, hidden, output = self(batch)
-
         val_loss = self.loss(output.view(-1, output.size(-1)), trg['input_ids'].view(-1))
+        acc, bleu, table = self.greedy_decode(batch)
+        return {"val_loss": val_loss, "val_accuracy": acc, "val_bleu": bleu, "examples": table}
 
-        acc, bleu = self.greedy_decode(batch)
-        self.log('val_loss', val_loss, logger=True)
-        self.log('val_accuracy', acc, on_epoch=True, prog_bar=True, logger=True)
-        self.log('val_bleu', bleu, on_epoch=True, prog_bar=True, logger=True)
-        return {"val_loss": val_loss, "val_accuracy": acc, "val_bleu": bleu}
+    def validation_epoch_end(self, outputs):
+        val_loss_mean = torch.stack([x["val_loss"] for x in outputs]).mean().item()
+        val_acc_mean = torch.stack([x["val_accuracy"] for x in outputs]).mean().item()
+        val_bleu_mean = torch.stack([x["val_bleu"] for x in outputs]).mean().item()
+        self.logger.experiment.log({"val_examples": outputs[0]["examples"],
+                                    "val_accuracy": val_acc_mean,
+                                    "val_bleu": val_bleu_mean,
+                                    "val_loss": val_loss_mean})
 
     def test_step(self, batch, batch_idx):
-        acc, bleu = self.greedy_decode(batch)
-        self.log('test_accuracy', acc, on_epoch=True, prog_bar=True, logger=True)
-        self.log('test_bleu', bleu, on_epoch=True, prog_bar=True, logger=True)
-        return {"test_accuracy": acc, "test_bleu": bleu}
+        acc, bleu, table = self.greedy_decode(batch)
+        return {"test_accuracy": acc, "test_bleu": bleu, "examples": table}
+
+    def test_epoch_end(self, outputs):
+        test_acc_mean = torch.stack([x["test_accuracy"] for x in outputs]).mean().item()
+        test_bleu_mean = torch.stack([x["test_bleu"] for x in outputs]).mean().item()
+        self.logger.experiment.log({"test_examples": outputs[0]["examples"],
+                                    "test_accuracy": test_acc_mean,
+                                    "test_bleu": test_bleu_mean})
 
     def greedy_decode(self, batch):
         # TODO: implement beam search and add choice between beam search/greedy approaches
@@ -117,7 +130,6 @@ class EncoderDecoderModule(pl.LightningModule):
             _, next_word = torch.max(output, dim=2)
             preds[:, i] = torch.flatten(next_word)
             prev_y = next_word
-
         # compute accuracy with tensors
         acc = self.accuracy(preds, trg['input_ids'])
 
@@ -129,8 +141,17 @@ class EncoderDecoderModule(pl.LightningModule):
         preds = [self._tokenizer.decode(example, skip_special_tokens=True, clean_up_tokenization_spaces=False).split(' ')
                  for example in preds.tolist()]
 
+        table = wandb.Table(columns=["Predicted", "Target"])
+        for i in range(5):
+            try:
+                table.add_data(' '.join(preds[i]), ' '.join(targets[i]))
+            except IndexError:
+                print("\n=========PREDS============\n", preds, '\n', len(preds))
+                print("\n=========TARGETS============\n", targets, '\n', len(targets))
+                break
+
         bleu = self.bleu(preds, targets)
-        return acc, bleu
+        return acc, bleu, table
 
     def configure_optimizers(self):
         return AdamW(self.parameters(), lr=self.learning_rate)

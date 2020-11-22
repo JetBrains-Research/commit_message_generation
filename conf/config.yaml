@@ -3,18 +3,18 @@ dataset:
   diff_max_len: 100
   msg_max_len: 30
   train_dataloader_conf:
-    batch_size: 8
+    batch_size: 6
     shuffle: true
     num_workers: 4
   val_dataloader_conf:
-    batch_size: 8
+    batch_size: 6
     num_workers: 4
   test_dataloader_conf:
-    batch_size: 8
+    batch_size: 6
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: adamw reduction_mean auto_lr_find no_tf
+  name: transpose lr_5e-5 tf_65
   project: commit_message_generation
 model:
   embedding_dim: 768
@@ -24,12 +24,12 @@ model:
   num_layers: 2
   dropout: 0.2
   bridge: true
-  teacher_forcing_ratio: -1.0
-  learning_rate: 1e-3
+  teacher_forcing_ratio: 0.65
+  learning_rate: 5e-5
   reduction: mean
   model_name_or_path: microsoft/codebert-base
 trainer:
   gpus: 1
   max_epochs: 10
-  auto_lr_find: true
   limit_train_batches: 250
+  limit_val_batches: 100
