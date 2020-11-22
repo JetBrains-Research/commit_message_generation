@@ -14,7 +14,7 @@ dataset:
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: transpose+pooler+relu lr_5e-5 tf_65
+  name: transpose+pooler+relu+layernorm lr_5e-5 tf_65
   project: commit_message_generation
 model:
   embedding_dim: 768

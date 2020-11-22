@@ -26,9 +26,11 @@ class Decoder(nn.Module):
         self.dropout = dropout
         self.teacher_forcing_ratio = teacher_forcing_ratio
 
+        self.norm1 = nn.LayerNorm(hidden_size_encoder)
         self.bridge = nn.Linear(hidden_size_encoder, hidden_size, bias=True) if bridge else None
         self.embedding = nn.Embedding(vocab_size, embed_dim)
         self.attention = nn.MultiheadAttention(embed_dim, num_heads)
+        self.norm2 = nn.LayerNorm(hidden_size_encoder)
         self.rnn = nn.GRU(hidden_size_encoder + embed_dim,
                           hidden_size,
                           num_layers=num_layers,
@@ -56,11 +58,13 @@ class Decoder(nn.Module):
                                          encoder_output,
                                          key_padding_mask=src_mask)
 
+        context = self.norm2(context.transpose(0, 1))
+
         # update rnn hidden state
-        rnn_input = torch.cat([prev_embed, context.transpose(0, 1)], dim=2)
+        rnn_input = torch.cat([prev_embed, context], dim=2)
         rnn_output, hidden = self.rnn(rnn_input, hidden)
 
-        pre_output = torch.cat([prev_embed, rnn_output, context.transpose(0, 1)], dim=2)
+        pre_output = torch.cat([prev_embed, rnn_output, context], dim=2)
         pre_output = self.dropout_layer(pre_output)
         pre_output = F.relu(self.pre_output_layer(pre_output))
         output = self.output_layer(pre_output)
@@ -117,10 +121,13 @@ class Decoder(nn.Module):
 
     def init_hidden(self, encoder_final):
         """Returns the initial decoder state,
-        conditioned on the final encoder state."""
+        conditioned on the final encoder state.
+
+        :param encoder_final: [1, batch_size, hidden_size_encoder]"""
+
         if encoder_final is None:
             return None  # start with zeros
-        return F.relu(self.bridge(encoder_final))
+        return F.relu(self.bridge(self.norm1(encoder_final)))
 
 
 if __name__ == "__main__":
