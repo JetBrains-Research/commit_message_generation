@@ -14,14 +14,14 @@ dataset:
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: transpose lr_5e-5 tf_65
+  name: transpose+pooler lr_5e-5 tf_65
   project: commit_message_generation
 model:
   embedding_dim: 768
   hidden_size_decoder: 256
   hidden_size_encoder: 768
   num_heads: 8
-  num_layers: 2
+  num_layers: 1
   dropout: 0.2
   bridge: true
   teacher_forcing_ratio: 0.65

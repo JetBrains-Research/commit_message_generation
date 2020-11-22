@@ -59,20 +59,18 @@ class EncoderDecoderModule(pl.LightningModule):
     def forward(self, batch):
         src, trg = batch
         # encode step
-        encoder_output, _, encoder_final = self.encoder(input_ids=src['input_ids'],
+        encoder_output, encoder_final, _ = self.encoder(input_ids=src['input_ids'],
                                                         attention_mask=src['attention_mask'],
                                                         output_hidden_states=True)
-        t = encoder_final[0].shape[1] - 1
-        encoder_final = torch.stack(encoder_final)[:, :, t, :][-self.decoder.num_layers:]
         # decode step
         return self.decoder(trg['input_ids'],
                             trg['attention_mask'],
-                            encoder_output, encoder_final,
+                            encoder_output, encoder_final.unsqueeze(0),
                             torch.logical_not(src['attention_mask']))
 
     def training_step(self, batch, batch_idx):
         src, trg = batch
-        decoder_states, hidden, output = self(batch)
+        hidden, output = self(batch)
         train_loss = self.loss(output.view(-1, output.size(-1)), trg['input_ids'].view(-1))
         self.logger.experiment.log({"train_loss_step": train_loss})
         return train_loss
@@ -83,7 +81,7 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         src, trg = batch
-        decoder_states, hidden, output = self(batch)
+        hidden, output = self(batch)
         val_loss = self.loss(output.view(-1, output.size(-1)), trg['input_ids'].view(-1))
         acc, bleu, table = self.greedy_decode(batch)
         return {"val_loss": val_loss, "val_accuracy": acc, "val_bleu": bleu, "examples": table}
@@ -111,11 +109,11 @@ class EncoderDecoderModule(pl.LightningModule):
     def greedy_decode(self, batch):
         # TODO: implement beam search and add choice between beam search/greedy approaches
         src, trg = batch
-        encoder_output, _, encoder_final = self.encoder(input_ids=src['input_ids'],
+        encoder_output, encoder_final, _ = self.encoder(input_ids=src['input_ids'],
                                                         attention_mask=src['attention_mask'],
                                                         output_hidden_states=True)
-        t = encoder_final[0].shape[1] - 1
-        encoder_final = torch.stack(encoder_final)[:, :, t, :][-self.decoder.num_layers:, :]
+
+        encoder_final = encoder_final.unsqueeze(0)
 
         prev_y = torch.ones(src['input_ids'].shape[0], 1).fill_(self.bos_token_id).type_as(src['input_ids'])
         prev_y_mask = torch.ones_like(prev_y)
@@ -123,10 +121,10 @@ class EncoderDecoderModule(pl.LightningModule):
         hidden = None
 
         for i in range(trg['input_ids'].shape[1]):
-            decoder_states, hidden, output = self.decoder(prev_y,
-                                                          prev_y_mask,
-                                                          encoder_output, encoder_final,
-                                                          torch.logical_not(src['attention_mask']), hidden=hidden)
+            hidden, output = self.decoder(prev_y,
+                                          prev_y_mask,
+                                          encoder_output, encoder_final,
+                                          torch.logical_not(src['attention_mask']), hidden=hidden)
             _, next_word = torch.max(output, dim=2)
             preds[:, i] = torch.flatten(next_word)
             prev_y = next_word
@@ -140,17 +138,17 @@ class EncoderDecoderModule(pl.LightningModule):
 
         preds = [self._tokenizer.decode(example, skip_special_tokens=True, clean_up_tokenization_spaces=False).split(' ')
                  for example in preds.tolist()]
+        bleu = self.bleu(preds, targets)
 
-        table = wandb.Table(columns=["Predicted", "Target"])
+        # log a little table with examples
+        table = wandb.Table(columns=["Source", "Predicted", "Target"])
+        srcs = [self._tokenizer.decode(example, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+                for example in src['input_ids'].tolist()]
         for i in range(5):
             try:
-                table.add_data(' '.join(preds[i]), ' '.join(targets[i]))
+                table.add_data(srcs[i], ' '.join(preds[i]), ' '.join(targets[i]))
             except IndexError:
-                print("\n=========PREDS============\n", preds, '\n', len(preds))
-                print("\n=========TARGETS============\n", targets, '\n', len(targets))
                 break
-
-        bleu = self.bleu(preds, targets)
         return acc, bleu, table
 
     def configure_optimizers(self):
