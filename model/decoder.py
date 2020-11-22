@@ -1,7 +1,7 @@
 import random
 import torch
 from torch import nn
-
+import torch.nn.functional as F
 
 class Decoder(nn.Module):
     """A conditional GRU decoder with multihead self-attention."""
@@ -55,19 +55,18 @@ class Decoder(nn.Module):
                                          encoder_output,
                                          encoder_output,
                                          key_padding_mask=src_mask)
-        context = context.transpose(0, 1)
 
         # update rnn hidden state
-        rnn_input = torch.cat([prev_embed, context], dim=2)
+        rnn_input = torch.cat([prev_embed, context.transpose(0, 1)], dim=2)
         rnn_output, hidden = self.rnn(rnn_input, hidden)
 
-        pre_output = torch.cat([prev_embed, rnn_output, context], dim=2)
+        pre_output = torch.cat([prev_embed, rnn_output, context.transpose(0, 1)], dim=2)
         pre_output = self.dropout_layer(pre_output)
-        pre_output = self.pre_output_layer(pre_output)
+        pre_output = F.relu(self.pre_output_layer(pre_output))
         output = self.output_layer(pre_output)
         output = self.log_softmax(output)
 
-        return rnn_output, hidden, output
+        return hidden, output
 
     def forward(self, input_ids, attention_mask, encoder_output, encoder_final,
                 src_attention_mask, hidden=None, max_len=None):
@@ -76,7 +75,7 @@ class Decoder(nn.Module):
         :param input_ids: [batch_size, target_sequence_length]
         :param attention_mask: [batch_size, target_sequence_length]
         :param encoder_output: [batch_size, src_sequence_length, hidden_size_encoder]
-        :param encoder_final: [num_layers, batch_size, hidden_size_encoder]
+        :param encoder_final: [1, batch_size, hidden_size_encoder]
         :param src_attention_mask: [batch_size, src_sequence_length]
         :param hidden: decoder hidden state
         :param max_len: the maximum number of steps to unroll the RNN
@@ -97,10 +96,10 @@ class Decoder(nn.Module):
 
         trg_embed = self.embedding(input_ids)
 
+        # transpose for MultiheadAttention layer
         encoder_output = encoder_output.transpose(0, 1)
 
-        # here we store all intermediate hidden states and pre-output vectors
-        decoder_states = []
+        # here we store all intermediate output vectors
         output_vectors = []
 
         # unroll the decoder RNN for max_len steps
@@ -111,20 +110,17 @@ class Decoder(nn.Module):
             else:
                 _, prev_pred = torch.max(output, dim=2)
                 prev_embed = self.embedding(prev_pred)
-            rnn_output, hidden, output = self.forward_step(prev_embed, encoder_output, src_attention_mask, hidden)
-            decoder_states.append(rnn_output)
+            hidden, output = self.forward_step(prev_embed, encoder_output, src_attention_mask, hidden)
             output_vectors.append(output)
-
-        decoder_states = torch.cat(decoder_states, dim=1)
         output_vectors = torch.cat(output_vectors, dim=1)
-        return decoder_states, hidden, output_vectors
+        return hidden, output_vectors
 
     def init_hidden(self, encoder_final):
         """Returns the initial decoder state,
         conditioned on the final encoder state."""
         if encoder_final is None:
             return None  # start with zeros
-        return torch.tanh(self.bridge(encoder_final))
+        return F.relu(self.bridge(encoder_final))
 
 
 if __name__ == "__main__":
