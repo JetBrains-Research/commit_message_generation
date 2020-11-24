@@ -14,7 +14,7 @@ dataset:
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: transpose+pooler+relu+layernorm lr_5e-5 tf_65
+  name: full run change layernorm (again!) and add dropout but don't concat rnn output lr_1e-4 tf_65
   project: commit_message_generation
 model:
   embedding_dim: 768
@@ -25,11 +25,10 @@ model:
   dropout: 0.2
   bridge: true
   teacher_forcing_ratio: 0.65
-  learning_rate: 5e-5
+  learning_rate: 1e-4
   reduction: mean
   model_name_or_path: microsoft/codebert-base
 trainer:
   gpus: 1
-  max_epochs: 10
-  limit_train_batches: 250
-  limit_val_batches: 100
+  max_epochs: 6
+  val_check_interval: 0.5

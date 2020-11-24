@@ -3,6 +3,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+
 class Decoder(nn.Module):
     """A conditional GRU decoder with multihead self-attention."""
     def __init__(self,
@@ -26,17 +27,18 @@ class Decoder(nn.Module):
         self.dropout = dropout
         self.teacher_forcing_ratio = teacher_forcing_ratio
 
-        self.norm1 = nn.LayerNorm(hidden_size_encoder)
+        self.norm1 = nn.LayerNorm(hidden_size)
         self.bridge = nn.Linear(hidden_size_encoder, hidden_size, bias=True) if bridge else None
         self.embedding = nn.Embedding(vocab_size, embed_dim)
         self.attention = nn.MultiheadAttention(embed_dim, num_heads)
+        self.dropout1 = nn.Dropout(p=dropout)
         self.norm2 = nn.LayerNorm(hidden_size_encoder)
-        self.rnn = nn.GRU(hidden_size_encoder + embed_dim,
+        self.rnn = nn.GRU(hidden_size_encoder,
                           hidden_size,
                           num_layers=num_layers,
                           batch_first=True)
-        self.dropout_layer = nn.Dropout(p=dropout)
-        self.pre_output_layer = nn.Linear(hidden_size_encoder + hidden_size + embed_dim, hidden_size)
+        self.dropout2 = nn.Dropout(p=dropout)
+        self.pre_output_layer = nn.Linear(hidden_size, hidden_size)
         self.output_layer = nn.Linear(hidden_size, vocab_size)
         self.log_softmax = nn.LogSoftmax(dim=-1)
 
@@ -57,16 +59,13 @@ class Decoder(nn.Module):
                                          encoder_output,
                                          encoder_output,
                                          key_padding_mask=src_mask)
+        context = context.transpose(0, 1)
 
-        context = self.norm2(context.transpose(0, 1))
+        rnn_input = self.norm2(prev_embed + self.dropout1(context))
 
-        # update rnn hidden state
-        rnn_input = torch.cat([prev_embed, context], dim=2)
         rnn_output, hidden = self.rnn(rnn_input, hidden)
 
-        pre_output = torch.cat([prev_embed, rnn_output, context], dim=2)
-        pre_output = self.dropout_layer(pre_output)
-        pre_output = F.relu(self.pre_output_layer(pre_output))
+        pre_output = self.dropout2(F.relu(self.pre_output_layer(rnn_output)))
         output = self.output_layer(pre_output)
         output = self.log_softmax(output)
 
@@ -127,7 +126,7 @@ class Decoder(nn.Module):
 
         if encoder_final is None:
             return None  # start with zeros
-        return F.relu(self.bridge(self.norm1(encoder_final)))
+        return F.relu(self.norm1(self.bridge(encoder_final)))
 
 
 if __name__ == "__main__":

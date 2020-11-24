@@ -37,6 +37,7 @@ class EncoderDecoderModule(pl.LightningModule):
         self.learning_rate = learning_rate
         self.pad_token_id = tokenizer.pad_token_id
         self.bos_token_id = tokenizer.bos_token_id
+        self.eos_token_id = tokenizer.eos_token_id
 
         self.encoder_config = RobertaConfig.from_pretrained(model_name_or_path)
         self.encoder = RobertaModel.from_pretrained(model_name_or_path, config=self.encoder_config)

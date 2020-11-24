@@ -22,8 +22,8 @@ def main(cfg: DictConfig) -> None:
     encoder_decoder = EncoderDecoderModule(**cfg.model, tokenizer=dm._tokenizer)
 
     # freeze codebert
-    #for param in encoder_decoder.encoder.parameters():
-    #    param.requires_grad = False
+    for param in encoder_decoder.encoder.parameters():
+        param.requires_grad = False
 
     trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
     trainer_logger.watch(encoder_decoder, log='gradients', log_freq=250)
