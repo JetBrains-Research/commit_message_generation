@@ -1,0 +1,34 @@
+dataset:
+  dataset_root: raw_data/CleanedJiang
+  diff_max_len: 100
+  msg_max_len: 30
+  train_dataloader_conf:
+    batch_size: 6
+    shuffle: true
+    num_workers: 4
+  val_dataloader_conf:
+    batch_size: 6
+    num_workers: 4
+  test_dataloader_conf:
+    batch_size: 6
+    num_workers: 4
+logger:
+  _target_: pytorch_lightning.loggers.WandbLogger
+  name: full run change layernorm (again!) and add dropout but don't concat rnn output lr_1e-4 tf_65
+  project: commit_message_generation
+model:
+  embedding_dim: 768
+  hidden_size_decoder: 256
+  hidden_size_encoder: 768
+  num_heads: 8
+  num_layers: 1
+  dropout: 0.2
+  bridge: true
+  teacher_forcing_ratio: 0.65
+  learning_rate: 1e-4
+  reduction: mean
+  model_name_or_path: microsoft/codebert-base
+trainer:
+  gpus: 1
+  max_epochs: 6
+  val_check_interval: 0.5
