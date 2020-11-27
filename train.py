@@ -21,7 +21,7 @@ def main(cfg: DictConfig) -> None:
 
     encoder_decoder = EncoderDecoderModule(**cfg.model, tokenizer=dm._tokenizer)
 
-    # freeze codebert
+    # freee codebert
     for param in encoder_decoder.encoder.parameters():
         param.requires_grad = False
 

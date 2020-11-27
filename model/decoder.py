@@ -27,7 +27,7 @@ class Decoder(nn.Module):
         self.dropout = dropout
         self.teacher_forcing_ratio = teacher_forcing_ratio
 
-        self.norm1 = nn.LayerNorm(hidden_size)
+        self.norm1 = nn.LayerNorm(hidden_size_encoder)
         self.bridge = nn.Linear(hidden_size_encoder, hidden_size, bias=True) if bridge else None
         self.embedding = nn.Embedding(vocab_size, embed_dim)
         self.attention = nn.MultiheadAttention(embed_dim, num_heads)
@@ -56,12 +56,11 @@ class Decoder(nn.Module):
                        [batch_size, 1, hidden_size_decoder]]"""
 
         context, attn_w = self.attention(prev_embed.transpose(0, 1),
-                                         encoder_output,
-                                         encoder_output,
+                                         encoder_output.transpose(0, 1),
+                                         encoder_output.transpose(0, 1),
                                          key_padding_mask=src_mask)
-        context = context.transpose(0, 1)
 
-        rnn_input = self.norm2(prev_embed + self.dropout1(context))
+        rnn_input = self.norm2(prev_embed + self.dropout1(context.transpose(0, 1)))
 
         rnn_output, hidden = self.rnn(rnn_input, hidden)
 
@@ -99,9 +98,6 @@ class Decoder(nn.Module):
 
         trg_embed = self.embedding(input_ids)
 
-        # transpose for MultiheadAttention layer
-        encoder_output = encoder_output.transpose(0, 1)
-
         # here we store all intermediate output vectors
         output_vectors = []
 
@@ -126,7 +122,7 @@ class Decoder(nn.Module):
 
         if encoder_final is None:
             return None  # start with zeros
-        return F.relu(self.norm1(self.bridge(encoder_final)))
+        return F.relu(self.bridge(self.norm1(encoder_final)))
 
 
 if __name__ == "__main__":

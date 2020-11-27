@@ -29,18 +29,19 @@ class DiffPreprocessor:
 
         prev_lines, updated_lines = [], []
         was_special_keyword_modification = False
+        contains_minus_or_plus = False
         for tokens_in_line in tokens_per_line:
             if tokens_in_line[0] == 'mmm':
-                prev_lines.append(tokens_in_line)
+                prev_lines.append(tokens_in_line[1:])
                 was_special_keyword_modification = True
             elif tokens_in_line[0] == 'ppp':
-                updated_lines.append(tokens_in_line)
+                updated_lines.append(tokens_in_line[1:])
                 was_special_keyword_modification = True
             elif tokens_in_line[:3] == ['new', 'file', 'mode']:
-                prev_lines.append(tokens_in_line)
+                prev_lines.append(['new', 'file'])
                 was_special_keyword_modification = True
             elif tokens_in_line[:3] == ['deleted', 'file', 'mode']:
-                updated_lines.append(tokens_in_line)
+                updated_lines.append(['deleted', 'file'])
                 was_special_keyword_modification = True
             elif tokens_in_line[:2] == ['rename', 'from']:
                 prev_lines.append(tokens_in_line)
@@ -49,29 +50,29 @@ class DiffPreprocessor:
                 updated_lines.append(tokens_in_line)
                 was_special_keyword_modification = True
             elif tokens_in_line[:2] == ['old', 'mode']:
-                prev_lines.append(tokens_in_line)
+                prev_lines.append(['old', 'mode'])
                 was_special_keyword_modification = True
             elif tokens_in_line[:2] == ['new', 'mode']:
-                updated_lines.append(tokens_in_line)
+                updated_lines.append(['new', 'mode'])
                 was_special_keyword_modification = True
             elif tokens_in_line[0] == '-':
                 prev_lines.append(tokens_in_line[1:])
+                contains_minus_or_plus = True
             elif tokens_in_line[0] == '+':
                 updated_lines.append(tokens_in_line[1:])
+                contains_minus_or_plus = True
             elif tokens_in_line[0] == 'index' or tokens_in_line[:2] == ['similarity', 'index']:
                 continue
-            else:
+            elif not contains_minus_or_plus:
                 prev_lines.append(tokens_in_line)
                 updated_lines.append(tokens_in_line)
 
-        # TODO: leave <nl> in the end?
-        prev = ' '.join(itertools.chain(*[line + ['<nl>'] for line in prev_lines]))
-        updated = ' '.join(itertools.chain(*[line + ['<nl>'] for line in updated_lines]))
-        if verbose:
-            if not was_special_keyword_modification:
-                print(f'No special keyword found for diff: {git_diff_output}')
-            if prev == updated:
-                print(f'Prev and updated are the same for diff: {git_diff_output}')
+        prev = ' '.join(itertools.chain(*[line + [' '] for line in prev_lines]))
+        updated = ' '.join(itertools.chain(*[line + [' '] for line in updated_lines]))
+        if not was_special_keyword_modification:
+            print(f'No special keyword found for diff: {git_diff_output}')
+        if prev == updated:
+            print(f'Prev and updated are the same for diff: {git_diff_output}')
         return prev + '\n', updated + '\n'
 
     @staticmethod
