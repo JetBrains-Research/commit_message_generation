@@ -127,7 +127,6 @@ class Decoder(nn.Module):
 
 if __name__ == "__main__":
     from transformers import RobertaTokenizer, RobertaModel, RobertaConfig
-    import numpy as np
     print("Just a small run with random examples\n")
 
     prev = ["mmm a / Wiki . txt <nl> Test auto push 9 . <nl> public void asyncHtml ( ) { <nl>",

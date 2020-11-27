@@ -1,4 +1,5 @@
 import pytorch_lightning as pl
+from lr_logger_callback import LearningRateLogger
 
 import hydra
 from hydra.utils import instantiate
@@ -19,7 +20,8 @@ def main(cfg: DictConfig) -> None:
 
     dm = CMGDataModule(**cfg.dataset)
 
-    encoder_decoder = EncoderDecoderModule(**cfg.model, tokenizer=dm._tokenizer)
+    encoder_decoder = EncoderDecoderModule(**cfg.model, tokenizer=dm._tokenizer, num_epochs=cfg.trainer.max_epochs,
+                                           num_batches=100)
 
     # freee codebert
     for param in encoder_decoder.encoder.parameters():
@@ -28,7 +30,9 @@ def main(cfg: DictConfig) -> None:
     trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
     trainer_logger.watch(encoder_decoder, log='gradients', log_freq=250)
 
-    trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger)
+    lr_logger = LearningRateLogger()
+
+    trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger, callbacks=[lr_logger])
     # -----------------------
     #       tune lr         -
     # -----------------------

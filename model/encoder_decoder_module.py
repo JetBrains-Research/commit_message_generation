@@ -3,7 +3,7 @@ import pytorch_lightning as pl
 import torch
 from torch import nn
 
-from transformers import RobertaConfig, RobertaModel, RobertaTokenizer, AdamW
+from transformers import RobertaConfig, RobertaModel, RobertaTokenizer, AdamW, get_linear_schedule_with_warmup
 
 import wandb
 
@@ -27,12 +27,19 @@ class EncoderDecoderModule(pl.LightningModule):
                  reduction: str,
                  model_name_or_path: str,
                  tokenizer: RobertaTokenizer,
+                 num_epochs: int,
+                 num_batches: int,
                  **kwargs):
         super().__init__()
 
         self._tokenizer = tokenizer
+        self._num_epochs = num_epochs
+        self._num_batches = num_batches
+
         self.save_hyperparameters()
+
         self.learning_rate = learning_rate
+
         self.pad_token_id = tokenizer.pad_token_id
         self.bos_token_id = tokenizer.bos_token_id
         self.eos_token_id = tokenizer.eos_token_id
@@ -121,7 +128,8 @@ class EncoderDecoderModule(pl.LightningModule):
 
         prev_y = torch.ones(batch[0]['input_ids'].shape[0], 1).fill_(self.bos_token_id).type_as(batch[0]['input_ids'])
         prev_y_mask = torch.ones_like(prev_y)
-        preds = torch.zeros((batch[0]['input_ids'].shape[0], batch[1]['input_ids'].shape[1])).type_as(batch[0]['input_ids'])
+        preds = torch.zeros((batch[0]['input_ids'].shape[0], batch[1]['input_ids'].shape[1])).type_as(
+            batch[0]['input_ids'])
         hidden = None
 
         for i in range(batch[1]['input_ids'].shape[1]):
@@ -140,8 +148,9 @@ class EncoderDecoderModule(pl.LightningModule):
             self._tokenizer.decode(example, skip_special_tokens=True, clean_up_tokenization_spaces=False).split(' ')
             for example in batch[1]['input_ids'].tolist()]
 
-        preds = [self._tokenizer.decode(example, skip_special_tokens=True, clean_up_tokenization_spaces=False).split(' ')
-                 for example in preds.tolist()]
+        preds = [
+            self._tokenizer.decode(example, skip_special_tokens=True, clean_up_tokenization_spaces=False).split(' ')
+            for example in preds.tolist()]
         bleu = self.bleu(preds, targets)
 
         # log a little table with examples
@@ -157,4 +166,8 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = AdamW(self.parameters(), lr=self.learning_rate)
-        return optimizer
+        scheduler = {'scheduler': get_linear_schedule_with_warmup(optimizer, 100, self._num_epochs * self._num_batches),
+                     'name': 'learning_rate',
+                     'interval': 'step',
+                     'frequency': 1}
+        return [optimizer], [scheduler]

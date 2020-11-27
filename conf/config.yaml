@@ -14,7 +14,7 @@ dataset:
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: same but with 3e-5 lr
+  name: test with linear scheduler
   project: commit_message_generation
 model:
   embedding_dim: 768
@@ -31,4 +31,5 @@ model:
 trainer:
   gpus: 1
   max_epochs: 4
-  val_check_interval: 0.5
+  limit_train_batches: 100
+  limit_val_batches: 100

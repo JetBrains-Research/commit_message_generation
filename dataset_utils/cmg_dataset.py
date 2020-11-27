@@ -59,7 +59,6 @@ class CMGDataset(Dataset):
                 prevs.append(prev_line)
                 upds.append(updated_line)
                 msgs.append(msg_line)
-
         return CMGDataset(src_encodings=codebert_tokenizer(prevs, upds, truncation=True,
                                                            padding=True, return_tensors='pt'),
                           trg_encodings=codebert_tokenizer(msgs, truncation=True,
