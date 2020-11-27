@@ -19,12 +19,13 @@ def main(cfg: DictConfig) -> None:
     print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
 
     dm = CMGDataModule(**cfg.dataset)
+    dm.setup()
 
     encoder_decoder = EncoderDecoderModule(**cfg.model, tokenizer=dm._tokenizer, num_epochs=cfg.trainer.max_epochs,
-                                           num_batches=100)
+                                           num_batches=len(dm.train_dataloader()) + 10)
 
-    # freee codebert
-    for param in encoder_decoder.encoder.parameters():
+    # freeze codebert encoder
+    for param in encoder_decoder.model.encoder.parameters():
         param.requires_grad = False
 
     trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True

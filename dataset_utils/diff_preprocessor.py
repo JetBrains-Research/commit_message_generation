@@ -67,8 +67,8 @@ class DiffPreprocessor:
                 prev_lines.append(tokens_in_line)
                 updated_lines.append(tokens_in_line)
 
-        prev = ' '.join(itertools.chain(*[line + [' '] for line in prev_lines]))
-        updated = ' '.join(itertools.chain(*[line + [' '] for line in updated_lines]))
+        prev = ' '.join(itertools.chain(*[line + ['\\n'] for line in prev_lines]))
+        updated = ' '.join(itertools.chain(*[line + ['\\n'] for line in updated_lines]))
         if not was_special_keyword_modification:
             print(f'No special keyword found for diff: {git_diff_output}')
         if prev == updated:

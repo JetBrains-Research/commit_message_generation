@@ -34,7 +34,8 @@ class BleuMetric(Metric):
 
     def update(self, preds, targets):
         for pred, trg in zip(preds, targets):
-            self.bleu += bleu_score(translate_corpus=[pred], reference_corpus=[[trg]], n_gram=self.n_gram, smooth=True)
+            self.bleu += bleu_score(translate_corpus=[pred.split(' ')], reference_corpus=[[trg.split(' ')]],
+                                    n_gram=self.n_gram, smooth=True)
             self.total += 1
 
     def compute(self):
