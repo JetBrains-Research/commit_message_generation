@@ -3,18 +3,18 @@ dataset:
   diff_max_len: 100
   msg_max_len: 30
   train_dataloader_conf:
-    batch_size: 6
+    batch_size: 16
     shuffle: true
     num_workers: 4
   val_dataloader_conf:
-    batch_size: 6
+    batch_size: 16
     num_workers: 4
   test_dataloader_conf:
-    batch_size: 6
+    batch_size: 16
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: full run change layernorm (again!) and add dropout but don't concat rnn output lr_1e-4 tf_65
+  name: test with linear scheduler
   project: commit_message_generation
 model:
   embedding_dim: 768
@@ -25,10 +25,11 @@ model:
   dropout: 0.2
   bridge: true
   teacher_forcing_ratio: 0.65
-  learning_rate: 1e-4
+  learning_rate: 3e-5
   reduction: mean
   model_name_or_path: microsoft/codebert-base
 trainer:
   gpus: 1
-  max_epochs: 6
-  val_check_interval: 0.5
+  max_epochs: 4
+  limit_train_batches: 100
+  limit_val_batches: 100

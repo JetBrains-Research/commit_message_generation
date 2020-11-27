@@ -1,11 +1,9 @@
-from argparse import ArgumentParser
-
 import pytorch_lightning as pl
 
 import torch
 from torch import nn
 
-from transformers import RobertaConfig, RobertaModel, RobertaTokenizer, AdamW
+from transformers import RobertaConfig, RobertaModel, RobertaTokenizer, AdamW, get_linear_schedule_with_warmup
 
 import wandb
 
@@ -29,12 +27,19 @@ class EncoderDecoderModule(pl.LightningModule):
                  reduction: str,
                  model_name_or_path: str,
                  tokenizer: RobertaTokenizer,
+                 num_epochs: int,
+                 num_batches: int,
                  **kwargs):
         super().__init__()
 
         self._tokenizer = tokenizer
+        self._num_epochs = num_epochs
+        self._num_batches = num_batches
+
         self.save_hyperparameters()
+
         self.learning_rate = learning_rate
+
         self.pad_token_id = tokenizer.pad_token_id
         self.bos_token_id = tokenizer.bos_token_id
         self.eos_token_id = tokenizer.eos_token_id
@@ -70,20 +75,26 @@ class EncoderDecoderModule(pl.LightningModule):
                             torch.logical_not(src['attention_mask']))
 
     def training_step(self, batch, batch_idx):
-        src, trg = batch
         hidden, output = self(batch)
-        train_loss = self.loss(output.view(-1, output.size(-1)), trg['input_ids'].view(-1))
+        train_loss = self.loss(output.view(-1, output.size(-1)), batch[1]['input_ids'].view(-1))
+
+        table = None
+
         self.logger.experiment.log({"train_loss_step": train_loss})
-        return train_loss
+        return {"loss": train_loss, "examples": table}
 
     def training_epoch_end(self, outputs):
-        train_loss_mean = torch.stack([x['loss'] for x in outputs]).mean().item()
-        self.logger.experiment.log({"train_loss_epoch": train_loss_mean})
+        train_loss_mean = torch.stack([x["loss"] for x in outputs]).mean().item()
+        tables = [x["examples"] for x in outputs if x["examples"] is not None]
+        try:
+            self.logger.experiment.log({"train_examples": tables[0],
+                                        "train_loss_epoch": train_loss_mean})
+        except IndexError:
+            self.logger.experiment.log({"train_loss_epoch": train_loss_mean})
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        src, trg = batch
         hidden, output = self(batch)
-        val_loss = self.loss(output.view(-1, output.size(-1)), trg['input_ids'].view(-1))
+        val_loss = self.loss(output.view(-1, output.size(-1)), batch[1]['input_ids'].view(-1))
         acc, bleu, table = self.greedy_decode(batch)
         return {"val_loss": val_loss, "val_accuracy": acc, "val_bleu": bleu, "examples": table}
 
@@ -109,42 +120,43 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def greedy_decode(self, batch):
         # TODO: implement beam search and add choice between beam search/greedy approaches
-        src, trg = batch
-        encoder_output, encoder_final, _ = self.encoder(input_ids=src['input_ids'],
-                                                        attention_mask=src['attention_mask'],
+        encoder_output, encoder_final, _ = self.encoder(input_ids=batch[0]['input_ids'],
+                                                        attention_mask=batch[0]['attention_mask'],
                                                         output_hidden_states=True)
 
         encoder_final = encoder_final.unsqueeze(0)
 
-        prev_y = torch.ones(src['input_ids'].shape[0], 1).fill_(self.bos_token_id).type_as(src['input_ids'])
+        prev_y = torch.ones(batch[0]['input_ids'].shape[0], 1).fill_(self.bos_token_id).type_as(batch[0]['input_ids'])
         prev_y_mask = torch.ones_like(prev_y)
-        preds = torch.zeros((src['input_ids'].shape[0], trg['input_ids'].shape[1])).type_as(src['input_ids'])
+        preds = torch.zeros((batch[0]['input_ids'].shape[0], batch[1]['input_ids'].shape[1])).type_as(
+            batch[0]['input_ids'])
         hidden = None
 
-        for i in range(trg['input_ids'].shape[1]):
+        for i in range(batch[1]['input_ids'].shape[1]):
             hidden, output = self.decoder(prev_y,
                                           prev_y_mask,
                                           encoder_output, encoder_final,
-                                          torch.logical_not(src['attention_mask']), hidden=hidden)
+                                          torch.logical_not(batch[0]['attention_mask']), hidden=hidden)
             _, next_word = torch.max(output, dim=2)
             preds[:, i] = torch.flatten(next_word)
             prev_y = next_word
         # compute accuracy with tensors
-        acc = self.accuracy(preds, trg['input_ids'])
+        acc = self.accuracy(preds, batch[1]['input_ids'])
 
         # compute BLEU with decoded strings
         targets = [
             self._tokenizer.decode(example, skip_special_tokens=True, clean_up_tokenization_spaces=False).split(' ')
-            for example in trg['input_ids'].tolist()]
+            for example in batch[1]['input_ids'].tolist()]
 
-        preds = [self._tokenizer.decode(example, skip_special_tokens=True, clean_up_tokenization_spaces=False).split(' ')
-                 for example in preds.tolist()]
+        preds = [
+            self._tokenizer.decode(example, skip_special_tokens=True, clean_up_tokenization_spaces=False).split(' ')
+            for example in preds.tolist()]
         bleu = self.bleu(preds, targets)
 
         # log a little table with examples
         table = wandb.Table(columns=["Source", "Predicted", "Target"])
         srcs = [self._tokenizer.decode(example, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-                for example in src['input_ids'].tolist()]
+                for example in batch[0]['input_ids'].tolist()[:5]]
         for i in range(5):
             try:
                 table.add_data(srcs[i], ' '.join(preds[i]), ' '.join(targets[i]))
@@ -153,4 +165,9 @@ class EncoderDecoderModule(pl.LightningModule):
         return acc, bleu, table
 
     def configure_optimizers(self):
-        return AdamW(self.parameters(), lr=self.learning_rate)
+        optimizer = AdamW(self.parameters(), lr=self.learning_rate)
+        scheduler = {'scheduler': get_linear_schedule_with_warmup(optimizer, 100, self._num_epochs * self._num_batches),
+                     'name': 'learning_rate',
+                     'interval': 'step',
+                     'frequency': 1}
+        return [optimizer], [scheduler]
