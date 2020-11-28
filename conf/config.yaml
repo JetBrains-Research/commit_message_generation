@@ -3,18 +3,18 @@ dataset:
   diff_max_len: 100
   msg_max_len: 30
   train_dataloader_conf:
-    batch_size: 16
+    batch_size: 32
     shuffle: true
     num_workers: 4
   val_dataloader_conf:
-    batch_size: 16
+    batch_size: 32
     num_workers: 4
   test_dataloader_conf:
-    batch_size: 16
+    batch_size: 32
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: train longer encoderdecoder architecture
+  name: beam search decode encoderdecoder architecture
   project: commit_message_generation
 model:
   learning_rate: 1e-4
@@ -22,6 +22,6 @@ model:
   model_name_or_path: microsoft/codebert-base
 trainer:
   gpus: 1
-  max_epochs: 2
-  limit_val_batches: 10
-  limit_test_batches: 10
+  max_epochs: 3
+  limit_val_batches: 100
+  val_check_interval: 0.5

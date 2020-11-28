@@ -2,6 +2,7 @@ import pytorch_lightning as pl
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 from transformers import EncoderDecoderModel, RobertaTokenizer, AdamW, get_linear_schedule_with_warmup
 
@@ -50,12 +51,13 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def generate(self, batch):
         return self.model.generate(input_ids=batch[0]['input_ids'],
-                                   max_length=batch[1]['input_ids'].shape[1],
-                                   min_length=batch[1]['input_ids'].shape[1],
+                                   attention_mask=batch[0]['attention_mask'],
+                                   max_length=30,
+                                   min_length=5,
                                    decoder_start_token_id=self.bos_token_id,
-                                   do_sample=True,
-                                   top_p=0.92,
-                                   top_k=0,
+                                   num_beams=4,
+                                   early_stopping=True,
+                                   no_repeat_ngram_size=3,
                                    pad_token_id=self.pad_token_id,
                                    bos_token_id=self.bos_token_id,
                                    eos_token_id=self.eos_token_id)
@@ -105,7 +107,6 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         gen_sequence = self.generate(batch)
-
         acc, bleu, table = self.compute_metrics(batch[0]['input_ids'], gen_sequence, batch[1]['input_ids'])
         return {"test_accuracy": acc, "test_bleu": bleu, "examples": table}
 
@@ -117,12 +118,20 @@ class EncoderDecoderModule(pl.LightningModule):
                                     "test_bleu": test_bleu_mean})
 
     def compute_metrics(self, source, generated, target, n_examples=10):
+        if target.shape[1] > generated.shape[1]:
+            # pad generated tokens to match sequence length dimension with target
+            generated = F.pad(input=generated, pad=(0, target.shape[1] - generated.shape[1], 0, 0), mode='constant',
+                              value=self.pad_token_id)
+        elif generated.shape[1] > target.shape[1]:
+            # pad target tokens to match sequence length dimension with generated
+            target = F.pad(input=target, pad=(0, generated.shape[1] - target.shape[1], 0, 0), mode='constant',
+                           value=self.pad_token_id)
         # compute accuracy with tensors
         acc = self.accuracy(generated, target)
 
         # compute BLEU with decoded strings
-        targets = self._tokenizer.batch_decode(target, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        preds = self._tokenizer.batch_decode(generated, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        targets = self._tokenizer.batch_decode(target, skip_special_tokens=False, clean_up_tokenization_spaces=False)
+        preds = self._tokenizer.batch_decode(generated, skip_special_tokens=False, clean_up_tokenization_spaces=False)
         bleu = self.bleu(preds, targets)
 
         # log a little table with examples
@@ -137,7 +146,8 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = AdamW(self.parameters(), lr=self.learning_rate)
-        scheduler = {'scheduler': get_linear_schedule_with_warmup(optimizer, self._num_batches//2, self._num_epochs * self._num_batches),
+        scheduler = {'scheduler': get_linear_schedule_with_warmup(optimizer, self._num_batches // 2,
+                                                                  self._num_epochs * self._num_batches),
                      'name': 'learning_rate',
                      'interval': 'step',
                      'frequency': 1}

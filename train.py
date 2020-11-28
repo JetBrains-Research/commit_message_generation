@@ -22,7 +22,7 @@ def main(cfg: DictConfig) -> None:
     dm.setup()
 
     encoder_decoder = EncoderDecoderModule(**cfg.model, tokenizer=dm._tokenizer, num_epochs=cfg.trainer.max_epochs,
-                                           num_batches=len(dm.train_dataloader()) + 10)
+                                           num_batches=len(dm.train_dataloader()) + 2*100)
 
     # freeze codebert encoder
     for param in encoder_decoder.model.encoder.parameters():
