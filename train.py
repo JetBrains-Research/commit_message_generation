@@ -21,8 +21,11 @@ def main(cfg: DictConfig) -> None:
     dm = CMGDataModule(**cfg.dataset)
     dm.setup()
 
-    encoder_decoder = EncoderDecoderModule(**cfg.model, tokenizer=dm._tokenizer, num_epochs=cfg.trainer.max_epochs,
-                                           num_batches=len(dm.train_dataloader()) + 2*100)
+    encoder_decoder = EncoderDecoderModule(**cfg.model,
+                                           src_tokenizer=dm._src_tokenizer,
+                                           trg_tokenizer=dm._trg_tokenizer,
+                                           num_epochs=cfg.trainer.max_epochs,
+                                           num_batches=2 + len(dm.train_dataloader()) + len(dm.val_dataloader()))
 
     # freeze codebert encoder
     for param in encoder_decoder.model.encoder.parameters():
@@ -30,7 +33,6 @@ def main(cfg: DictConfig) -> None:
 
     trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
     trainer_logger.watch(encoder_decoder, log='gradients', log_freq=250)
-
     lr_logger = LearningRateLogger()
 
     trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger, callbacks=[lr_logger])

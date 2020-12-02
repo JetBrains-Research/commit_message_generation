@@ -2,6 +2,8 @@ dataset:
   dataset_root: raw_data/CleanedJiang
   diff_max_len: 100
   msg_max_len: 30
+  encoder_name_or_path: microsoft/codebert-base
+  decoder_name_or_path: distilgpt2
   train_dataloader_conf:
     batch_size: 32
     shuffle: true
@@ -14,14 +16,13 @@ dataset:
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: beam search decode encoderdecoder architecture
+  name: train longer codebert2distilgpt2
   project: commit_message_generation
 model:
-  learning_rate: 1e-4
-  reduction: mean
-  model_name_or_path: microsoft/codebert-base
+  learning_rate: 3e-5
+  encoder_name_or_path: microsoft/codebert-base
+  decoder_name_or_path: distilgpt2
 trainer:
   gpus: 1
-  max_epochs: 3
-  limit_val_batches: 100
-  val_check_interval: 0.5
+  max_epochs: 30
+  num_sanity_val_steps: 2

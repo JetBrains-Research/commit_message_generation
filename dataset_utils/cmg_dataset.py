@@ -2,7 +2,7 @@ import os
 import sys
 
 from torch.utils.data import Dataset, Subset
-from transformers import RobertaTokenizer
+from transformers import RobertaTokenizer, GPT2Tokenizer
 
 
 def create_filter_predicate_on_code_and_msg(max_length_code, max_length_msg):
@@ -36,7 +36,8 @@ class CMGDataset(Dataset):
         return len(self.trg_encodings['input_ids'])
 
     @staticmethod
-    def load_data(codebert_tokenizer: RobertaTokenizer, path: str, diff_max_len, msg_max_len, verbose=False):
+    def load_data(src_tokenizer: RobertaTokenizer, trg_tokenizer: GPT2Tokenizer, path: str, diff_max_len, msg_max_len,
+                  verbose=False):
         filter_pred = create_filter_predicate_on_code_and_msg(diff_max_len, msg_max_len)
         prevs = []
         upds = []
@@ -59,11 +60,11 @@ class CMGDataset(Dataset):
                 prevs.append(prev_line)
                 upds.append(updated_line)
                 msgs.append(msg_line)
-        return CMGDataset(src_encodings=codebert_tokenizer(prevs, upds, truncation=True,
-                                                           padding=True, return_tensors='pt'),
-                          trg_encodings=codebert_tokenizer(msgs, truncation=True,
-                                                           padding=True,
-                                                           return_tensors='pt'))
+        return CMGDataset(src_encodings=src_tokenizer(prevs, upds, truncation=True,
+                                                      padding=True, return_tensors='pt'),
+                          trg_encodings=trg_tokenizer(msgs, truncation=True,
+                                                      padding=True,
+                                                      return_tensors='pt'))
 
     @staticmethod
     def take_first_n_from_dataset(dataset, n: int):
@@ -73,11 +74,11 @@ class CMGDataset(Dataset):
 if __name__ == "__main__":
     tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")
 
-    train_dataset = CMGDataset.load_data(tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'train'),
+    train_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'train'),
                                          diff_max_len=100, msg_max_len=30, verbose=True)
-    val_dataset = CMGDataset.load_data(tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'val'),
+    val_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'val'),
                                        diff_max_len=100, msg_max_len=30, verbose=True)
-    test_dataset = CMGDataset.load_data(tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'test'),
+    test_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'test'),
                                         diff_max_len=100, msg_max_len=30, verbose=True)
 
     print("Train:", len(train_dataset))

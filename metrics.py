@@ -16,10 +16,10 @@ class AccuracyMetric(Metric):
         assert preds.shape == targets.shape
 
         # correct --- # of equal tokens in pred and target without <s> </s> <pad>
-        self.correct += torch.sum(torch.logical_and(targets > self.pad_token_id, targets == preds))
+        self.correct += torch.sum(torch.logical_and(targets != self.pad_token_id, targets == preds))
 
         # total --- # of tokens in target without <s> </s> <pad>
-        self.total += torch.sum(targets > self.pad_token_id)
+        self.total += torch.sum(targets != self.pad_token_id)
 
     def compute(self):
         return self.correct.float() / self.total
