@@ -32,11 +32,10 @@ class EncoderDecoderModule(pl.LightningModule):
 
         self.learning_rate = learning_rate
 
-        self.pad_token_id = src_tokenizer.pad_token_id
-        self.bos_token_id = src_tokenizer.bos_token_id
-        self.eos_token_id = src_tokenizer.eos_token_id
-
         self.model = EncoderDecoderModel.from_encoder_decoder_pretrained(encoder_name_or_path, decoder_name_or_path)
+
+        # cache is currently not supported by EncoderDecoder framework
+        self.model.decoder.config.use_cache = False
 
         # do not tie output embeddings to input embeddings
         self.model.config.tie_word_embeddings = False
@@ -46,34 +45,42 @@ class EncoderDecoderModule(pl.LightningModule):
         self.model.config.bos_token_id = self._trg_tokenizer.bos_token_id
         self.model.config.eos_token_id = self._trg_tokenizer.eos_token_id
         self.model.config.pad_token_id = self._trg_tokenizer.pad_token_id
-        self.model.config.max_length = 50
-        self.model.config.min_length = 5
+        self.model.config.max_length = 30
+        self.model.config.min_length = 2
         self.model.config.no_repeat_ngram_size = 3
-        self.model.early_stopping = True
-        self.model.length_penalty = 1.5
-        self.model.num_beams = 4
+        self.model.config.early_stopping = True
+        self.model.config.num_beams = 4
 
-        print("\n==CONFIG==\n")
+        print("\n====MODEL CONFIG====\n")
         print(self.model.config)
         print()
 
-        self.accuracy = AccuracyMetric(self.pad_token_id)
+        self.accuracy = AccuracyMetric(self._trg_tokenizer.pad_token_id)
         self.bleu = BleuMetric()
 
-    def forward(self, batch):
+        # to make logs for different batch sizes prettier
+        self.examples_count = 0
 
+    def on_train_epoch_start(self) -> None:
+        # freeze codebert after several epochs
+        if self.current_epoch == 2:
+            for param in self.model.encoder.parameters():
+                param.requires_grad = False
+
+    def forward(self, batch):
+        self.examples_count += len(batch[0])
         # transformers assume pad indices to be -100
         # gpt2 has no pad tokens so use attention mask
-        return self.model(input_ids=batch[0]['input_ids'],
-                          attention_mask=batch[0]['attention_mask'],
-                          decoder_input_ids=batch[1]['input_ids'],
-                          decoder_attention_mask=batch[1]['attention_mask'],
-                          labels=batch[1]['input_ids'].where(batch[1]['attention_mask'].type(torch.ByteTensor).to(self.device),
-                                                             torch.tensor(-100, device=self.device)))
+        return self.model(input_ids=batch[0],
+                          attention_mask=batch[1],
+                          decoder_input_ids=batch[2],
+                          decoder_attention_mask=batch[3],
+                          labels=batch[2].where(batch[3].type(torch.ByteTensor).to(self.device),
+                                                torch.tensor(-100, device=self.device)))
 
     def generate(self, batch):
-        return self.model.generate(input_ids=batch[0]['input_ids'],
-                                   attention_mask=batch[0]['attention_mask'])
+        return self.model.generate(input_ids=batch[0],
+                                   attention_mask=batch[1])
 
     def training_step(self, batch, batch_idx):
         loss, logits = self(batch)[:2]
@@ -82,11 +89,11 @@ class EncoderDecoderModule(pl.LightningModule):
         if self.global_step % 1000 == 0:
             with torch.no_grad():
                 gen_sequence = self.generate(batch)
-                _, _, table = self.compute_metrics(batch[0]['input_ids'], gen_sequence, batch[1]['input_ids'])
+                _, _, table = self.compute_metrics(batch[0], gen_sequence, batch[2])
         else:
             table = None
 
-        self.logger.experiment.log({"train_loss_step": loss})
+        self.logger.experiment.log({"train_loss_step": loss}, step=self.examples_count)
         return {"loss": loss, "examples": table}
 
     def training_epoch_end(self, outputs):
@@ -94,16 +101,16 @@ class EncoderDecoderModule(pl.LightningModule):
         tables = [x["examples"] for x in outputs if x["examples"] is not None]
         try:
             self.logger.experiment.log({"train_examples": tables[0],
-                                        "train_loss_epoch": train_loss_mean})
+                                        "train_loss_epoch": train_loss_mean}, step=self.examples_count)
         except IndexError:
-            self.logger.experiment.log({"train_loss_epoch": train_loss_mean})
+            self.logger.experiment.log({"train_loss_epoch": train_loss_mean}, step=self.examples_count)
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         loss, logits = self(batch)[:2]
 
         gen_sequence = self.generate(batch)
 
-        acc, bleu, table = self.compute_metrics(batch[0]['input_ids'], gen_sequence, batch[1]['input_ids'])
+        acc, bleu, table = self.compute_metrics(batch[0], gen_sequence, batch[2])
 
         return {"val_loss": loss, "val_accuracy": acc, "val_bleu": bleu, "examples": table}
 
@@ -114,11 +121,11 @@ class EncoderDecoderModule(pl.LightningModule):
         self.logger.experiment.log({"val_examples": outputs[0]["examples"],
                                     "val_accuracy": val_acc_mean,
                                     "val_bleu": val_bleu_mean,
-                                    "val_loss": val_loss_mean})
+                                    "val_loss": val_loss_mean}, step=self.examples_count)
 
     def test_step(self, batch, batch_idx):
         gen_sequence = self.generate(batch)
-        acc, bleu, table = self.compute_metrics(batch[0]['input_ids'], gen_sequence, batch[1]['input_ids'])
+        acc, bleu, table = self.compute_metrics(batch[0], gen_sequence, batch[2])
         return {"test_accuracy": acc, "test_bleu": bleu, "examples": table}
 
     def test_epoch_end(self, outputs):
@@ -126,23 +133,24 @@ class EncoderDecoderModule(pl.LightningModule):
         test_bleu_mean = torch.stack([x["test_bleu"] for x in outputs]).mean()
         self.logger.experiment.log({"test_examples": outputs[0]["examples"],
                                     "test_accuracy": test_acc_mean,
-                                    "test_bleu": test_bleu_mean})
+                                    "test_bleu": test_bleu_mean}, step=self.examples_count)
 
     def compute_metrics(self, source, generated, target, n_examples=10):
         if target.shape[1] > generated.shape[1]:
             # pad generated tokens to match sequence length dimension with target
             generated = F.pad(input=generated, pad=(0, target.shape[1] - generated.shape[1], 0, 0), mode='constant',
-                              value=self.pad_token_id)
+                              value=self._trg_tokenizer.pad_token_id)
         elif generated.shape[1] > target.shape[1]:
             # pad target tokens to match sequence length dimension with generated
             target = F.pad(input=target, pad=(0, generated.shape[1] - target.shape[1], 0, 0), mode='constant',
-                           value=self.pad_token_id)
+                           value=self._trg_tokenizer.pad_token_id)
         # compute accuracy with tensors
         acc = self.accuracy(generated, target)
 
         # compute BLEU with decoded strings
         targets = self._trg_tokenizer.batch_decode(target, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        preds = self._trg_tokenizer.batch_decode(generated, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        preds = self._trg_tokenizer.batch_decode(generated, skip_special_tokens=True,
+                                                 clean_up_tokenization_spaces=False)
         bleu = self.bleu(preds, targets)
 
         # log a little table with examples
@@ -157,7 +165,7 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = AdamW(self.parameters(), lr=self.learning_rate)
-        scheduler = {'scheduler': get_linear_schedule_with_warmup(optimizer, self._num_batches * 8,
+        scheduler = {'scheduler': get_linear_schedule_with_warmup(optimizer, self._num_batches * 5,
                                                                   self._num_epochs * self._num_batches),
                      'interval': 'step',
                      'frequency': 1}

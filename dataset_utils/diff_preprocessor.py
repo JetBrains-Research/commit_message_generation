@@ -29,7 +29,6 @@ class DiffPreprocessor:
 
         prev_lines, updated_lines = [], []
         was_special_keyword_modification = False
-        contains_minus_or_plus = False
         for tokens_in_line in tokens_per_line:
             if tokens_in_line[0] == 'mmm':
                 prev_lines.append(tokens_in_line[1:])
@@ -38,7 +37,7 @@ class DiffPreprocessor:
                 updated_lines.append(tokens_in_line[1:])
                 was_special_keyword_modification = True
             elif tokens_in_line[:3] == ['new', 'file', 'mode']:
-                prev_lines.append(['new', 'file'])
+                updated_lines.append(['new', 'file'])
                 was_special_keyword_modification = True
             elif tokens_in_line[:3] == ['deleted', 'file', 'mode']:
                 updated_lines.append(['deleted', 'file'])
@@ -57,13 +56,11 @@ class DiffPreprocessor:
                 was_special_keyword_modification = True
             elif tokens_in_line[0] == '-':
                 prev_lines.append(tokens_in_line[1:])
-                contains_minus_or_plus = True
             elif tokens_in_line[0] == '+':
                 updated_lines.append(tokens_in_line[1:])
-                contains_minus_or_plus = True
             elif tokens_in_line[0] == 'index' or tokens_in_line[:2] == ['similarity', 'index']:
                 continue
-            elif not contains_minus_or_plus:
+            else:
                 prev_lines.append(tokens_in_line)
                 updated_lines.append(tokens_in_line)
 

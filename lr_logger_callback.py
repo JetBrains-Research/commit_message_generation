@@ -1,9 +1,11 @@
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from pytorch_lightning.callbacks.base import Callback
 
 
 class LearningRateLogger(Callback):
+    """A little wrapper of pytorch_lightning.callbacks.LearningRateMonitor
+    to use trainer.logger.experiment.log instead of trainer.logger.log"""
     def __init__(self, logging_interval: Optional[str] = None):
         self.logging_interval = logging_interval
         self.name = 'learning_rate'
