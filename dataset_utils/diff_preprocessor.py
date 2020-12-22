@@ -37,26 +37,32 @@ class DiffPreprocessor:
                 updated_lines.append(tokens_in_line[1:])
                 was_special_keyword_modification = True
             elif tokens_in_line[:3] == ['new', 'file', 'mode']:
+                prev_lines.append(["<empty>", "<empty>"])
                 updated_lines.append(['new', 'file'])
                 was_special_keyword_modification = True
             elif tokens_in_line[:3] == ['deleted', 'file', 'mode']:
+                prev_lines.append(["<empty>", "<empty>"])
                 updated_lines.append(['deleted', 'file'])
                 was_special_keyword_modification = True
             elif tokens_in_line[:2] == ['rename', 'from']:
                 prev_lines.append(tokens_in_line)
+                updated_lines.append(["<empty>" for token in tokens_in_line])
                 was_special_keyword_modification = True
             elif tokens_in_line[:2] == ['rename', 'to']:
+                prev_lines.append(["<empty>" for token in tokens_in_line])
                 updated_lines.append(tokens_in_line)
                 was_special_keyword_modification = True
             elif tokens_in_line[:2] == ['old', 'mode']:
-                prev_lines.append(['old', 'mode'])
+                prev_lines.append(tokens_in_line)
                 was_special_keyword_modification = True
             elif tokens_in_line[:2] == ['new', 'mode']:
-                updated_lines.append(['new', 'mode'])
+                updated_lines.append(tokens_in_line)
                 was_special_keyword_modification = True
             elif tokens_in_line[0] == '-':
                 prev_lines.append(tokens_in_line[1:])
+                updated_lines.append(["<empty>" for token in tokens_in_line[1:]])
             elif tokens_in_line[0] == '+':
+                prev_lines.append(["<empty>" for token in tokens_in_line[1:]])
                 updated_lines.append(tokens_in_line[1:])
             elif tokens_in_line[0] == 'index' or tokens_in_line[:2] == ['similarity', 'index']:
                 continue

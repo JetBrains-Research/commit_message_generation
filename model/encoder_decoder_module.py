@@ -3,7 +3,8 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 
-from transformers import EncoderDecoderModel, RobertaTokenizer, GPT2Tokenizer, AdamW, get_linear_schedule_with_warmup
+from transformers import EncoderDecoderModel, RobertaModel, GPT2LMHeadModel, GPT2Config,\
+    RobertaTokenizer, GPT2Tokenizer, AdamW, get_linear_schedule_with_warmup
 
 import wandb
 
@@ -16,6 +17,7 @@ class EncoderDecoderModule(pl.LightningModule):
                  learning_rate: float,
                  encoder_name_or_path: str,
                  decoder_name_or_path: str,
+                 unfreeze_after: int,
                  src_tokenizer: RobertaTokenizer,
                  trg_tokenizer: GPT2Tokenizer,
                  num_epochs: int,
@@ -23,6 +25,7 @@ class EncoderDecoderModule(pl.LightningModule):
                  **kwargs):
         super().__init__()
 
+        self._unfreeze_after = unfreeze_after
         self._src_tokenizer = src_tokenizer
         self._trg_tokenizer = trg_tokenizer
         self._num_epochs = num_epochs
@@ -32,7 +35,21 @@ class EncoderDecoderModule(pl.LightningModule):
 
         self.learning_rate = learning_rate
 
-        self.model = EncoderDecoderModel.from_encoder_decoder_pretrained(encoder_name_or_path, decoder_name_or_path)
+        # use RoBERTa with resized embeddings as encoder
+        encoder = RobertaModel.from_pretrained(encoder_name_or_path)
+        # resize embeddings to match special token
+        encoder.resize_token_embeddings(len(self._src_tokenizer))
+        encoder.config.type_vocab_size = 2
+        encoder.embeddings.token_type_embeddings = torch.nn.Embedding.from_pretrained(
+                                         torch.cat((encoder.embeddings.token_type_embeddings.weight,
+                                                    encoder.embeddings.token_type_embeddings.weight), dim=0))
+        # use GPT-2 as decoder
+        config = GPT2Config.from_pretrained(decoder_name_or_path)
+        config.is_decoder = True
+        config.add_cross_attention = True
+        gpt = GPT2LMHeadModel.from_pretrained(decoder_name_or_path, config=config)
+
+        self.model = EncoderDecoderModel(encoder=encoder, decoder=gpt)
 
         # cache is currently not supported by EncoderDecoder framework
         self.model.decoder.config.use_cache = False
@@ -47,7 +64,7 @@ class EncoderDecoderModule(pl.LightningModule):
         self.model.config.pad_token_id = self._trg_tokenizer.pad_token_id
         self.model.config.max_length = 30
         self.model.config.min_length = 2
-        self.model.config.no_repeat_ngram_size = 3
+        self.model.config.no_repeat_ngram_size = 4
         self.model.config.early_stopping = True
         self.model.config.num_beams = 4
 
@@ -63,19 +80,24 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def on_train_epoch_start(self) -> None:
         # freeze codebert after several epochs
-        if self.current_epoch == 2:
+        if self.current_epoch == self._unfreeze_after:
             for param in self.model.encoder.parameters():
                 param.requires_grad = False
 
     def forward(self, batch):
         self.examples_count += len(batch[0])
+
+        encoder_outputs = self.model.encoder(
+            input_ids=batch[0],
+            attention_mask=batch[1],
+            token_type_ids=batch[2])
+
         # transformers assume pad indices to be -100
         # gpt2 has no pad tokens so use attention mask
-        return self.model(input_ids=batch[0],
-                          attention_mask=batch[1],
-                          decoder_input_ids=batch[2],
-                          decoder_attention_mask=batch[3],
-                          labels=batch[2].where(batch[3].type(torch.ByteTensor).to(self.device),
+        return self.model(encoder_outputs=encoder_outputs,
+                          decoder_input_ids=batch[3],
+                          decoder_attention_mask=batch[4],
+                          labels=batch[3].where(batch[4].type(torch.ByteTensor).to(self.device),
                                                 torch.tensor(-100, device=self.device)))
 
     def generate(self, batch):
@@ -89,7 +111,7 @@ class EncoderDecoderModule(pl.LightningModule):
         if self.global_step % 1000 == 0:
             with torch.no_grad():
                 gen_sequence = self.generate(batch)
-                _, _, table = self.compute_metrics(batch[0], gen_sequence, batch[2])
+                _, _, table = self.compute_metrics(batch[0], gen_sequence, batch[3])
         else:
             table = None
 
@@ -110,7 +132,7 @@ class EncoderDecoderModule(pl.LightningModule):
 
         gen_sequence = self.generate(batch)
 
-        acc, bleu, table = self.compute_metrics(batch[0], gen_sequence, batch[2])
+        acc, bleu, table = self.compute_metrics(batch[0], gen_sequence, batch[3])
 
         return {"val_loss": loss, "val_accuracy": acc, "val_bleu": bleu, "examples": table}
 
@@ -125,7 +147,7 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         gen_sequence = self.generate(batch)
-        acc, bleu, table = self.compute_metrics(batch[0], gen_sequence, batch[2])
+        acc, bleu, table = self.compute_metrics(batch[0], gen_sequence, batch[3])
         return {"test_accuracy": acc, "test_bleu": bleu, "examples": table}
 
     def test_epoch_end(self, outputs):

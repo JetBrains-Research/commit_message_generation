@@ -24,21 +24,19 @@ def create_filter_predicate_on_code_and_msg(max_length_code, max_length_msg):
 class CMGDataset(Dataset):
     """Defines a dataset_utils for commit message generation task as torch.utils.raw_data.Dataset"""
 
-    def __init__(self, src_encodings, trg_encodings):
-        self.src_encodings = src_encodings
-        self.trg_encodings = trg_encodings
+    def __init__(self, src_input_ids, src_attention_mask, src_token_type_ids, trg_input_ids, trg_attention_mask):
+        self.src_input_ids = src_input_ids
+        self.src_attention_mask = src_attention_mask
+        self.src_token_type_ids = src_token_type_ids
+        self.trg_input_ids = trg_input_ids
+        self.trg_attention_mask = trg_attention_mask
 
     def __getitem__(self, idx):
-        src_input_ids = self.src_encodings['input_ids'][idx]
-        src_attention_mask = self.src_encodings['attention_mask'][idx]
-
-        trg_input_ids = self.trg_encodings['input_ids'][idx]
-        trg_attention_mask = self.trg_encodings['attention_mask'][idx]
-
-        return src_input_ids, src_attention_mask, trg_input_ids, trg_attention_mask
+        return self.src_input_ids[idx], self.src_attention_mask[idx], self.src_token_type_ids[idx],\
+               self.trg_input_ids[idx], self.trg_attention_mask[idx]
 
     def __len__(self):
-        return len(self.trg_encodings['input_ids'])
+        return len(self.trg_input_ids)
 
     @staticmethod
     def load_data(src_tokenizer: RobertaTokenizer, trg_tokenizer: GPT2Tokenizer, path: str, diff_max_len, msg_max_len,
@@ -47,6 +45,7 @@ class CMGDataset(Dataset):
         prevs = []
         upds = []
         msgs = []
+
         with open(os.path.join(path, 'diff.txt'), mode='r', encoding='utf-8') as diff, \
                 open(os.path.join(path, 'msg.txt'), mode='r', encoding='utf-8') as msg, \
                 open(os.path.join(path, 'prev.txt'), mode='r', encoding='utf-8') as prev, \
@@ -65,11 +64,22 @@ class CMGDataset(Dataset):
                 prevs.append(prev_line)
                 upds.append(updated_line)
                 msgs.append(msg_line)
-        return CMGDataset(src_encodings=src_tokenizer(prevs, upds, truncation=True,
-                                                      padding=True, return_tensors='pt'),
-                          trg_encodings=trg_tokenizer(msgs, truncation=True,
-                                                      padding=True,
-                                                      return_tensors='pt'))
+        prev_enc = src_tokenizer(prevs, truncation=True, padding=True, return_tensors='pt')
+        prev_token_type_ids = torch.zeros_like(prev_enc.input_ids)
+        upd_enc = src_tokenizer(upds, truncation=True, padding=True, return_tensors='pt')
+        upd_enc.input_ids[:, 0] = torch.ones_like(upd_enc.input_ids[:, 0]) * src_tokenizer.eos_token_id
+        upd_enc_token_type_ids = torch.ones_like(upd_enc.input_ids)
+
+        src_input_ids = torch.cat((prev_enc.input_ids, upd_enc.input_ids), dim=1)
+        src_attention_mask = torch.cat((prev_enc.attention_mask, upd_enc.attention_mask), dim=1)
+        src_token_type_ids = torch.cat((prev_token_type_ids, upd_enc_token_type_ids), dim=1)
+
+        msg_enc = trg_tokenizer(msgs, truncation=True, padding=True, return_tensors='pt')
+        return CMGDataset(src_input_ids=src_input_ids,
+                          src_attention_mask=src_attention_mask,
+                          src_token_type_ids=src_token_type_ids,
+                          trg_input_ids=msg_enc.input_ids,
+                          trg_attention_mask=msg_enc.attention_mask)
 
 
 if __name__ == "__main__":
@@ -87,18 +97,15 @@ if __name__ == "__main__":
     print("Test:", len(test_dataset))
 
     print("===Example===")
-    src_input_ids, src_attention_mask, trg_input_ids, trg_attention_mask = train_dataset[0]
+    src_input_ids, src_attention_mask, src_token_type_ids, trg_input_ids, trg_attention_mask = train_dataset[0]
     print("Source input ids")
     print(src_input_ids)
     print("Source attention mask")
     print(src_attention_mask)
+    print("Source token type ids")
+    print(src_token_type_ids)
     print("Target input ids")
     print(trg_input_ids)
     print("Target attention mask")
     print(trg_attention_mask)
     print()
-    print(torch.where(src_input_ids == 0)[0][1])
-    src_input_ids, src_attention_mask, trg_input_ids, trg_attention_mask = train_dataset[10]
-    print(torch.where(src_input_ids == 0)[0][1])
-    src_input_ids, src_attention_mask, trg_input_ids, trg_attention_mask = train_dataset[1005]
-    print(torch.where(src_input_ids == 0)[0][1])
