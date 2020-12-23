@@ -17,7 +17,7 @@ class EncoderDecoderModule(pl.LightningModule):
                  learning_rate: float,
                  encoder_name_or_path: str,
                  decoder_name_or_path: str,
-                 unfreeze_after: int,
+                 freeze_after: int,
                  src_tokenizer: RobertaTokenizer,
                  trg_tokenizer: GPT2Tokenizer,
                  num_epochs: int,
@@ -25,7 +25,7 @@ class EncoderDecoderModule(pl.LightningModule):
                  **kwargs):
         super().__init__()
 
-        self._unfreeze_after = unfreeze_after
+        self._freeze_after = freeze_after
         self._src_tokenizer = src_tokenizer
         self._trg_tokenizer = trg_tokenizer
         self._num_epochs = num_epochs
@@ -35,10 +35,11 @@ class EncoderDecoderModule(pl.LightningModule):
 
         self.learning_rate = learning_rate
 
-        # use RoBERTa with resized embeddings as encoder
+        # use RoBERTa as encoder
         encoder = RobertaModel.from_pretrained(encoder_name_or_path)
-        # resize embeddings to match special token
+        # resize embeddings to match vocab with new special token
         encoder.resize_token_embeddings(len(self._src_tokenizer))
+        # change token_type_embeddings dimension to 2
         encoder.config.type_vocab_size = 2
         encoder.embeddings.token_type_embeddings = torch.nn.Embedding.from_pretrained(
                                          torch.cat((encoder.embeddings.token_type_embeddings.weight,
@@ -80,7 +81,7 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def on_train_epoch_start(self) -> None:
         # freeze codebert after several epochs
-        if self.current_epoch == self._unfreeze_after:
+        if self.current_epoch == self._freeze_after:
             for param in self.model.encoder.parameters():
                 param.requires_grad = False
 

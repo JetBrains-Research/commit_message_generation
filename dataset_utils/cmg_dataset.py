@@ -64,16 +64,18 @@ class CMGDataset(Dataset):
                 prevs.append(prev_line)
                 upds.append(updated_line)
                 msgs.append(msg_line)
-        prev_enc = src_tokenizer(prevs, truncation=True, padding=True, return_tensors='pt')
-        prev_token_type_ids = torch.zeros_like(prev_enc.input_ids)
-        upd_enc = src_tokenizer(upds, truncation=True, padding=True, return_tensors='pt')
-        upd_enc.input_ids[:, 0] = torch.ones_like(upd_enc.input_ids[:, 0]) * src_tokenizer.eos_token_id
-        upd_enc_token_type_ids = torch.ones_like(upd_enc.input_ids)
 
-        src_input_ids = torch.cat((prev_enc.input_ids, upd_enc.input_ids), dim=1)
-        src_attention_mask = torch.cat((prev_enc.attention_mask, upd_enc.attention_mask), dim=1)
-        src_token_type_ids = torch.cat((prev_token_type_ids, upd_enc_token_type_ids), dim=1)
+        enc = src_tokenizer(prevs, upds, truncation=True, padding=True, return_tensors='pt', add_special_tokens=True)
+        # get input ids and attention mask from encoding
+        src_input_ids = enc.input_ids
+        src_attention_mask = enc.attention_mask
 
+        # construct token_type_ids
+        src_token_type_ids = torch.ones_like(enc.input_ids)
+        # find where first sentence ends (each sentence contains three eos tokens, we are interested in the 2nd)
+        end = torch.where(enc.input_ids == src_tokenizer.eos_token_id)[1][1::3]
+        for i, ind in enumerate(end):
+            src_token_type_ids[i, :ind + 1] = torch.zeros((1, ind + 1))
         msg_enc = trg_tokenizer(msgs, truncation=True, padding=True, return_tensors='pt')
         return CMGDataset(src_input_ids=src_input_ids,
                           src_attention_mask=src_attention_mask,
