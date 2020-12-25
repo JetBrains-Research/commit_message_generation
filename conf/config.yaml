@@ -16,13 +16,14 @@ dataset:
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: add <empty> special token codebert2distilgpt2
+  name: start with frozen codebert (except embeddings) codebert2distilgpt2
   project: commit_message_generation
 model:
   learning_rate: 1e-4
   encoder_name_or_path: microsoft/codebert-base
   decoder_name_or_path: distilgpt2
-  freeze_after: 5
+  unfreeze_after: 10
+  freeze_after: 15
 trainer:
   gpus: 1
   max_epochs: 40

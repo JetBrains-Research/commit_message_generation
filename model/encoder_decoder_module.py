@@ -17,6 +17,7 @@ class EncoderDecoderModule(pl.LightningModule):
                  learning_rate: float,
                  encoder_name_or_path: str,
                  decoder_name_or_path: str,
+                 unfreeze_after: int,
                  freeze_after: int,
                  src_tokenizer: RobertaTokenizer,
                  trg_tokenizer: GPT2Tokenizer,
@@ -25,6 +26,7 @@ class EncoderDecoderModule(pl.LightningModule):
                  **kwargs):
         super().__init__()
 
+        self._unfreeze_after = unfreeze_after
         self._freeze_after = freeze_after
         self._src_tokenizer = src_tokenizer
         self._trg_tokenizer = trg_tokenizer
@@ -80,7 +82,12 @@ class EncoderDecoderModule(pl.LightningModule):
         self.examples_count = 0
 
     def on_train_epoch_start(self) -> None:
-        # freeze codebert after several epochs
+        # unfreeze codebert on certain epochs
+        if self.current_epoch == self._unfreeze_after:
+            for param in self.model.encoder.parameters():
+                param.requires_grad = True
+
+        # freeze codebert on certain epochs
         if self.current_epoch == self._freeze_after:
             for param in self.model.encoder.parameters():
                 param.requires_grad = False
@@ -103,7 +110,8 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def generate(self, batch):
         return self.model.generate(input_ids=batch[0],
-                                   attention_mask=batch[1])
+                                   attention_mask=batch[1],
+                                   token_type_ids=batch[2])
 
     def training_step(self, batch, batch_idx):
         loss, logits = self(batch)[:2]

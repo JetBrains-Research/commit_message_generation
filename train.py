@@ -31,6 +31,13 @@ def main(cfg: DictConfig) -> None:
     trainer_logger.watch(encoder_decoder, log='gradients', log_freq=250)
     lr_logger = LearningRateLogger()
 
+    # freeze codebert
+    for param in encoder_decoder.model.encoder.parameters():
+        param.requires_grad = False
+    # unfreeze embeddings
+    for param in encoder_decoder.model.encoder.embeddings.parameters():
+        param.requires_grad = True
+
     trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger, callbacks=[lr_logger])
     # -----------------------
     #       tune lr         -
