@@ -72,7 +72,7 @@ class CMGDataset(Dataset):
 
         # construct token_type_ids
         src_token_type_ids = torch.ones_like(enc.input_ids)
-        # find where first sentence ends (each sentence contains three eos tokens, we are interested in the 2nd)
+        # find where first sentence ends (each sequence contains three eos tokens, we are interested in the 2nd)
         end = torch.where(enc.input_ids == src_tokenizer.eos_token_id)[1][1::3]
         for i, ind in enumerate(end):
             src_token_type_ids[i, :ind + 1] = torch.zeros((1, ind + 1))
