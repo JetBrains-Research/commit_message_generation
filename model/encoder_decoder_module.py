@@ -3,7 +3,7 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 
-from transformers import EncoderDecoderModel, RobertaModel, GPT2LMHeadModel, GPT2Config,\
+from transformers import EncoderDecoderModel, RobertaModel, GPT2LMHeadModel, GPT2Config, \
     RobertaTokenizer, GPT2Tokenizer, AdamW, get_linear_schedule_with_warmup
 
 import wandb
@@ -42,8 +42,8 @@ class EncoderDecoderModule(pl.LightningModule):
         # resize embeddings to match vocab with new special token
         encoder.resize_token_embeddings(len(self._src_tokenizer))
         # change token_type_embeddings dimension to 2
-        #encoder.config.type_vocab_size = 2
-        #encoder.embeddings.token_type_embeddings = torch.nn.Embedding.from_pretrained(
+        # encoder.config.type_vocab_size = 2
+        # encoder.embeddings.token_type_embeddings = torch.nn.Embedding.from_pretrained(
         #                                 torch.cat((encoder.embeddings.token_type_embeddings.weight,
         #                                            encoder.embeddings.token_type_embeddings.weight), dim=0))
         # use GPT-2 as decoder
@@ -82,12 +82,12 @@ class EncoderDecoderModule(pl.LightningModule):
         self.examples_count = 0
 
     def on_train_epoch_start(self) -> None:
-        # unfreeze codebert on certain epochs
+        # unfreeze codebert on certain epoch
         if self.current_epoch == self._unfreeze_after:
             for param in self.model.encoder.parameters():
                 param.requires_grad = True
 
-        # freeze codebert on certain epochs
+        # freeze codebert on certain epoch
         if self.current_epoch == self._freeze_after:
             for param in self.model.encoder.parameters():
                 param.requires_grad = False
@@ -97,8 +97,8 @@ class EncoderDecoderModule(pl.LightningModule):
 
         encoder_outputs = self.model.encoder(
             input_ids=batch[0],
-            attention_mask=batch[1],)
-            #token_type_ids=batch[2])
+            attention_mask=batch[1], )
+        # token_type_ids=batch[2])
 
         # transformers assume pad indices to be -100
         # gpt2 has no pad tokens so use attention mask
@@ -110,8 +110,8 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def generate(self, batch):
         return self.model.generate(input_ids=batch[0],
-                                   attention_mask=batch[1],)
-                                   #token_type_ids=batch[2])
+                                   attention_mask=batch[1], )
+        # token_type_ids=batch[2])
 
     def training_step(self, batch, batch_idx):
         loss, logits = self(batch)[:2]
@@ -166,7 +166,7 @@ class EncoderDecoderModule(pl.LightningModule):
                                     "test_accuracy": test_acc_mean,
                                     "test_bleu": test_bleu_mean}, step=self.examples_count)
 
-    def compute_metrics(self, source, generated, target, n_examples=10):
+    def compute_metrics(self, source, generated, target):
         if target.shape[1] > generated.shape[1]:
             # pad generated tokens to match sequence length dimension with target
             generated = F.pad(input=generated, pad=(0, target.shape[1] - generated.shape[1], 0, 0), mode='constant',
@@ -185,14 +185,28 @@ class EncoderDecoderModule(pl.LightningModule):
         bleu = self.bleu(preds, targets)
 
         # log a little table with examples
-        table = wandb.Table(columns=["Source", "Predicted", "Target"])
-        srcs = self._src_tokenizer.batch_decode(source, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        table = self.make_wandb_table(source, preds, targets)
+        return acc, bleu, table
+
+    def make_wandb_table(self, source, preds, targets, n_examples=10):
+        # create a little wandb table with examples
+        table = wandb.Table(columns=["Source Before", "Source After", "Predicted", "Target"])
+
+        # find sequences before and after in source
+        end = torch.where(source == self._src_tokenizer.eos_token_id)[1][1::3]
+
         for i in range(n_examples):
             try:
-                table.add_data(srcs[i], preds[i], targets[i])
+                table.add_data(self._src_tokenizer.decode(source[i, :end[i] + 1], skip_special_tokens=True, \
+                                                          clean_up_tokenization_spaces=False),  # decode sequence before
+                               self._src_tokenizer.decode(source[i, end[i] + 1:], skip_special_tokens=True, \
+                                                          clean_up_tokenization_spaces=False),  # decode sequence after
+                               preds[i],
+                               targets[i])
             except IndexError:
                 break
-        return acc, bleu, table
+
+        return table
 
     def configure_optimizers(self):
         optimizer = AdamW(self.parameters(), lr=self.learning_rate)

@@ -16,14 +16,14 @@ dataset:
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: align + no token_type_ids + embeddings + encoder
+  name: fix data preprocessing (no token_type_ids)
   project: commit_message_generation
 model:
   learning_rate: 1e-4
   encoder_name_or_path: microsoft/codebert-base
   decoder_name_or_path: distilgpt2
-  unfreeze_encoder_after: 5
-  freeze_encoder_after: 10
+  unfreeze_encoder_after: 20
+  freeze_encoder_after: 5
 trainer:
   gpus: 1
   max_epochs: 40
