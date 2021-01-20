@@ -42,10 +42,10 @@ class EncoderDecoderModule(pl.LightningModule):
         # resize embeddings to match vocab with new special token
         encoder.resize_token_embeddings(len(self._src_tokenizer))
         # change token_type_embeddings dimension to 2
-        # encoder.config.type_vocab_size = 2
-        # encoder.embeddings.token_type_embeddings = torch.nn.Embedding.from_pretrained(
-        #                                 torch.cat((encoder.embeddings.token_type_embeddings.weight,
-        #                                            encoder.embeddings.token_type_embeddings.weight), dim=0))
+        encoder.config.type_vocab_size = 2
+        encoder.embeddings.token_type_embeddings = torch.nn.Embedding.from_pretrained(
+                                         torch.cat((encoder.embeddings.token_type_embeddings.weight,
+                                                    encoder.embeddings.token_type_embeddings.weight), dim=0))
         # use GPT-2 as decoder
         config = GPT2Config.from_pretrained(decoder_name_or_path)
         config.is_decoder = True
@@ -97,8 +97,8 @@ class EncoderDecoderModule(pl.LightningModule):
 
         encoder_outputs = self.model.encoder(
             input_ids=batch[0],
-            attention_mask=batch[1], )
-        # token_type_ids=batch[2])
+            attention_mask=batch[1],
+            token_type_ids=batch[2])
 
         # transformers assume pad indices to be -100
         # gpt2 has no pad tokens so use attention mask
@@ -110,8 +110,8 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def generate(self, batch):
         return self.model.generate(input_ids=batch[0],
-                                   attention_mask=batch[1], )
-        # token_type_ids=batch[2])
+                                   attention_mask=batch[1],
+                                   token_type_ids=batch[2])
 
     def training_step(self, batch, batch_idx):
         loss, logits = self(batch)[:2]

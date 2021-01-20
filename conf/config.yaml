@@ -16,7 +16,7 @@ dataset:
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: fix data preprocessing (no token_type_ids)
+  name: fix data preprocessing + token_type_ids
   project: commit_message_generation
 model:
   learning_rate: 1e-4
