@@ -36,7 +36,7 @@ def main(cfg: DictConfig) -> None:
         param.requires_grad = False
     # unfreeze embeddings
     for param in encoder_decoder.model.encoder.embeddings.parameters():
-        param.requires_grad = True
+        param.requires_grad = False
 
     trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger, callbacks=[lr_logger])
     # -----------------------
