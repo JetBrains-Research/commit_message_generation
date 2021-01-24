@@ -8,8 +8,10 @@ from transformers import EncoderDecoderModel, RobertaModel, GPT2LMHeadModel, GPT
 
 import wandb
 
-from metrics import AccuracyMetric
-from metrics import BleuMetric
+from datasets import load_metric
+
+import nltk
+nltk.download('wordnet')
 
 
 class EncoderDecoderModule(pl.LightningModule):
@@ -42,10 +44,10 @@ class EncoderDecoderModule(pl.LightningModule):
         # resize embeddings to match vocab with new special token
         encoder.resize_token_embeddings(len(self._src_tokenizer))
         # change token_type_embeddings dimension to 2
-        encoder.config.type_vocab_size = 2
-        encoder.embeddings.token_type_embeddings = torch.nn.Embedding.from_pretrained(
-                                         torch.cat((encoder.embeddings.token_type_embeddings.weight,
-                                                    encoder.embeddings.token_type_embeddings.weight), dim=0))
+        #encoder.config.type_vocab_size = 2
+        #encoder.embeddings.token_type_embeddings = torch.nn.Embedding.from_pretrained(
+        #                                 torch.cat((encoder.embeddings.token_type_embeddings.weight,
+        #                                            encoder.embeddings.token_type_embeddings.weight), dim=0))
         # use GPT-2 as decoder
         config = GPT2Config.from_pretrained(decoder_name_or_path)
         config.is_decoder = True
@@ -75,8 +77,9 @@ class EncoderDecoderModule(pl.LightningModule):
         print(self.model.config)
         print()
 
-        self.accuracy = AccuracyMetric(self._trg_tokenizer.pad_token_id)
-        self.bleu = BleuMetric()
+        self.bleu = load_metric("bleu")
+        self.rouge = load_metric("rouge")
+        self.meteor = load_metric("meteor")
 
         # to make logs for different batch sizes prettier
         self.examples_count = 0
@@ -97,8 +100,8 @@ class EncoderDecoderModule(pl.LightningModule):
 
         encoder_outputs = self.model.encoder(
             input_ids=batch[0],
-            attention_mask=batch[1],
-            token_type_ids=batch[2])
+            attention_mask=batch[1],)
+        #    token_type_ids=batch[2])
 
         # transformers assume pad indices to be -100
         # gpt2 has no pad tokens so use attention mask
@@ -110,8 +113,8 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def generate(self, batch):
         return self.model.generate(input_ids=batch[0],
-                                   attention_mask=batch[1],
-                                   token_type_ids=batch[2])
+                                   attention_mask=batch[1],)
+        #                           token_type_ids=batch[2])
 
     def training_step(self, batch, batch_idx):
         loss, logits = self(batch)[:2]
@@ -120,7 +123,8 @@ class EncoderDecoderModule(pl.LightningModule):
         if self.global_step % 1000 == 0:
             with torch.no_grad():
                 gen_sequence = self.generate(batch)
-                _, _, table = self.compute_metrics(batch[0], gen_sequence, batch[3])
+                preds, targets = self.decode_preds_and_targets(gen_sequence, batch[3])
+                table = self.make_wandb_table(batch[0], preds, targets)
         else:
             table = None
 
@@ -138,35 +142,60 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         loss, logits = self(batch)[:2]
-
+        # generate
         gen_sequence = self.generate(batch)
-
-        acc, bleu, table = self.compute_metrics(batch[0], gen_sequence, batch[3])
-
-        return {"val_loss": loss, "val_accuracy": acc, "val_bleu": bleu, "examples": table}
+        # decode generated sequences and targets into strings
+        preds, targets = self.decode_preds_and_targets(gen_sequence, batch[3])
+        # create a little table with examples
+        table = self.make_wandb_table(batch[0], preds, targets)
+        # add batches to metrics
+        self.bleu.add_batch(predictions=[line.split() for line in preds],
+                            references=[[line.split()] for line in targets])
+        self.rouge.add_batch(predictions=preds, references=targets)
+        self.meteor.add_batch(predictions=preds, references=targets)
+        return {"val_loss": loss, "examples": table}
 
     def validation_epoch_end(self, outputs):
         val_loss_mean = torch.stack([x["val_loss"] for x in outputs]).mean()
-        val_acc_mean = torch.stack([x["val_accuracy"] for x in outputs]).mean()
-        val_bleu_mean = torch.stack([x["val_bleu"] for x in outputs]).mean()
+        bleu = self.bleu.compute()
+        rouge = self.rouge.compute()
+        meteor = self.meteor.compute()
         self.logger.experiment.log({"val_examples": outputs[0]["examples"],
-                                    "val_accuracy": val_acc_mean,
-                                    "val_bleu": val_bleu_mean,
+                                    "val_bleu": bleu["bleu"],
+                                    "val_rouge1": rouge["rouge1"].mid.fmeasure,
+                                    "val_rouge2": rouge["rouge2"].mid.fmeasure,
+                                    "val_rougeL": rouge["rougeL"].mid.fmeasure,
+                                    "val_meteor": meteor["meteor"],
                                     "val_loss": val_loss_mean}, step=self.examples_count)
 
     def test_step(self, batch, batch_idx):
+        loss, logits = self(batch)[:2]
+        # generate
         gen_sequence = self.generate(batch)
-        acc, bleu, table = self.compute_metrics(batch[0], gen_sequence, batch[3])
-        return {"test_accuracy": acc, "test_bleu": bleu, "examples": table}
+        # decode generated sequences and targets into strings
+        preds, targets = self.decode_preds_and_targets(gen_sequence, batch[3])
+        # create a little table with examples
+        table = self.make_wandb_table(batch[0], preds, targets)
+        # add batches to metrics
+        self.bleu.add_batch(predictions=[line.split() for line in preds],
+                            references=[[line.split()] for line in targets])
+        self.rouge.add_batch(predictions=preds, references=targets)
+        self.meteor.add_batch(predictions=preds, references=targets)
+        return {"examples": table}
 
     def test_epoch_end(self, outputs):
-        test_acc_mean = torch.stack([x["test_accuracy"] for x in outputs]).mean()
-        test_bleu_mean = torch.stack([x["test_bleu"] for x in outputs]).mean()
+        print(outputs)
+        bleu = self.bleu.compute()
+        rouge = self.rouge.compute()
+        meteor = self.meteor.compute()
         self.logger.experiment.log({"test_examples": outputs[0]["examples"],
-                                    "test_accuracy": test_acc_mean,
-                                    "test_bleu": test_bleu_mean}, step=self.examples_count)
+                                    "test_bleu": bleu["bleu"],
+                                    "test_rouge1": rouge["rouge1"].mid.fmeasure,
+                                    "test_rouge2": rouge["rouge2"].mid.fmeasure,
+                                    "test_rougeL": rouge["rougeL"].mid.fmeasure,
+                                    "test_meteor": meteor["meteor"]}, step=self.examples_count)
 
-    def compute_metrics(self, source, generated, target):
+    def decode_preds_and_targets(self, generated, target):
         if target.shape[1] > generated.shape[1]:
             # pad generated tokens to match sequence length dimension with target
             generated = F.pad(input=generated, pad=(0, target.shape[1] - generated.shape[1], 0, 0), mode='constant',
@@ -175,20 +204,14 @@ class EncoderDecoderModule(pl.LightningModule):
             # pad target tokens to match sequence length dimension with generated
             target = F.pad(input=target, pad=(0, generated.shape[1] - target.shape[1], 0, 0), mode='constant',
                            value=self._trg_tokenizer.pad_token_id)
-        # compute accuracy with tensors
-        acc = self.accuracy(generated, target)
 
-        # compute BLEU with decoded strings
+        # decoded preds and targets
         targets = self._trg_tokenizer.batch_decode(target, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         preds = self._trg_tokenizer.batch_decode(generated, skip_special_tokens=True,
                                                  clean_up_tokenization_spaces=False)
-        bleu = self.bleu(preds, targets)
+        return preds, targets
 
-        # log a little table with examples
-        table = self.make_wandb_table(source, preds, targets)
-        return acc, bleu, table
-
-    def make_wandb_table(self, source, preds, targets, n_examples=10):
+    def make_wandb_table(self, source, preds, targets, n_examples=8):
         # create a little wandb table with examples
         table = wandb.Table(columns=["Source Before", "Source After", "Predicted", "Target"])
 
