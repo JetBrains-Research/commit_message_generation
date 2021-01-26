@@ -13,6 +13,8 @@ from datasets import load_metric
 import nltk
 nltk.download('wordnet')
 
+from copy import copy
+
 
 class EncoderDecoderModule(pl.LightningModule):
     def __init__(self,
@@ -21,6 +23,7 @@ class EncoderDecoderModule(pl.LightningModule):
                  decoder_name_or_path: str,
                  unfreeze_encoder_after: int,
                  freeze_encoder_after: int,
+                 num_layers_encoder: int,
                  src_tokenizer: RobertaTokenizer,
                  trg_tokenizer: GPT2Tokenizer,
                  num_epochs: int,
@@ -30,6 +33,7 @@ class EncoderDecoderModule(pl.LightningModule):
 
         self._unfreeze_after = unfreeze_encoder_after
         self._freeze_after = freeze_encoder_after
+        self.num_layers_encoder = num_layers_encoder
         self._src_tokenizer = src_tokenizer
         self._trg_tokenizer = trg_tokenizer
         self._num_epochs = num_epochs
@@ -40,21 +44,43 @@ class EncoderDecoderModule(pl.LightningModule):
         self.learning_rate = learning_rate
 
         # use RoBERTa as encoder
-        encoder = RobertaModel.from_pretrained(encoder_name_or_path)
+        teacher = RobertaModel.from_pretrained(encoder_name_or_path)
+
+        # remove part of the layers
+        teacher_config = teacher.config
+        student_config = copy(teacher.config)
+        student_config.num_hidden_layers = self.num_layers_encoder
+        student = RobertaModel(config=student_config)
+
+        # copy all embeddings
+        student.embeddings.word_embeddings = teacher.embeddings.word_embeddings
+        student.embeddings.position_embeddings = teacher.embeddings.position_embeddings
+        student.embeddings.token_type_embeddings = teacher.embeddings.token_type_embeddings
+        student.embeddings.LayerNorm = teacher.embeddings.LayerNorm
+        student.embeddings.dropout = teacher.embeddings.dropout
+
+        # uniformly pick from middle layers from teacher
+        # it is basically np.linspace(0, teacher_config.num_hidden_layers,
+        #                             num=student_config.num_hidden_layers, endpoint=True)
+        step = (teacher_config.num_hidden_layers - 1) / (student_config.num_hidden_layers - 1)
+        for student_layer, teacher_layer in enumerate(int(i * step) for i in range(student_config.num_hidden_layers)):
+            student.encoder.layer[student_layer] = teacher.encoder.layer[teacher_layer]
+
         # resize embeddings to match vocab with new special token
-        encoder.resize_token_embeddings(len(self._src_tokenizer))
+        student.resize_token_embeddings(len(self._src_tokenizer))
+
         # change token_type_embeddings dimension to 2
-        #encoder.config.type_vocab_size = 2
-        #encoder.embeddings.token_type_embeddings = torch.nn.Embedding.from_pretrained(
-        #                                 torch.cat((encoder.embeddings.token_type_embeddings.weight,
-        #                                            encoder.embeddings.token_type_embeddings.weight), dim=0))
+        student.config.type_vocab_size = 2
+        student.embeddings.token_type_embeddings = torch.nn.Embedding.from_pretrained(
+                                         torch.cat((student.embeddings.token_type_embeddings.weight,
+                                                    student.embeddings.token_type_embeddings.weight), dim=0))
         # use GPT-2 as decoder
         config = GPT2Config.from_pretrained(decoder_name_or_path)
         config.is_decoder = True
         config.add_cross_attention = True
         gpt = GPT2LMHeadModel.from_pretrained(decoder_name_or_path, config=config)
 
-        self.model = EncoderDecoderModel(encoder=encoder, decoder=gpt)
+        self.model = EncoderDecoderModel(encoder=student, decoder=gpt)
 
         # cache is currently not supported by EncoderDecoder framework
         self.model.decoder.config.use_cache = False
@@ -100,8 +126,8 @@ class EncoderDecoderModule(pl.LightningModule):
 
         encoder_outputs = self.model.encoder(
             input_ids=batch[0],
-            attention_mask=batch[1],)
-        #    token_type_ids=batch[2])
+            attention_mask=batch[1],
+            token_type_ids=batch[2])
 
         # transformers assume pad indices to be -100
         # gpt2 has no pad tokens so use attention mask
@@ -113,8 +139,8 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def generate(self, batch):
         return self.model.generate(input_ids=batch[0],
-                                   attention_mask=batch[1],)
-        #                           token_type_ids=batch[2])
+                                   attention_mask=batch[1],
+                                   token_type_ids=batch[2])
 
     def training_step(self, batch, batch_idx):
         loss, logits = self(batch)[:2]
@@ -184,7 +210,6 @@ class EncoderDecoderModule(pl.LightningModule):
         return {"examples": table}
 
     def test_epoch_end(self, outputs):
-        print(outputs)
         bleu = self.bleu.compute()
         rouge = self.rouge.compute()
         meteor = self.meteor.compute()
