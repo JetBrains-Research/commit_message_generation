@@ -3,7 +3,7 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 
-from transformers import EncoderDecoderModel, RobertaModel, GPT2LMHeadModel, GPT2Config, \
+from transformers import EncoderDecoderModel, RobertaModel, RobertaConfig, GPT2LMHeadModel, GPT2Config, \
     RobertaTokenizer, GPT2Tokenizer, AdamW, get_linear_schedule_with_warmup
 
 import wandb
@@ -24,6 +24,7 @@ class EncoderDecoderModule(pl.LightningModule):
                  unfreeze_encoder_after: int,
                  freeze_encoder_after: int,
                  num_layers_encoder: int,
+                 num_layers_decoder: int,
                  src_tokenizer: RobertaTokenizer,
                  trg_tokenizer: GPT2Tokenizer,
                  num_epochs: int,
@@ -34,6 +35,7 @@ class EncoderDecoderModule(pl.LightningModule):
         self._unfreeze_after = unfreeze_encoder_after
         self._freeze_after = freeze_encoder_after
         self.num_layers_encoder = num_layers_encoder
+        self.num_layers_decoder = num_layers_decoder
         self._src_tokenizer = src_tokenizer
         self._trg_tokenizer = trg_tokenizer
         self._num_epochs = num_epochs
@@ -43,44 +45,28 @@ class EncoderDecoderModule(pl.LightningModule):
 
         self.learning_rate = learning_rate
 
-        # use RoBERTa as encoder
-        teacher = RobertaModel.from_pretrained(encoder_name_or_path)
-
-        # remove part of the layers
-        teacher_config = teacher.config
-        student_config = copy(teacher.config)
-        student_config.num_hidden_layers = self.num_layers_encoder
-        student = RobertaModel(config=student_config)
-
-        # copy all embeddings
-        student.embeddings.word_embeddings = teacher.embeddings.word_embeddings
-        student.embeddings.position_embeddings = teacher.embeddings.position_embeddings
-        student.embeddings.token_type_embeddings = teacher.embeddings.token_type_embeddings
-        student.embeddings.LayerNorm = teacher.embeddings.LayerNorm
-        student.embeddings.dropout = teacher.embeddings.dropout
-
-        # uniformly pick from middle layers from teacher
-        # it is basically np.linspace(0, teacher_config.num_hidden_layers,
-        #                             num=student_config.num_hidden_layers, endpoint=True)
-        step = (teacher_config.num_hidden_layers - 1) / (student_config.num_hidden_layers - 1)
-        for student_layer, teacher_layer in enumerate(int(i * step) for i in range(student_config.num_hidden_layers)):
-            student.encoder.layer[student_layer] = teacher.encoder.layer[teacher_layer]
+        # use randomly initialized RoBERTa as encoder
+        encoder_config = RobertaConfig()
+        encoder_config.num_hidden_layers = self.num_layers_encoder
+        encoder = RobertaModel(config=encoder_config)
 
         # resize embeddings to match vocab with new special token
-        student.resize_token_embeddings(len(self._src_tokenizer))
+        encoder.resize_token_embeddings(len(self._src_tokenizer))
 
         # change token_type_embeddings dimension to 2
-        student.config.type_vocab_size = 2
-        student.embeddings.token_type_embeddings = torch.nn.Embedding.from_pretrained(
-                                         torch.cat((student.embeddings.token_type_embeddings.weight,
-                                                    student.embeddings.token_type_embeddings.weight), dim=0))
-        # use GPT-2 as decoder
-        config = GPT2Config.from_pretrained(decoder_name_or_path)
-        config.is_decoder = True
-        config.add_cross_attention = True
-        gpt = GPT2LMHeadModel.from_pretrained(decoder_name_or_path, config=config)
+        encoder.config.type_vocab_size = 2
+        encoder.embeddings.token_type_embeddings = torch.nn.Embedding.from_pretrained(
+                                         torch.cat((encoder.embeddings.token_type_embeddings.weight,
+                                                    encoder.embeddings.token_type_embeddings.weight), dim=0))
 
-        self.model = EncoderDecoderModel(encoder=student, decoder=gpt)
+        # use randomly initialized GPT-2 as decoder
+        decoder_config = GPT2Config()
+        decoder_config.n_layer = self.num_layers_decoder
+        decoder_config.is_decoder = True
+        decoder_config.add_cross_attention = True
+        gpt = GPT2LMHeadModel(config=decoder_config)
+
+        self.model = EncoderDecoderModel(encoder=encoder, decoder=gpt)
 
         # cache is currently not supported by EncoderDecoder framework
         self.model.decoder.config.use_cache = False
@@ -110,16 +96,16 @@ class EncoderDecoderModule(pl.LightningModule):
         # to make logs for different batch sizes prettier
         self.examples_count = 0
 
-    def on_train_epoch_start(self) -> None:
+    #def on_train_epoch_start(self) -> None:
         # unfreeze codebert on certain epoch
-        if self.current_epoch == self._unfreeze_after:
-            for param in self.model.encoder.parameters():
-                param.requires_grad = True
+        #if self.current_epoch == self._unfreeze_after:
+        #    for param in self.model.encoder.parameters():
+        #        param.requires_grad = True
 
         # freeze codebert on certain epoch
-        if self.current_epoch == self._freeze_after:
-            for param in self.model.encoder.parameters():
-                param.requires_grad = False
+        #if self.current_epoch == self._freeze_after:
+        #    for param in self.model.encoder.parameters():
+        #        param.requires_grad = False
 
     def forward(self, batch):
         self.examples_count += len(batch[0])

@@ -32,11 +32,11 @@ def main(cfg: DictConfig) -> None:
     lr_logger = LearningRateLogger()
 
     # freeze codebert
-    for param in encoder_decoder.model.encoder.parameters():
-        param.requires_grad = False
+    #for param in encoder_decoder.model.encoder.parameters():
+    #    param.requires_grad = False
     # unfreeze embeddings
-    for param in encoder_decoder.model.encoder.embeddings.parameters():
-        param.requires_grad = True
+    #for param in encoder_decoder.model.encoder.embeddings.parameters():
+    #    param.requires_grad = True
 
     trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger, callbacks=[lr_logger])
     # -----------------------

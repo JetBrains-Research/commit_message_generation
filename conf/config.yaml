@@ -5,18 +5,18 @@ dataset:
   encoder_name_or_path: microsoft/codebert-base
   decoder_name_or_path: distilgpt2
   train_dataloader_conf:
-    batch_size: 16
+    batch_size: 32
     shuffle: true
     num_workers: 4
   val_dataloader_conf:
-    batch_size: 16
+    batch_size: 32
     num_workers: 4
   test_dataloader_conf:
-    batch_size: 16
+    batch_size: 32
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: remove layers from encoder + token_type_ids
+  name: random 2-layers + token_type_ids
   project: commit_message_generation
 model:
   learning_rate: 1e-4
@@ -24,7 +24,8 @@ model:
   decoder_name_or_path: distilgpt2
   unfreeze_encoder_after: 20
   freeze_encoder_after: 5
-  num_layers_encoder: 6
+  num_layers_encoder: 2
+  num_layers_decoder: 2
 trainer:
   gpus: 1
   max_epochs: 40
