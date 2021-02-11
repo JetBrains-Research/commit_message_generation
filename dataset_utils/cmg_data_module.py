@@ -19,7 +19,6 @@ class CMGDataModule(pl.LightningDataModule):
                  diff_max_len: int,
                  msg_max_len: int,
                  encoder_name_or_path: str,
-                 decoder_name_or_path: str,
                  train_dataloader_conf: DictConfig,
                  val_dataloader_conf: DictConfig,
                  test_dataloader_conf: DictConfig):
@@ -38,21 +37,9 @@ class CMGDataModule(pl.LightningDataModule):
         self.val_dataloader_conf = val_dataloader_conf
         self.test_dataloader_conf = test_dataloader_conf
 
-        # make sure GPT2 appends EOS in begin and end
-        # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
-        def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-            outputs = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
-            return outputs
-
-        GPT2Tokenizer.build_inputs_with_special_tokens = build_inputs_with_special_tokens
-        self._src_tokenizer = RobertaTokenizer.from_pretrained(encoder_name_or_path)
+        self._tokenizer = RobertaTokenizer.from_pretrained(encoder_name_or_path)
         # add <empty> special token
-        self._src_tokenizer.add_special_tokens({"additional_special_tokens": ["<empty>"]})
-
-        self._trg_tokenizer = GPT2Tokenizer.from_pretrained(decoder_name_or_path)
-        # set pad_token_id to unk_token_id -> be careful here as unk_token_id == eos_token_id == bos_token_id
-        # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
-        self._trg_tokenizer.pad_token = self._trg_tokenizer.unk_token
+        self._tokenizer.add_special_tokens({"additional_special_tokens": ["<empty>"]})
 
     def prepare_data(self):
         # called only on 1 GPU
@@ -62,14 +49,14 @@ class CMGDataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # called on every GPU
         if stage == 'fit' or stage is None:
-            self.train = CMGDataset.load_data(self._src_tokenizer, self._trg_tokenizer, path=self.train_data_dir,
+            self.train = CMGDataset.load_data(self._tokenizer, self._tokenizer, path=self.train_data_dir,
                                               diff_max_len=self.diff_max_len,
                                               msg_max_len=self.msg_max_len)
-            self.val = CMGDataset.load_data(self._src_tokenizer, self._trg_tokenizer, path=self.val_data_dir,
+            self.val = CMGDataset.load_data(self._tokenizer, self._tokenizer, path=self.val_data_dir,
                                             diff_max_len=self.diff_max_len,
                                             msg_max_len=self.msg_max_len)
         if stage == 'test' or stage is None:
-            self.test = CMGDataset.load_data(self._src_tokenizer, self._trg_tokenizer, path=self.test_data_dir,
+            self.test = CMGDataset.load_data(self._tokenizer, self._tokenizer, path=self.test_data_dir,
                                              diff_max_len=self.diff_max_len,
                                              msg_max_len=self.msg_max_len)
 
