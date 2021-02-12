@@ -4,20 +4,17 @@ dataset:
   msg_max_len: 30
   encoder_name_or_path: microsoft/codebert-base
   train_dataloader_conf:
-    batch_size: 128
+    batch_size: 32
     shuffle: true
     num_workers: 4
   val_dataloader_conf:
-    batch_size: 128
+    batch_size: 32
     num_workers: 4
   test_dataloader_conf:
-    batch_size: 128
+    batch_size: 32
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
   name: test
   project: commit_message_generation
-num_layers_encoder: 4
 k: 3
-
-

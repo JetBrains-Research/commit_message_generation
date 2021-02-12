@@ -14,6 +14,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from tqdm import tqdm
+import os
 
 from dataset_utils.cmg_data_module import CMGDataModule
 from faiss_knn import FaissKNN
@@ -55,35 +56,34 @@ def main(cfg: DictConfig) -> None:
 
     # prepare datamodule
     dm = CMGDataModule(**cfg.dataset)
-    dm.setup()
+    dm.setup('fit')
 
     # use wandb logger
     logger = instantiate(cfg.logger)
 
-    # use randomly initialized RoBERTa as encoder
-    encoder_config = RobertaConfig()
-    encoder_config.num_hidden_layers = cfg.num_layers_encoder
-    encoder = RobertaModel(config=encoder_config)
-    encoder.eval()
+    # use CodeBERT as encoder
+    encoder = RobertaModel.from_pretrained('microsoft/codebert-base')
+
     # resize embeddings to match vocab with new special token
     encoder.resize_token_embeddings(len(dm._tokenizer))
 
+    encoder.to("cuda")
+
+    print("Model\n", encoder)
+
     # use faiss for nearest neighbors search
-    knn = FaissKNN(cfg.k, encoder_config.hidden_size)
+    knn = FaissKNN(cfg.k, encoder.config.hidden_size)
     # -------------------------
     #         "train"         -
     # -------------------------
     # (for kNN, just store vectors from RoBERTa)
 
-    dm.setup('fit')
-
     for batch in tqdm(dm.train_dataloader(), total=int(len(dm.train_dataloader()))):
         # use pooler_output as embedding of each sequence
         # (torch.FloatTensor of shape (batch_size, hidden_size))
         with torch.no_grad():
-            embeddings = encoder(input_ids=batch[0],
-                                 attention_mask=batch[1],
-                                 token_type_ids=batch[2])[1].detach().numpy()
+            embeddings = encoder(input_ids=batch[0].to("cuda"),
+                                 attention_mask=batch[1].to("cuda"))[1].cpu().detach().numpy()
         knn.fit(np.ascontiguousarray(embeddings), batch[3].detach().numpy())
 
     # ----------------------
@@ -96,9 +96,8 @@ def main(cfg: DictConfig) -> None:
         # use pooler_output as embedding of each sequence
         # (torch.FloatTensor of shape (batch_size, hidden_size))
         with torch.no_grad():
-            embeddings = encoder(input_ids=batch[0],
-                                 attention_mask=batch[1],
-                                 token_type_ids=batch[2])[1].detach().numpy()
+            embeddings = encoder(input_ids=batch[0].to("cuda"),
+                                 attention_mask=batch[1].to("cuda"))[1].cpu().detach().numpy()
 
         test_preds = knn.predict(np.ascontiguousarray(embeddings))
 
