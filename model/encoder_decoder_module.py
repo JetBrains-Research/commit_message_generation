@@ -11,10 +11,9 @@ import wandb
 from datasets import load_metric
 
 import nltk
-
 nltk.download('wordnet')
 
-from model.my_roberta_model import MyRobertaModel
+from copy import copy
 
 
 class EncoderDecoderModule(pl.LightningModule):
@@ -49,7 +48,7 @@ class EncoderDecoderModule(pl.LightningModule):
         # use randomly initialized RoBERTa as encoder
         encoder_config = RobertaConfig()
         encoder_config.num_hidden_layers = self.num_layers_encoder
-        encoder = MyRobertaModel(config=encoder_config)
+        encoder = RobertaModel(config=encoder_config)
 
         # resize embeddings to match vocab with new special token
         encoder.resize_token_embeddings(len(self._src_tokenizer))
@@ -57,8 +56,8 @@ class EncoderDecoderModule(pl.LightningModule):
         # change token_type_embeddings dimension to 2
         encoder.config.type_vocab_size = 2
         encoder.embeddings.token_type_embeddings = torch.nn.Embedding.from_pretrained(
-            torch.cat((encoder.embeddings.token_type_embeddings.weight,
-                       encoder.embeddings.token_type_embeddings.weight), dim=0))
+                                         torch.cat((encoder.embeddings.token_type_embeddings.weight,
+                                                    encoder.embeddings.token_type_embeddings.weight), dim=0))
 
         # use randomly initialized GPT-2 as decoder
         decoder_config = GPT2Config()
