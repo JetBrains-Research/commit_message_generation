@@ -53,12 +53,6 @@ class EncoderDecoderModule(pl.LightningModule):
         # resize embeddings to match vocab with new special token
         encoder.resize_token_embeddings(len(self._src_tokenizer))
 
-        # change token_type_embeddings dimension to 2
-        encoder.config.type_vocab_size = 2
-        encoder.embeddings.token_type_embeddings = torch.nn.Embedding.from_pretrained(
-                                         torch.cat((encoder.embeddings.token_type_embeddings.weight,
-                                                    encoder.embeddings.token_type_embeddings.weight), dim=0))
-
         # use randomly initialized GPT-2 as decoder
         decoder_config = GPT2Config()
         decoder_config.n_layer = self.num_layers_decoder
@@ -99,14 +93,10 @@ class EncoderDecoderModule(pl.LightningModule):
     def forward(self, batch):
         self.examples_count += len(batch[0])
 
-        encoder_outputs = self.model.encoder(
-            input_ids=batch[0],
-            attention_mask=batch[1],
-            token_type_ids=batch[2])
-
         # transformers assume pad indices to be -100
         # gpt2 has no pad tokens so use attention mask
-        return self.model(encoder_outputs=encoder_outputs,
+        return self.model(input_ids=batch[0],
+                          attention_mask=batch[1],
                           decoder_input_ids=batch[3],
                           decoder_attention_mask=batch[4],
                           labels=batch[3].where(batch[4].type(torch.ByteTensor).to(self.device),
@@ -114,8 +104,7 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def generate(self, batch):
         return self.model.generate(input_ids=batch[0],
-                                   attention_mask=batch[1],
-                                   token_type_ids=batch[2])
+                                   attention_mask=batch[1])
 
     def training_step(self, batch, batch_idx):
         loss, logits = self(batch)[:2]
@@ -196,15 +185,6 @@ class EncoderDecoderModule(pl.LightningModule):
                                     "test_meteor": meteor["meteor"]}, step=self.examples_count)
 
     def decode_preds_and_targets(self, generated, target):
-        if target.shape[1] > generated.shape[1]:
-            # pad generated tokens to match sequence length dimension with target
-            generated = F.pad(input=generated, pad=(0, target.shape[1] - generated.shape[1], 0, 0), mode='constant',
-                              value=self._trg_tokenizer.pad_token_id)
-        elif generated.shape[1] > target.shape[1]:
-            # pad target tokens to match sequence length dimension with generated
-            target = F.pad(input=target, pad=(0, generated.shape[1] - target.shape[1], 0, 0), mode='constant',
-                           value=self._trg_tokenizer.pad_token_id)
-
         # decoded preds and targets
         targets = self._trg_tokenizer.batch_decode(target, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         preds = self._trg_tokenizer.batch_decode(generated, skip_special_tokens=True,
