@@ -29,12 +29,11 @@ class DiffPreprocessor:
         tokens_per_line = tokenize_git_diff_output_string(git_diff_output)
 
         prev_lines, updated_lines, removed, added = [], [], [], []
-        removed_idxs, added_idxs = [], []
         was_special_keyword_modification = False
         rename_len = None
         another_file_name_len = None
 
-        for i, tokens_in_line in enumerate(tokens_per_line):
+        for tokens_in_line in tokens_per_line:
             if tokens_in_line[0] == 'mmm':
                 # name of changed file
                 # example: mmm a / telecomm / java / android / telecomm / Connection . java
@@ -122,13 +121,11 @@ class DiffPreprocessor:
                 # lines that were removed
                 # example: - version = ' 2 . 0 . 2 '
                 removed.append(tokens_in_line)
-                removed_idxs.append(i)
 
             elif tokens_in_line[0] == '+':
                 # lines that were added
                 # example: + version = ' 2 . 0 . 3 '
                 added.append(tokens_in_line)
-                added_idxs.append(i)
 
             elif tokens_in_line[0] == 'index' or tokens_in_line[:2] == ['similarity', 'index']:
                 # some special info that we are not interested in
@@ -138,21 +135,17 @@ class DiffPreprocessor:
 
             else:
                 # all other cases
-                # case 1: line that was not changed (do not drop them)
+                # case 1: line that was not changed (drop them)
                 # case 2: Binary files a / dependencies / windows / sumatra / SumatraPDF . exe and / dev / null differ
-                prev_lines.append(tokens_in_line)
-                updated_lines.append(tokens_in_line)
+                if tokens_in_line[:2] == ["Binary", "files"]:
+                    prev_lines.append(tokens_in_line)
+                    updated_lines.append(tokens_in_line)
 
         # align removed and added
         removed, added = align_lists(removed, added)
-
-        for (i, prev_line), upd_line in zip(enumerate(removed), added):
-            if len(removed_idxs) > len(added_idxs):
-                prev_lines.insert(removed_idxs[i], prev_line)
-                updated_lines.insert(removed_idxs[i], upd_line)
-            else:
-                prev_lines.insert(added_idxs[i], prev_line)
-                updated_lines.insert(added_idxs[i], upd_line)
+        for prev_line, upd_line in zip(removed, added):
+            prev_lines.append(prev_line)
+            updated_lines.append(upd_line)
 
         prev = ' '.join(itertools.chain(*[line + ['\\n'] for line in prev_lines]))
         updated = ' '.join(itertools.chain(*[line + ['\\n'] for line in updated_lines]))

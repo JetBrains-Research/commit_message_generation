@@ -16,16 +16,16 @@ dataset:
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: random 12 + 6 layers
+  name: 4+4 random changed lines only
   project: commit_message_generation
 model:
   learning_rate: 1e-4
   encoder_name_or_path: microsoft/codebert-base
   decoder_name_or_path: distilgpt2
-  unfreeze_encoder_after: 20
-  freeze_encoder_after: 5
-  num_layers_encoder: 12
-  num_layers_decoder: 6
+  unfreeze_encoder_after: -1
+  freeze_encoder_after: -1
+  num_layers_encoder: 4
+  num_layers_decoder: 4
 trainer:
   gpus: 1
   max_epochs: 40
