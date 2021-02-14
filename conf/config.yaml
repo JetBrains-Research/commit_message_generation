@@ -15,6 +15,5 @@ dataset:
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: test
+  name: codebert + nn
   project: commit_message_generation
-k: 3

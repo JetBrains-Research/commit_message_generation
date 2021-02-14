@@ -7,35 +7,26 @@ import numpy as np
 
 from datasets import load_metric
 import nltk
-nltk.download('wordnet') # used in meteor metric
+
+nltk.download('wordnet')  # used in meteor metric
 
 import hydra
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from tqdm import tqdm
-import os
 
 from dataset_utils.cmg_data_module import CMGDataModule
 from faiss_knn import FaissKNN
 
 
-def decode_preds_and_targets(preds, targets, metric, tokenizer):
-    decoded_preds = []
-    decoded_targets = []
+def decode_preds_and_targets(preds, targets, tokenizer):
+    decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True,
+                                           clean_up_tokenization_spaces=False)
 
-    for pred, trg in zip(preds, targets):
-        # we have k preds for each target
-        # choose one with the biggest bleu score
-        decoded_pred = tokenizer.batch_decode(pred, skip_special_tokens=True,
-                                              clean_up_tokenization_spaces=False)
-        decoded_target = tokenizer.decode(trg, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+    decoded_targets = tokenizer.batch_decode(targets, skip_special_tokens=True,
+                                             clean_up_tokenization_spaces=False)
 
-        scores = np.array([metric.compute(predictions=[pr.split()],
-                                          references=[[decoded_target.split()]])["bleu"] for pr in decoded_pred])
-
-        decoded_preds.append(decoded_pred[np.argmax(scores)])
-        decoded_targets.append(decoded_target)
     return decoded_preds, decoded_targets
 
 
@@ -49,7 +40,6 @@ def main(cfg: DictConfig) -> None:
     print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
 
     # load metrics
-    bleu_decoding = load_metric("bleu")
     bleu = load_metric("bleu")
     rouge = load_metric("rouge")
     meteor = load_metric("meteor")
@@ -72,7 +62,7 @@ def main(cfg: DictConfig) -> None:
     print("Model\n", encoder)
 
     # use faiss for nearest neighbors search
-    knn = FaissKNN(cfg.k, encoder.config.hidden_size)
+    knn = FaissKNN(1, encoder.config.hidden_size)
     # -------------------------
     #         "train"         -
     # -------------------------
@@ -102,7 +92,8 @@ def main(cfg: DictConfig) -> None:
         test_preds = knn.predict(np.ascontiguousarray(embeddings))
 
         # decode generated sequences and targets into strings
-        preds, targets = decode_preds_and_targets(test_preds, batch[3].detach().numpy(), bleu_decoding, dm._tokenizer)
+        preds, targets = decode_preds_and_targets(np.squeeze(test_preds, axis=1), batch[3].detach().numpy(),
+                                                  dm._tokenizer)
 
         # add batches to metrics
         bleu.add_batch(predictions=[line.split() for line in preds],
