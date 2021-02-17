@@ -33,10 +33,6 @@ def main(cfg: DictConfig) -> None:
 
     trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger, callbacks=[lr_logger])
     # -----------------------
-    #       tune lr         -
-    # -----------------------
-    trainer.tune(model=encoder_decoder, datamodule=dm)
-    # -----------------------
     #         train         -
     # -----------------------
     trainer.fit(encoder_decoder, dm)
