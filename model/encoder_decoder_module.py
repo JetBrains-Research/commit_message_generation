@@ -47,6 +47,7 @@ class EncoderDecoderModule(pl.LightningModule):
 
         # use randomly initialized RoBERTa as encoder
         encoder_config = RobertaConfig()
+        encoder_config.type_vocab_size = 2
         encoder_config.num_hidden_layers = self.num_layers_encoder
         encoder = RobertaModel(config=encoder_config)
 
@@ -81,6 +82,8 @@ class EncoderDecoderModule(pl.LightningModule):
 
         print("\n====MODEL CONFIG====\n")
         print(self.model.config)
+        print()
+        print(f"Embeddings: {self.model.encoder.embeddings.token_type_embeddings}")
         print()
 
         self.bleu = load_metric("bleu")

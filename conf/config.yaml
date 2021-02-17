@@ -5,18 +5,18 @@ dataset:
   encoder_name_or_path: microsoft/codebert-base
   decoder_name_or_path: distilgpt2
   train_dataloader_conf:
-    batch_size: 16
+    batch_size: 8
     shuffle: true
     num_workers: 4
   val_dataloader_conf:
-    batch_size: 16
+    batch_size: 8
     num_workers: 4
   test_dataloader_conf:
-    batch_size: 16
+    batch_size: 8
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: 4+4 random changed lines only w/o token_type_ids
+  name: 4+4 random changed lines only correct embeddings
   project: commit_message_generation
 model:
   learning_rate: 1e-4
