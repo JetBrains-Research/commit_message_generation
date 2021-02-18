@@ -29,6 +29,6 @@ model:
 trainer:
   gpus: 1
   max_epochs: 40
-  num_sanity_val_steps: 0
+  num_sanity_val_steps: 2
   accumulate_grad_batches: 1
 
