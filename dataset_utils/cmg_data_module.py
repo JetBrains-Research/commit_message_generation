@@ -46,9 +46,6 @@ class CMGDataModule(pl.LightningDataModule):
 
         GPT2Tokenizer.build_inputs_with_special_tokens = build_inputs_with_special_tokens
         self._src_tokenizer = RobertaTokenizer.from_pretrained(encoder_name_or_path)
-        # add <empty> special token
-        self._src_tokenizer.add_special_tokens({"additional_special_tokens": ["<empty>"]})
-
         self._trg_tokenizer = GPT2Tokenizer.from_pretrained(decoder_name_or_path)
         # set pad_token_id to unk_token_id -> be careful here as unk_token_id == eos_token_id == bos_token_id
         # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)

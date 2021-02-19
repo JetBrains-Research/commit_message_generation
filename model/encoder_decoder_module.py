@@ -1,7 +1,6 @@
 import pytorch_lightning as pl
 
 import torch
-import torch.nn.functional as F
 
 from transformers import EncoderDecoderModel, RobertaModel, RobertaConfig, GPT2LMHeadModel, GPT2Config, \
     RobertaTokenizer, GPT2Tokenizer, AdamW, get_linear_schedule_with_warmup
@@ -12,8 +11,6 @@ from datasets import load_metric
 
 import nltk
 nltk.download('wordnet')
-
-from copy import copy
 
 
 class EncoderDecoderModule(pl.LightningModule):
@@ -40,20 +37,15 @@ class EncoderDecoderModule(pl.LightningModule):
         self._trg_tokenizer = trg_tokenizer
         self._num_epochs = num_epochs
         self._num_batches = num_batches
+        self.learning_rate = learning_rate
 
         self.save_hyperparameters()
 
-        self.learning_rate = learning_rate
-
         # use randomly initialized RoBERTa as encoder
         encoder_config = RobertaConfig()
-        encoder_config.type_vocab_size = 2
         encoder_config.num_hidden_layers = self.num_layers_encoder
         encoder = RobertaModel(config=encoder_config)
-
-        # resize embeddings to match vocab with new special token
         encoder.resize_token_embeddings(len(self._src_tokenizer))
-
         # use randomly initialized GPT-2 as decoder
         decoder_config = GPT2Config()
         decoder_config.n_layer = self.num_layers_decoder
@@ -83,8 +75,6 @@ class EncoderDecoderModule(pl.LightningModule):
         print("\n====MODEL CONFIG====\n")
         print(self.model.config)
         print()
-        print(f"Embeddings: {self.model.encoder.embeddings.token_type_embeddings}")
-        print()
 
         self.bleu = load_metric("bleu")
         self.rouge = load_metric("rouge")
@@ -100,9 +90,9 @@ class EncoderDecoderModule(pl.LightningModule):
         # gpt2 has no pad tokens so use attention mask
         return self.model(input_ids=batch[0],
                           attention_mask=batch[1],
-                          decoder_input_ids=batch[3],
-                          decoder_attention_mask=batch[4],
-                          labels=batch[3].where(batch[4].type(torch.ByteTensor).to(self.device),
+                          decoder_input_ids=batch[2],
+                          decoder_attention_mask=batch[3],
+                          labels=batch[2].where(batch[3].type(torch.ByteTensor).to(self.device),
                                                 torch.tensor(-100, device=self.device)))
 
     def generate(self, batch):
@@ -116,7 +106,7 @@ class EncoderDecoderModule(pl.LightningModule):
         if self.global_step % 1000 == 0:
             with torch.no_grad():
                 gen_sequence = self.generate(batch)
-                preds, targets = self.decode_preds_and_targets(gen_sequence, batch[3])
+                preds, targets = self.decode_preds_and_targets(gen_sequence, batch[2])
                 table = self.make_wandb_table(batch[0], preds, targets)
         else:
             table = None
@@ -138,7 +128,7 @@ class EncoderDecoderModule(pl.LightningModule):
         # generate
         gen_sequence = self.generate(batch)
         # decode generated sequences and targets into strings
-        preds, targets = self.decode_preds_and_targets(gen_sequence, batch[3])
+        preds, targets = self.decode_preds_and_targets(gen_sequence, batch[2])
         # create a little table with examples
         table = self.make_wandb_table(batch[0], preds, targets)
         # add batches to metrics
@@ -166,7 +156,7 @@ class EncoderDecoderModule(pl.LightningModule):
         # generate
         gen_sequence = self.generate(batch)
         # decode generated sequences and targets into strings
-        preds, targets = self.decode_preds_and_targets(gen_sequence, batch[3])
+        preds, targets = self.decode_preds_and_targets(gen_sequence, batch[2])
         # create a little table with examples
         table = self.make_wandb_table(batch[0], preds, targets)
         # add batches to metrics
@@ -196,17 +186,12 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def make_wandb_table(self, source, preds, targets, n_examples=8):
         # create a little wandb table with examples
-        table = wandb.Table(columns=["Source Before", "Source After", "Predicted", "Target"])
-
-        # find sequences before and after in source
-        end = torch.where(source == self._src_tokenizer.eos_token_id)[1][1::3]
-
+        table = wandb.Table(columns=["Source", "Predicted", "Target"])
+        decoded_source = self._src_tokenizer.batch_decode(source, skip_special_tokens=True, \
+                                                          clean_up_tokenization_spaces=False)
         for i in range(n_examples):
             try:
-                table.add_data(self._src_tokenizer.decode(source[i, :end[i] + 1], skip_special_tokens=True, \
-                                                          clean_up_tokenization_spaces=False),  # decode sequence before
-                               self._src_tokenizer.decode(source[i, end[i] + 1:], skip_special_tokens=True, \
-                                                          clean_up_tokenization_spaces=False),  # decode sequence after
+                table.add_data(decoded_source[i],
                                preds[i],
                                targets[i])
             except IndexError:
