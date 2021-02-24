@@ -53,7 +53,7 @@ class CMGDataModule(pl.LightningDataModule):
 
     def prepare_data(self):
         # called only on 1 GPU
-        if 'prev.txt' not in os.listdir(self.train_data_dir):
+        if 'new_diff.txt' not in os.listdir(self.train_data_dir):
             DiffPreprocessor.create_files(self.dataset_root)
 
     def setup(self, stage=None):
