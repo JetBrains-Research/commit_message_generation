@@ -10914,7 +10914,7 @@ Close the message logger so that the file is closed on windows
 set last used on shutdown 
 Updated travis file for Java 8 & to notify me as well . 
 Fix compiler warning 
- ' module ' object has no attribute ' SKIP ' 
+' module ' object has no attribute ' SKIP '
 Deploy sites with the version in the URL . 
 convert path in the constructor 
 delete unused constatns ; 
@@ -18539,7 +18539,7 @@ Fix issues with video on linux .
 Remove unused java_test target specific override for the java agent . 
 Reset version to 3 . 1 . 0 . CI - SNAPSHOT . 
 Copy premultipliedAlpha in copy constructor 
- @ Deprecated does not have effect in Groovy 
+@ Deprecated does not have effect in Groovy
 Upgrade Aalto - xml to 1 . 0 
 Always send ESC for backspace 
 Added openjdk6 to unit tests 
