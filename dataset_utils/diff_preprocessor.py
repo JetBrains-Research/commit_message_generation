@@ -128,7 +128,7 @@ class DiffPreprocessor:
 
     @staticmethod
     def create_files(ds_root_path: str):
-        for part in ['train', 'val', 'test']:
+        for part in ['train', 'test']:
             cur_path = os.path.join(ds_root_path, part)
             with open(os.path.join(cur_path, 'diff.txt')) as diff_file, \
                  open(os.path.join(cur_path, 'new_diff.txt'), 'w') as new_diff_file:

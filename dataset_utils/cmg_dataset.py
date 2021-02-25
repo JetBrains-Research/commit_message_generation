@@ -7,7 +7,6 @@ from transformers import RobertaTokenizer, GPT2Tokenizer
 
 def create_filter_predicate_on_code_and_msg(max_length_code, max_length_msg):
     """Create function to check length of diffs and target messages."""
-
     def filter_predicate(diff, trg):
         if len(diff) > max_length_code:
             return False, \
@@ -22,7 +21,6 @@ def create_filter_predicate_on_code_and_msg(max_length_code, max_length_msg):
 
 class CMGDataset(Dataset):
     """Defines a dataset_utils for commit message generation task as torch.utils.raw_data.Dataset"""
-
     def __init__(self, src_input_ids, src_attention_mask, trg_input_ids, trg_attention_mask):
         self.src_input_ids = src_input_ids
         self.src_attention_mask = src_attention_mask
@@ -74,13 +72,10 @@ if __name__ == "__main__":
 
     train_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'train'),
                                          diff_max_len=110, msg_max_len=30, verbose=True)
-    val_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'val'),
-                                       diff_max_len=110, msg_max_len=30, verbose=True)
     test_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'test'),
                                         diff_max_len=110, msg_max_len=30, verbose=True)
 
     print("Train:", len(train_dataset))
-    print("Val:", len(val_dataset))
     print("Test:", len(test_dataset))
 
     print("===Example===")
