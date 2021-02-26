@@ -22,22 +22,18 @@ def create_filter_predicate_on_code_and_msg(max_length_code, max_length_msg):
 
 class CMGDataset(Dataset):
     """Defines a dataset_utils for commit message generation task as torch.utils.raw_data.Dataset"""
-
-    def __init__(self, src_input_ids, src_attention_mask, trg_input_ids, trg_attention_mask):
-        self.src_input_ids = src_input_ids
-        self.src_attention_mask = src_attention_mask
-        self.trg_input_ids = trg_input_ids
-        self.trg_attention_mask = trg_attention_mask
+    def __init__(self, diff_input_ids, msg_input_ids):
+        self.diff_input_ids = diff_input_ids
+        self.msg_input_ids = msg_input_ids
 
     def __getitem__(self, idx):
-        return self.src_input_ids[idx], self.src_attention_mask[idx], \
-               self.trg_input_ids[idx], self.trg_attention_mask[idx]
+        return {"diff_input_ids": self.diff_input_ids[idx], "message_input_ids": self.msg_input_ids[idx]}
 
     def __len__(self):
-        return len(self.trg_input_ids)
+        return len(self.msg_input_ids)
 
     @staticmethod
-    def load_data(src_tokenizer: RobertaTokenizer, trg_tokenizer: GPT2Tokenizer, path: str, diff_max_len, msg_max_len,
+    def load_data(tokenizer: RobertaTokenizer, path: str, diff_max_len, msg_max_len,
                   verbose=False):
         filter_pred = create_filter_predicate_on_code_and_msg(diff_max_len, msg_max_len)
         new_diffs = []
@@ -59,24 +55,22 @@ class CMGDataset(Dataset):
                 new_diffs.append(new_diff_line)
                 msgs.append(msg_line)
 
-        new_diff_enc = src_tokenizer(new_diffs, truncation=True, padding=True,
-                                     return_tensors='pt', add_special_tokens=True)
-        msg_enc = trg_tokenizer(msgs, truncation=True, padding=True, return_tensors='pt')
+        new_diff_enc = tokenizer(new_diffs, add_special_tokens=True)
 
-        return CMGDataset(src_input_ids=new_diff_enc.input_ids,
-                          src_attention_mask=new_diff_enc.attention_mask,
-                          trg_input_ids=msg_enc.input_ids,
-                          trg_attention_mask=msg_enc.attention_mask)
+        msg_enc = tokenizer(msgs, add_special_tokens=True)
+
+        return CMGDataset(diff_input_ids=new_diff_enc.input_ids,
+                          msg_input_ids=msg_enc.input_ids)
 
 
 if __name__ == "__main__":
     tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")
 
-    train_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'train'),
+    train_dataset = CMGDataset.load_data(tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'train'),
                                          diff_max_len=110, msg_max_len=30, verbose=True)
-    val_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'val'),
+    val_dataset = CMGDataset.load_data(tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'val'),
                                        diff_max_len=110, msg_max_len=30, verbose=True)
-    test_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'test'),
+    test_dataset = CMGDataset.load_data(tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'test'),
                                         diff_max_len=110, msg_max_len=30, verbose=True)
 
     print("Train:", len(train_dataset))
@@ -84,13 +78,9 @@ if __name__ == "__main__":
     print("Test:", len(test_dataset))
 
     print("===Example===")
-    src_input_ids, src_attention_mask, trg_input_ids, trg_attention_mask = train_dataset[0]
+    src_input_ids, trg_input_ids = train_dataset[0]
     print("Source input ids")
     print(src_input_ids)
-    print("Source attention mask")
-    print(src_attention_mask)
     print("Target input ids")
     print(trg_input_ids)
-    print("Target attention mask")
-    print(trg_attention_mask)
     print()

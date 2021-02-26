@@ -2,75 +2,63 @@ import pytorch_lightning as pl
 
 import torch
 
-from transformers import EncoderDecoderModel, RobertaModel, RobertaConfig, GPT2LMHeadModel, GPT2Config, \
-    RobertaTokenizer, GPT2Tokenizer, AdamW, get_linear_schedule_with_warmup
+from transformers import RobertaForMaskedLM, RobertaTokenizer, AdamW, get_linear_schedule_with_warmup
 
 import wandb
 
 from datasets import load_metric
 
 import nltk
+
 nltk.download('wordnet')
 
 
-class EncoderDecoderModule(pl.LightningModule):
+def generate_step(out, gen_idx, temperature=None, top_k=0, sample=False):
+    """ Generate a word from from out[gen_idx]
+    Copied from
+
+    args:
+        - out (torch.Tensor): tensor of logits of size batch_size x seq_len x vocab_size
+        - gen_idx (int): location for which to generate for
+        - top_k (int): if >0, only sample from the top k most probable words
+        - sample (Bool): if True, sample from full distribution. Overridden by top_k
+    """
+    logits = out[:, gen_idx]
+
+    if temperature is not None:
+        logits = logits / temperature
+    if top_k > 0:
+        kth_vals, kth_idx = logits.topk(top_k, dim=-1)
+        dist = torch.distributions.categorical.Categorical(logits=kth_vals)
+        idx = kth_idx.gather(dim=1, index=dist.sample().unsqueeze(-1)).squeeze(-1)
+    elif sample:
+        dist = torch.distributions.categorical.Categorical(logits=logits)
+        idx = dist.sample().squeeze(-1)
+    else:
+        idx = torch.argmax(logits, dim=-1)
+
+    return idx
+
+
+class RobertaForMLMModule(pl.LightningModule):
     def __init__(self,
                  learning_rate: float,
                  encoder_name_or_path: str,
-                 decoder_name_or_path: str,
-                 unfreeze_encoder_after: int,
-                 freeze_encoder_after: int,
-                 num_layers_encoder: int,
-                 num_layers_decoder: int,
-                 src_tokenizer: RobertaTokenizer,
-                 trg_tokenizer: GPT2Tokenizer,
+                 tokenizer: RobertaTokenizer,
                  num_epochs: int,
                  num_batches: int,
                  **kwargs):
         super().__init__()
 
-        self._unfreeze_after = unfreeze_encoder_after
-        self._freeze_after = freeze_encoder_after
-        self.num_layers_encoder = num_layers_encoder
-        self.num_layers_decoder = num_layers_decoder
-        self._src_tokenizer = src_tokenizer
-        self._trg_tokenizer = trg_tokenizer
+        self._tokenizer = tokenizer
         self._num_epochs = num_epochs
         self._num_batches = num_batches
         self.learning_rate = learning_rate
 
         self.save_hyperparameters()
 
-        # use randomly initialized RoBERTa as encoder
-        encoder_config = RobertaConfig()
-        encoder_config.num_hidden_layers = self.num_layers_encoder
-        encoder = RobertaModel(config=encoder_config)
-        encoder.resize_token_embeddings(len(self._src_tokenizer))
-        # use randomly initialized GPT-2 as decoder
-        decoder_config = GPT2Config()
-        decoder_config.n_layer = self.num_layers_decoder
-        decoder_config.is_decoder = True
-        decoder_config.add_cross_attention = True
-        gpt = GPT2LMHeadModel(config=decoder_config)
-
-        self.model = EncoderDecoderModel(encoder=encoder, decoder=gpt)
-
-        # cache is currently not supported by EncoderDecoder framework
-        self.model.decoder.config.use_cache = False
-
-        # do not tie output embeddings to input embeddings
-        self.model.config.tie_word_embeddings = False
-
-        # set decoding params
-        self.model.config.decoder_start_token_id = self._trg_tokenizer.bos_token_id
-        self.model.config.bos_token_id = self._trg_tokenizer.bos_token_id
-        self.model.config.eos_token_id = self._trg_tokenizer.eos_token_id
-        self.model.config.pad_token_id = self._trg_tokenizer.pad_token_id
-        self.model.config.max_length = 30
-        self.model.config.min_length = 2
-        self.model.config.no_repeat_ngram_size = 4
-        self.model.config.early_stopping = True
-        self.model.config.num_beams = 4
+        # use CodeBERT
+        self.model = RobertaForMaskedLM.from_pretrained(encoder_name_or_path)
 
         print("\n====MODEL CONFIG====\n")
         print(self.model.config)
@@ -84,32 +72,42 @@ class EncoderDecoderModule(pl.LightningModule):
         self.examples_count = 0
 
     def forward(self, batch):
-        self.examples_count += len(batch[0])
-
-        # transformers assume pad indices to be -100
-        # gpt2 has no pad tokens so use attention mask
-        return self.model(input_ids=batch[0],
-                          attention_mask=batch[1],
-                          decoder_input_ids=batch[2],
-                          decoder_attention_mask=batch[3],
-                          labels=batch[2].where(batch[3].type(torch.ByteTensor).to(self.device),
-                                                torch.tensor(-100, device=self.device)))
+        self.examples_count += len(batch['input_ids'])
+        return self.model(input_ids=batch['input_ids'],
+                          attention_mask=batch['attention_mask'],
+                          labels=batch['labels'])
 
     def generate(self, batch):
-        return self.model.generate(input_ids=batch[0],
-                                   attention_mask=batch[1])
+        """ Generate one word at a time, in L->R order"""
+        max_len = batch['input_ids'].shape[1]
+        top_k = 0
+        temperature = None
+        sample = True
+
+        outputs = batch['input_ids'].detach().clone()
+
+        for i, input in enumerate(outputs):
+            eos_ids = torch.where(input == self._tokenizer.eos_token_id)[0]
+            seed_text = input[:(eos_ids[0] + 2)].tolist()  # diff is our seed_text, it ends with first [EOS] token
+            seed_len = len(seed_text)
+
+            outputs[i] = torch.tensor(seed_text + [self._tokenizer.mask_token_id] * (max_len - seed_len - 1) \
+                                      + [self._tokenizer.eos_token_id])
+
+            for iter in range(max_len - seed_len - 1):
+                inp = torch.tensor(outputs[i][:seed_len + iter].tolist() + [self._tokenizer.eos_token_id]).to(
+                    self.device)
+                out = self({'input_ids': inp.view(1, -1),
+                            'attention_mask': torch.ones_like(inp.view(1, -1)).to(self.device),
+                            'labels': None}).logits
+                idxs = generate_step(out, gen_idx=seed_len + iter, top_k=top_k, temperature=temperature, sample=sample)
+                outputs[i][seed_len + iter] = idxs
+        return outputs
 
     def training_step(self, batch, batch_idx):
         loss, logits = self(batch)[:2]
 
-        # log train examples on every 1000th batch in epoch
-        if self.global_step % 1000 == 0:
-            with torch.no_grad():
-                gen_sequence = self.generate(batch)
-                preds, targets = self.decode_preds_and_targets(gen_sequence, batch[2])
-                table = self.make_wandb_table(batch[0], preds, targets)
-        else:
-            table = None
+        table = None
 
         self.logger.experiment.log({"train_loss_step": loss}, step=self.examples_count)
         return {"loss": loss, "examples": table}
@@ -128,9 +126,9 @@ class EncoderDecoderModule(pl.LightningModule):
         # generate
         gen_sequence = self.generate(batch)
         # decode generated sequences and targets into strings
-        preds, targets = self.decode_preds_and_targets(gen_sequence, batch[2])
+        preds, targets = self.decode_preds_and_targets(gen_sequence, batch['target_input_ids'])
         # create a little table with examples
-        table = self.make_wandb_table(batch[0], preds, targets)
+        table = self.make_wandb_table(preds, targets)
         # add batches to metrics
         self.bleu.add_batch(predictions=[line.split() for line in preds],
                             references=[[line.split()] for line in targets])
@@ -140,6 +138,7 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def validation_epoch_end(self, outputs):
         val_loss_mean = torch.stack([x["val_loss"] for x in outputs]).mean()
+
         bleu = self.bleu.compute()
         rouge = self.rouge.compute()
         meteor = self.meteor.compute()
@@ -152,13 +151,12 @@ class EncoderDecoderModule(pl.LightningModule):
                                     "val_loss": val_loss_mean}, step=self.examples_count)
 
     def test_step(self, batch, batch_idx):
-        loss, logits = self(batch)[:2]
         # generate
         gen_sequence = self.generate(batch)
         # decode generated sequences and targets into strings
-        preds, targets = self.decode_preds_and_targets(gen_sequence, batch[2])
+        preds, targets = self.decode_preds_and_targets(gen_sequence, batch['target_input_ids'])
         # create a little table with examples
-        table = self.make_wandb_table(batch[0], preds, targets)
+        table = self.make_wandb_table(preds, targets)
         # add batches to metrics
         self.bleu.add_batch(predictions=[line.split() for line in preds],
                             references=[[line.split()] for line in targets])
@@ -177,26 +175,24 @@ class EncoderDecoderModule(pl.LightningModule):
                                     "test_rougeL": rouge["rougeL"].mid.fmeasure,
                                     "test_meteor": meteor["meteor"]}, step=self.examples_count)
 
-    def decode_preds_and_targets(self, generated, target):
-        # decoded preds and targets
-        targets = self._trg_tokenizer.batch_decode(target, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        preds = self._trg_tokenizer.batch_decode(generated, skip_special_tokens=True,
-                                                 clean_up_tokenization_spaces=False)
-        return preds, targets
+    def decode_preds_and_targets(self, preds, targets):
+        dec_targets = self._tokenizer.batch_decode(targets,
+                                                   skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        dec_preds = [self._tokenizer.decode(pred[torch.where(pred == self._tokenizer.eos_token_id)[0][0] + 1:],
+                                            skip_special_tokens=True, clean_up_tokenization_spaces=False)
+                     for pred in preds]
+        return dec_preds, dec_targets
 
-    def make_wandb_table(self, source, preds, targets, n_examples=8):
+    def make_wandb_table(self, preds, targets, n_examples=8):
         # create a little wandb table with examples
-        table = wandb.Table(columns=["Source", "Predicted", "Target"])
-        decoded_source = self._src_tokenizer.batch_decode(source, skip_special_tokens=True, \
-                                                          clean_up_tokenization_spaces=False)
+        table = wandb.Table(columns=["Predicted", "Target"])
+
         for i in range(n_examples):
             try:
-                table.add_data(decoded_source[i],
-                               preds[i],
+                table.add_data(preds[i],
                                targets[i])
             except IndexError:
                 break
-
         return table
 
     def configure_optimizers(self):

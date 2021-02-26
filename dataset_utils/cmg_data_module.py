@@ -11,6 +11,7 @@ from omegaconf import DictConfig
 
 from dataset_utils.cmg_dataset import CMGDataset
 from dataset_utils.diff_preprocessor import DiffPreprocessor
+from dataset_utils.data_collator_corrupt_messages import DataCollatorCorruptMessages
 
 
 class CMGDataModule(pl.LightningDataModule):
@@ -19,7 +20,6 @@ class CMGDataModule(pl.LightningDataModule):
                  diff_max_len: int,
                  msg_max_len: int,
                  encoder_name_or_path: str,
-                 decoder_name_or_path: str,
                  train_dataloader_conf: DictConfig,
                  val_dataloader_conf: DictConfig,
                  test_dataloader_conf: DictConfig):
@@ -38,18 +38,8 @@ class CMGDataModule(pl.LightningDataModule):
         self.val_dataloader_conf = val_dataloader_conf
         self.test_dataloader_conf = test_dataloader_conf
 
-        # make sure GPT2 appends EOS in begin and end
-        # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
-        def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-            outputs = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
-            return outputs
-
-        GPT2Tokenizer.build_inputs_with_special_tokens = build_inputs_with_special_tokens
-        self._src_tokenizer = RobertaTokenizer.from_pretrained(encoder_name_or_path)
-        self._trg_tokenizer = GPT2Tokenizer.from_pretrained(decoder_name_or_path)
-        # set pad_token_id to unk_token_id -> be careful here as unk_token_id == eos_token_id == bos_token_id
-        # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
-        self._trg_tokenizer.pad_token = self._trg_tokenizer.unk_token
+        self._tokenizer = RobertaTokenizer.from_pretrained(encoder_name_or_path)
+        self.data_collator = DataCollatorCorruptMessages(tokenizer=self._tokenizer)
 
     def prepare_data(self):
         # called only on 1 GPU
@@ -59,22 +49,22 @@ class CMGDataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # called on every GPU
         if stage == 'fit' or stage is None:
-            self.train = CMGDataset.load_data(self._src_tokenizer, self._trg_tokenizer, path=self.train_data_dir,
+            self.train = CMGDataset.load_data(self._tokenizer, path=self.train_data_dir,
                                               diff_max_len=self.diff_max_len,
                                               msg_max_len=self.msg_max_len)
-            self.val = CMGDataset.load_data(self._src_tokenizer, self._trg_tokenizer, path=self.val_data_dir,
+            self.val = CMGDataset.load_data(self._tokenizer, path=self.val_data_dir,
                                             diff_max_len=self.diff_max_len,
                                             msg_max_len=self.msg_max_len)
         if stage == 'test' or stage is None:
-            self.test = CMGDataset.load_data(self._src_tokenizer, self._trg_tokenizer, path=self.test_data_dir,
+            self.test = CMGDataset.load_data(self._tokenizer, path=self.test_data_dir,
                                              diff_max_len=self.diff_max_len,
                                              msg_max_len=self.msg_max_len)
 
     def train_dataloader(self):
-        return DataLoader(self.train, **self.train_dataloader_conf)
+        return DataLoader(self.train, collate_fn=self.data_collator, **self.train_dataloader_conf)
 
     def val_dataloader(self):
-        return DataLoader(self.val, **self.val_dataloader_conf)
+        return DataLoader(self.val, collate_fn=self.data_collator, **self.val_dataloader_conf)
 
     def test_dataloader(self):
-        return DataLoader(self.test, **self.test_dataloader_conf)
+        return DataLoader(self.test, collate_fn=self.data_collator, **self.test_dataloader_conf)
