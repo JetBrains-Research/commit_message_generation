@@ -38,13 +38,6 @@ class CMGDataModule(pl.LightningDataModule):
 
         self.with_history = with_history
 
-        # make sure GPT2 appends EOS in begin and end
-        # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
-        def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-            outputs = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
-            return outputs
-
-        GPT2Tokenizer.build_inputs_with_special_tokens = build_inputs_with_special_tokens
         self._src_tokenizer = RobertaTokenizer.from_pretrained(encoder_name_or_path)
         self._trg_tokenizer = GPT2Tokenizer.from_pretrained(decoder_name_or_path)
         # set pad_token_id to unk_token_id -> be careful here as unk_token_id == eos_token_id == bos_token_id

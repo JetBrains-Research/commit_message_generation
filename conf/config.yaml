@@ -14,7 +14,7 @@ dataset:
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: test completion
+  name: decoder completion (no special tokens)
   project: commit_message_generation
 model:
   decoder_name_or_path: distilgpt2
