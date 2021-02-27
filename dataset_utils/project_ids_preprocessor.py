@@ -11,7 +11,7 @@ class ProjectIdsPreprocessor:
         ids_to_msgs = defaultdict(list)
         for id, msg in zip(ids, msgs):
             id, msg = id.strip(), msg.strip()
-            ids_to_msgs[id].append(msg)
+            ids_to_msgs[id].append(msg + ' \n ')
         return ids_to_msgs
 
     @staticmethod
