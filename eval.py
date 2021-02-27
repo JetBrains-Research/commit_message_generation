@@ -25,7 +25,7 @@ def main(cfg: DictConfig) -> None:
     if 'ckpt_path' in cfg:
         PATH = os.path.join(hydra.utils.get_original_cwd(), cfg.ckpt_path)
         print("Checkpoint path\n", PATH, '\n')
-        model = EncoderDecoderModule.load_from_checkpoint(PATH)
+        model = EncoderDecoderModule.load_from_checkpoint(PATH, actual_generation=cfg.model.actual_generation)
     else:
         model = GPT2LMHeadModule(**cfg.model, tokenizer=dm._trg_tokenizer)
 
