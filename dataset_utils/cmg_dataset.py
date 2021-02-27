@@ -1,12 +1,13 @@
 import os
 import sys
 
-from torch.utils.data import Dataset, Subset
+from torch.utils.data import Dataset
 from transformers import RobertaTokenizer, GPT2Tokenizer
 
 
 def create_filter_predicate_on_code_and_msg(max_length_code, max_length_msg):
     """Create function to check length of diffs and target messages."""
+
     def filter_predicate(diff, trg):
         if len(diff) > max_length_code:
             return False, \
@@ -21,18 +22,18 @@ def create_filter_predicate_on_code_and_msg(max_length_code, max_length_msg):
 
 class CMGDataset(Dataset):
     """Defines a dataset_utils for commit message generation task as torch.utils.raw_data.Dataset"""
-    def __init__(self, src_input_ids, src_attention_mask, trg_input_ids, trg_attention_mask):
-        self.src_input_ids = src_input_ids
-        self.src_attention_mask = src_attention_mask
-        self.trg_input_ids = trg_input_ids
-        self.trg_attention_mask = trg_attention_mask
+    def __init__(self, diff_input_ids, diff_attention_mask, msg_input_ids_unprocessed):
+        self.diff_input_ids = diff_input_ids
+        self.diff_attention_mask = diff_attention_mask
+        self.msg_input_ids_unprocessed = msg_input_ids_unprocessed
 
     def __getitem__(self, idx):
-        return self.src_input_ids[idx], self.src_attention_mask[idx], \
-               self.trg_input_ids[idx], self.trg_attention_mask[idx]
+        return {"diff_input_ids": self.diff_input_ids[idx],                        # tensor
+                "diff_attention_mask": self.diff_attention_mask[idx],              # tensor
+                "msg_input_ids_unprocessed": self.msg_input_ids_unprocessed[idx]}  # list of lists
 
     def __len__(self):
-        return len(self.trg_input_ids)
+        return len(self.diff_input_ids)
 
     @staticmethod
     def load_data(src_tokenizer: RobertaTokenizer, trg_tokenizer: GPT2Tokenizer, path: str, diff_max_len, msg_max_len,
@@ -59,12 +60,11 @@ class CMGDataset(Dataset):
 
         new_diff_enc = src_tokenizer(new_diffs, truncation=True, padding=True,
                                      return_tensors='pt', add_special_tokens=True)
-        msg_enc = trg_tokenizer(msgs, truncation=True, padding=True, return_tensors='pt')
+        msg_enc_unprocessed = trg_tokenizer(msgs)
 
-        return CMGDataset(src_input_ids=new_diff_enc.input_ids,
-                          src_attention_mask=new_diff_enc.attention_mask,
-                          trg_input_ids=msg_enc.input_ids,
-                          trg_attention_mask=msg_enc.attention_mask)
+        return CMGDataset(diff_input_ids=new_diff_enc.input_ids,
+                          diff_attention_mask=new_diff_enc.attention_mask,
+                          msg_input_ids_unprocessed=msg_enc_unprocessed.input_ids)
 
 
 if __name__ == "__main__":
@@ -78,14 +78,3 @@ if __name__ == "__main__":
     print("Train:", len(train_dataset))
     print("Test:", len(test_dataset))
 
-    print("===Example===")
-    src_input_ids, src_attention_mask, trg_input_ids, trg_attention_mask = train_dataset[0]
-    print("Source input ids")
-    print(src_input_ids)
-    print("Source attention mask")
-    print(src_attention_mask)
-    print("Target input ids")
-    print(trg_input_ids)
-    print("Target attention mask")
-    print(trg_attention_mask)
-    print()

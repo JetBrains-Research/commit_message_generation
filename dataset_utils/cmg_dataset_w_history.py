@@ -1,9 +1,8 @@
 import os
 import sys
 import json
-from typing import List, Dict, Tuple
+from typing import List, Dict
 
-import torch
 from torch.utils.data import Dataset
 from transformers import GPT2Tokenizer
 
@@ -32,49 +31,14 @@ class CMGDatasetWithHistory(Dataset):
         self.trg_input_ids = trg_input_ids
         self.trg_project_ids = trg_project_ids
         self.ids_to_msgs = ids_to_msgs
-        # all tensors in dataset will have this sequence length
-        self.max_len = 1024  # max gpt-2 input length - not optimal in terms of memory, choose some number myself?
-
-    def construct_tensor_from_example_and_history(self,
-                                                  trg_input_ids: List[int],
-                                                  trg_history: List[List[int]],
-                                                  pad_token_id: int = 50256) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Helper function.
-        Concatenate trg_input_ids to trg_history, pad all examples to max_length and convert to torch.Tensor
-        """
-
-        # concatenate history examples with current input ids (checking that resulting length is <= max_len)
-        ids = [trg_input_ids]
-        labels = [trg_input_ids]
-        cur_len = len(trg_input_ids)
-        for history_input_ids in trg_history[::-1]:
-            if cur_len + len(history_input_ids) > self.max_len:
-                break
-            cur_len += len(history_input_ids)
-            ids.insert(0, history_input_ids)
-            labels.insert(0, [-100 for _ in history_input_ids])
-
-        # flatten everything into one sequence of ids and convert to tensor of torch.int
-        ids = torch.tensor([ex for sublist in ids for ex in sublist], dtype=torch.int64)
-        labels = torch.tensor([ex for sublist in labels for ex in sublist], dtype=torch.int64)
-        # create ones for attention mask
-        mask = torch.ones_like(ids)
-
-        # pad ids with pad_token_id (which doesn't really matter) and mask with zeros
-        ids = torch.nn.functional.pad(ids, pad=(0, self.max_len - ids.numel()), mode='constant', value=pad_token_id)
-        labels = torch.nn.functional.pad(labels, pad=(0, self.max_len - labels.numel()), mode='constant', value=-100)
-        mask = torch.nn.functional.pad(mask, pad=(0, self.max_len - mask.numel()), mode='constant', value=0)
-
-        return ids, mask, labels
 
     def __getitem__(self, idx):
         try:
             msgs = self.ids_to_msgs[self.trg_project_ids[idx]]
         except KeyError:  # there are no train examples for some test repos =(
             msgs = []
-        return self.construct_tensor_from_example_and_history(self.trg_input_ids[idx],
-                                                              msgs)
+        return {"message_input_ids": self.trg_input_ids[idx],
+                "history_input_ids": msgs}
 
     def __len__(self):
         return len(self.trg_input_ids)
@@ -105,7 +69,7 @@ class CMGDatasetWithHistory(Dataset):
                 project_ids.append(proj_id_line)
                 msgs.append(msg_line)
 
-        trg_input_ids = msg_tokenizer(msgs, add_special_tokens=True).input_ids
+        trg_input_ids = msg_tokenizer(msgs).input_ids
 
         # load dict {repo id: all messages from train from this repo (as strings)}
         with open(os.path.join(path, 'train/ids_to_msg.json'), mode='r', encoding='utf-8') as json_file:
@@ -113,7 +77,7 @@ class CMGDatasetWithHistory(Dataset):
 
         # encode messages so dict becomes {repo id: all messages from train from this repo (as lists of tokens)}
         for repo_id in ids_to_msgs:
-            ids_to_msgs[repo_id] = msg_tokenizer(ids_to_msgs[repo_id], add_special_tokens=True).input_ids
+            ids_to_msgs[repo_id] = msg_tokenizer(ids_to_msgs[repo_id]).input_ids
 
         return CMGDatasetWithHistory(trg_input_ids=trg_input_ids,
                                      trg_project_ids=project_ids,
@@ -126,11 +90,14 @@ if __name__ == "__main__":
                                                    diff_max_len=110, msg_max_len=30, verbose=True)
 
     print("Test:", len(test_dataset))
+
     print("===Example===")
-    trg_input_ids, trg_attention_mask, trg_labels = test_dataset[0]
-    print("Target input ids")
-    print(trg_input_ids)
-    print("Target attention mask")
-    print(trg_attention_mask)
-    print("Labels")
-    print(trg_labels)
+    input = test_dataset[1]
+
+    print("Current message input ids")
+    print(input['message_input_ids'])
+    print(tokenizer.decode(input['message_input_ids']))
+
+    print("Current history input ids")
+    print(input['history_input_ids'])
+    print(tokenizer.batch_decode(input['history_input_ids']))

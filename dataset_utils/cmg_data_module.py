@@ -12,6 +12,9 @@ from omegaconf import DictConfig
 from dataset_utils.cmg_dataset import CMGDataset
 from dataset_utils.cmg_dataset_w_history import CMGDatasetWithHistory
 
+from dataset_utils.data_collator_w_history import DataCollatorWithHistory
+from dataset_utils.data_collator import DataCollator
+
 
 class CMGDataModule(pl.LightningDataModule):
     def __init__(self,
@@ -44,6 +47,18 @@ class CMGDataModule(pl.LightningDataModule):
         # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
         self._trg_tokenizer.pad_token = self._trg_tokenizer.unk_token
 
+        if self.with_history:
+            self.data_collator = DataCollatorWithHistory(tokenizer=self._trg_tokenizer, max_len=1024)
+        else:
+            # make sure GPT2 appends EOS in begin and end
+            # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
+            def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+                outputs = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
+                return outputs
+
+            GPT2Tokenizer.build_inputs_with_special_tokens = build_inputs_with_special_tokens
+            self.data_collator = DataCollator(tokenizer=self._trg_tokenizer)
+
     def setup(self, stage=None):
         # called on every GPU
         if self.with_history:
@@ -65,4 +80,4 @@ class CMGDataModule(pl.LightningDataModule):
         return DataLoader(self.train, **self.train_dataloader_conf)
 
     def test_dataloader(self):
-        return DataLoader(self.test, **self.test_dataloader_conf)
+        return DataLoader(self.test, **self.test_dataloader_conf, collate_fn=self.data_collator)
