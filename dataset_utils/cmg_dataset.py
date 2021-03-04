@@ -22,14 +22,15 @@ def create_filter_predicate_on_code_and_msg(max_length_code, max_length_msg):
 
 class CMGDataset(Dataset):
     """Defines a dataset_utils for commit message generation task as torch.utils.raw_data.Dataset"""
+
     def __init__(self, diff_input_ids, diff_attention_mask, msg_input_ids_unprocessed):
         self.diff_input_ids = diff_input_ids
         self.diff_attention_mask = diff_attention_mask
         self.msg_input_ids_unprocessed = msg_input_ids_unprocessed
 
     def __getitem__(self, idx):
-        return {"diff_input_ids": self.diff_input_ids[idx],                        # tensor
-                "diff_attention_mask": self.diff_attention_mask[idx],              # tensor
+        return {"diff_input_ids": self.diff_input_ids[idx],  # tensor
+                "diff_attention_mask": self.diff_attention_mask[idx],  # tensor
                 "msg_input_ids_unprocessed": self.msg_input_ids_unprocessed[idx]}  # list of lists
 
     def __len__(self):
@@ -39,14 +40,14 @@ class CMGDataset(Dataset):
     def load_data(src_tokenizer: RobertaTokenizer, trg_tokenizer: GPT2Tokenizer, path: str, diff_max_len, msg_max_len,
                   verbose=False):
         filter_pred = create_filter_predicate_on_code_and_msg(diff_max_len, msg_max_len)
-        new_diffs = []
+
+        diffs = []
         msgs = []
 
         with open(os.path.join(path, 'diff.txt'), mode='r', encoding='utf-8') as diff, \
-                open(os.path.join(path, 'msg.txt'), mode='r', encoding='utf-8') as msg, \
-                open(os.path.join(path, 'new_diff.txt'), mode='r', encoding='utf-8') as new_diff:
-            for diff_line, msg_line, new_diff_line in zip(diff, msg, new_diff):
-                diff_line, msg_line, new_diff_line = diff_line.strip(), msg_line.strip(), new_diff_line.strip()
+                open(os.path.join(path, 'msg.txt'), mode='r', encoding='utf-8') as msg:
+            for diff_line, msg_line in zip(diff, msg):
+                diff_line, msg_line = diff_line.strip(), msg_line.strip()
 
                 is_correct, error = filter_pred(diff_line.split(' '), msg_line.split(' '))
 
@@ -55,26 +56,25 @@ class CMGDataset(Dataset):
                         print(f'Incorrect example is seen. Error: {error}', file=sys.stderr)
                     continue
 
-                new_diffs.append(new_diff_line)
+                diffs.append(diff_line)
                 msgs.append(msg_line)
 
-        new_diff_enc = src_tokenizer(new_diffs, truncation=True, padding=True,
-                                     return_tensors='pt', add_special_tokens=True)
+        diff_enc = src_tokenizer(diffs, truncation=True, padding=True,
+                                 return_tensors='pt', add_special_tokens=True)
         msg_enc_unprocessed = trg_tokenizer(msgs)
 
-        return CMGDataset(diff_input_ids=new_diff_enc.input_ids,
-                          diff_attention_mask=new_diff_enc.attention_mask,
+        return CMGDataset(diff_input_ids=diff_enc.input_ids,
+                          diff_attention_mask=diff_enc.attention_mask,
                           msg_input_ids_unprocessed=msg_enc_unprocessed.input_ids)
 
 
 if __name__ == "__main__":
     tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")
 
-    train_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'train'),
+    train_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/github_data', 'train'),
                                          diff_max_len=110, msg_max_len=30, verbose=True)
-    test_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'test'),
+    test_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/github_data', 'test'),
                                         diff_max_len=110, msg_max_len=30, verbose=True)
 
     print("Train:", len(train_dataset))
     print("Test:", len(test_dataset))
-

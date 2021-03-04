@@ -131,7 +131,7 @@ if __name__ == '__main__':
 
     tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
 
-    test_dataset = CMGDatasetWithHistory.load_data(tokenizer, path='../raw_data/CleanedJiang',
+    test_dataset = CMGDatasetWithHistory.load_data(tokenizer, path='../raw_data/github_data',
                                                    diff_max_len=110, msg_max_len=30, verbose=True)
 
     data_collator = DataCollatorWithHistory(tokenizer=tokenizer, max_len=1024)

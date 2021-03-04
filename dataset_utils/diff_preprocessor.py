@@ -137,5 +137,5 @@ class DiffPreprocessor:
 
 
 if __name__ == "__main__":
-    dataset_path = '../raw_data/CleanedJiang/'
+    dataset_path = '../raw_data/github_data/'
     DiffPreprocessor.create_files(dataset_path)

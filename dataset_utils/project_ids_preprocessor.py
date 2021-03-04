@@ -17,13 +17,13 @@ class ProjectIdsPreprocessor:
     @staticmethod
     def create_file(ds_root_path: str):
         cur_path = os.path.join(ds_root_path, 'train')
-        with open(os.path.join(cur_path, 'projectIds.txt')) as proj_ids_file, \
-                open(os.path.join(cur_path, 'msg.txt')) as msg_file, \
-                open(os.path.join(cur_path, 'ids_to_msg.json'), 'w') as target_file:
+        with open(os.path.join(cur_path, 'projectIds.txt'), encoding='utf-8') as proj_ids_file, \
+                open(os.path.join(cur_path, 'msg.txt'), encoding='utf-8') as msg_file, \
+                open(os.path.join(cur_path, 'ids_to_msg.json'), 'w', encoding='utf-8') as target_file:
             ids_to_msgs = ProjectIdsPreprocessor.map_ids_to_msgs(proj_ids_file.readlines(), msg_file.readlines())
             json.dump(ids_to_msgs, target_file)
 
 
 if __name__ == '__main__':
-    dataset_path = '../raw_data/CleanedJiang/'
+    dataset_path = '../raw_data/github_data/'
     ProjectIdsPreprocessor.create_file(dataset_path)

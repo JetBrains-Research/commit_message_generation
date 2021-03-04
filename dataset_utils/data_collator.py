@@ -125,7 +125,7 @@ if __name__ == '__main__':
     trg_tokenizer.pad_token = trg_tokenizer.unk_token
 
     test_dataset = CMGDataset.load_data(src_tokenizer, trg_tokenizer,
-                                        path=os.path.join('../raw_data/CleanedJiang', 'test'),
+                                        path=os.path.join('../raw_data/github_data', 'test'),
                                         diff_max_len=110, msg_max_len=30, verbose=True)
 
     data_collator = DataCollator(tokenizer=trg_tokenizer)
