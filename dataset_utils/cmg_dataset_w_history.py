@@ -69,7 +69,7 @@ class CMGDatasetWithHistory(Dataset):
                 project_ids.append(proj_id_line)
                 msgs.append(msg_line)
 
-        trg_input_ids = msg_tokenizer(msgs).input_ids
+        trg_input_ids = msg_tokenizer(msgs, truncation=True).input_ids
 
         # load dict {repo id: all messages from train from this repo (as strings)}
         with open(os.path.join(path, 'train/ids_to_msg.json'), mode='r', encoding='utf-8') as json_file:
@@ -77,7 +77,7 @@ class CMGDatasetWithHistory(Dataset):
 
         # encode messages so dict becomes {repo id: all messages from train from this repo (as lists of tokens)}
         for repo_id in ids_to_msgs:
-            ids_to_msgs[repo_id] = msg_tokenizer(ids_to_msgs[repo_id]).input_ids
+            ids_to_msgs[repo_id] = msg_tokenizer(ids_to_msgs[repo_id], truncation=True).input_ids
 
         return CMGDatasetWithHistory(trg_input_ids=trg_input_ids,
                                      trg_project_ids=project_ids,

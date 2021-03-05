@@ -61,7 +61,7 @@ class CMGDataset(Dataset):
 
         diff_enc = src_tokenizer(diffs, truncation=True, padding=True,
                                  return_tensors='pt', add_special_tokens=True)
-        msg_enc_unprocessed = trg_tokenizer(msgs)
+        msg_enc_unprocessed = trg_tokenizer(msgs, truncation=True)
 
         return CMGDataset(diff_input_ids=diff_enc.input_ids,
                           diff_attention_mask=diff_enc.attention_mask,

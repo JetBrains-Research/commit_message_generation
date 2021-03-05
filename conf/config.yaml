@@ -4,7 +4,7 @@ dataset:
   msg_max_len: 512
   encoder_name_or_path: microsoft/codebert-base
   decoder_name_or_path: distilgpt2
-  with_history: true
+  with_history: false
   train_dataloader_conf:
     batch_size: 8
     shuffle: true
@@ -14,13 +14,14 @@ dataset:
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: decoder completion (generation)
+  name: test truncation encoder decoder completion
   project: commit_message_generation
 model:
   decoder_name_or_path: distilgpt2
-  actual_generation: true
+  actual_generation: false
 trainer:
   gpus: 1
   max_epochs: 40
   num_sanity_val_steps: 2
   accumulate_grad_batches: 1
+ckpt_path: outputs/2021-02-18/09-51-21/commit_message_generation/etyorau1/checkpoints/epoch=39-step=110559.ckpt
