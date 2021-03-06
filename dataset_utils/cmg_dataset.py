@@ -22,32 +22,32 @@ def create_filter_predicate_on_code_and_msg(max_length_code, max_length_msg):
 
 class CMGDataset(Dataset):
     """Defines a dataset_utils for commit message generation task as torch.utils.raw_data.Dataset"""
-
-    def __init__(self, src_input_ids, src_attention_mask, trg_input_ids, trg_attention_mask):
-        self.src_input_ids = src_input_ids
-        self.src_attention_mask = src_attention_mask
-        self.trg_input_ids = trg_input_ids
-        self.trg_attention_mask = trg_attention_mask
+    def __init__(self, diff_input_ids, diff_attention_mask, msg_input_ids, msg_attention_mask):
+        self.diff_input_ids = diff_input_ids
+        self.diff_attention_mask = diff_attention_mask
+        self.msg_input_ids = msg_input_ids
+        self.msg_attention_mask = msg_attention_mask
 
     def __getitem__(self, idx):
-        return self.src_input_ids[idx], self.src_attention_mask[idx], \
-               self.trg_input_ids[idx], self.trg_attention_mask[idx]
+        return {"diff_input_ids": self.diff_input_ids[idx],
+                "diff_attention_mask": self.diff_attention_mask[idx],
+                "msg_input_ids": self.msg_input_ids[idx],
+                "msg_attention_mask": self.msg_attention_mask[idx]}
 
     def __len__(self):
-        return len(self.trg_input_ids)
+        return len(self.diff_input_ids)
 
     @staticmethod
     def load_data(src_tokenizer: RobertaTokenizer, trg_tokenizer: GPT2Tokenizer, path: str, diff_max_len, msg_max_len,
                   verbose=False):
         filter_pred = create_filter_predicate_on_code_and_msg(diff_max_len, msg_max_len)
-        new_diffs = []
+        diffs = []
         msgs = []
 
         with open(os.path.join(path, 'diff.txt'), mode='r', encoding='utf-8') as diff, \
-                open(os.path.join(path, 'msg.txt'), mode='r', encoding='utf-8') as msg, \
-                open(os.path.join(path, 'new_diff.txt'), mode='r', encoding='utf-8') as new_diff:
-            for diff_line, msg_line, new_diff_line in zip(diff, msg, new_diff):
-                diff_line, msg_line, new_diff_line = diff_line.strip(), msg_line.strip(), new_diff_line.strip()
+                open(os.path.join(path, 'msg.txt'), mode='r', encoding='utf-8') as msg:
+            for diff_line, msg_line in zip(diff, msg):
+                diff_line, msg_line = diff_line.strip(), msg_line.strip()
 
                 is_correct, error = filter_pred(diff_line.split(' '), msg_line.split(' '))
 
@@ -56,17 +56,17 @@ class CMGDataset(Dataset):
                         print(f'Incorrect example is seen. Error: {error}', file=sys.stderr)
                     continue
 
-                new_diffs.append(new_diff_line)
+                diffs.append(diff_line)
                 msgs.append(msg_line)
 
-        new_diff_enc = src_tokenizer(new_diffs, truncation=True, padding=True,
+        new_diff_enc = src_tokenizer(diffs, truncation=True, padding=True,
                                      return_tensors='pt', add_special_tokens=True)
         msg_enc = trg_tokenizer(msgs, truncation=True, padding=True, return_tensors='pt')
 
-        return CMGDataset(src_input_ids=new_diff_enc.input_ids,
-                          src_attention_mask=new_diff_enc.attention_mask,
-                          trg_input_ids=msg_enc.input_ids,
-                          trg_attention_mask=msg_enc.attention_mask)
+        return CMGDataset(diff_input_ids=new_diff_enc.input_ids,
+                          diff_attention_mask=new_diff_enc.attention_mask,
+                          msg_input_ids=msg_enc.input_ids,
+                          msg_attention_mask=msg_enc.attention_mask)
 
 
 if __name__ == "__main__":
@@ -75,7 +75,7 @@ if __name__ == "__main__":
     train_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'train'),
                                          diff_max_len=110, msg_max_len=30, verbose=True)
     val_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'val'),
-                                       diff_max_len=110, msg_max_len=30, verbose=True)
+                                       diff_max_len=512, msg_max_len=512, verbose=True)
     test_dataset = CMGDataset.load_data(tokenizer, tokenizer, path=os.path.join('../raw_data/CleanedJiang', 'test'),
                                         diff_max_len=110, msg_max_len=30, verbose=True)
 
@@ -84,13 +84,13 @@ if __name__ == "__main__":
     print("Test:", len(test_dataset))
 
     print("===Example===")
-    src_input_ids, src_attention_mask, trg_input_ids, trg_attention_mask = train_dataset[0]
+    example = train_dataset[0]
     print("Source input ids")
-    print(src_input_ids)
+    print(example['diff_input_ids'])
     print("Source attention mask")
-    print(src_attention_mask)
+    print(example['diff_attention_mask'])
     print("Target input ids")
-    print(trg_input_ids)
+    print(example['msg_input_ids'])
     print("Target attention mask")
-    print(trg_attention_mask)
+    print(example['msg_attention_mask'])
     print()

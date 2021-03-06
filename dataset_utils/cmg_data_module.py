@@ -63,8 +63,8 @@ class CMGDataModule(pl.LightningDataModule):
                                               diff_max_len=self.diff_max_len,
                                               msg_max_len=self.msg_max_len)
             self.val = CMGDataset.load_data(self._src_tokenizer, self._trg_tokenizer, path=self.val_data_dir,
-                                            diff_max_len=self.diff_max_len,
-                                            msg_max_len=self.msg_max_len)
+                                            diff_max_len=512,
+                                            msg_max_len=512)
         if stage == 'test' or stage is None:
             self.test = CMGDataset.load_data(self._src_tokenizer, self._trg_tokenizer, path=self.test_data_dir,
                                              diff_max_len=self.diff_max_len,
