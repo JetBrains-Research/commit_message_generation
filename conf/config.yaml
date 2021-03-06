@@ -16,16 +16,16 @@ dataset:
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: codebert+distilgpt-2 validation on completion
+  name: codebert+distilgpt-2 old freezing strategy
   project: commit_message_generation
 model:
   learning_rate: 1e-4
   encoder_name_or_path: microsoft/codebert-base
   decoder_name_or_path: distilgpt2
-  unfreeze_after: 5
+  unfreeze_encoder_after: 4
+  freeze_encoder_after: 2
 trainer:
   gpus: 1
-  max_epochs: 40
+  max_epochs: 10
   num_sanity_val_steps: 2
   accumulate_grad_batches: 1
-ckpt_path: outputs/2021-03-05/18-58-32/checkpoint/epoch=4-step=13819.ckpt

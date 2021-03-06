@@ -29,15 +29,11 @@ def main(cfg: DictConfig) -> None:
                                            num_epochs=cfg.trainer.max_epochs,
                                            num_batches=len(dm.train_dataloader()) + len(dm.val_dataloader()))
 
-    # freeze encoder and decoder
-    for param in encoder_decoder.model.parameters():
+    # freeze codebert
+    for param in encoder_decoder.model.encoder.parameters():
         param.requires_grad = False
-    # unfreeze cross-attention layers
-    for layer in encoder_decoder.model.decoder.transformer.h:
-        for param in layer.crossattention.parameters():
-            param.requires_grad = True
-    # unfreeze lm head
-    for param in encoder_decoder.model.decoder.lm_head.parameters():
+    # unfreeze embeddings
+    for param in encoder_decoder.model.encoder.embeddings.parameters():
         param.requires_grad = True
 
     trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
@@ -51,9 +47,9 @@ def main(cfg: DictConfig) -> None:
         monitor='val_MRR_top5',
         mode='max'
     )
-    PATH = os.path.join(hydra.utils.get_original_cwd(), cfg.ckpt_path)
-    trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger, callbacks=[lr_logger, checkpoint_callback],
-                         resume_from_checkpoint=PATH)
+
+    trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger, callbacks=[lr_logger, checkpoint_callback])
+
     # -----------------------
     #         train         -
     # -----------------------

@@ -62,9 +62,14 @@ class CMGDataModule(pl.LightningDataModule):
             self.train = CMGDataset.load_data(self._src_tokenizer, self._trg_tokenizer, path=self.train_data_dir,
                                               diff_max_len=self.diff_max_len,
                                               msg_max_len=self.msg_max_len)
-            self.val = CMGDataset.load_data(self._src_tokenizer, self._trg_tokenizer, path=self.val_data_dir,
-                                            diff_max_len=512,
-                                            msg_max_len=512)
+
+            self.val_jiang = CMGDataset.load_data(self._src_tokenizer, self._trg_tokenizer, path=self.val_data_dir,
+                                                  diff_max_len=self.diff_max_len,
+                                                  msg_max_len=self.msg_max_len)
+            self.val_github = CMGDataset.load_data(self._src_tokenizer, self._trg_tokenizer,
+                                                   path=f"{hydra.utils.to_absolute_path('raw_data')}/github_data/val",
+                                                   diff_max_len=512,
+                                                   msg_max_len=512)
         if stage == 'test' or stage is None:
             self.test = CMGDataset.load_data(self._src_tokenizer, self._trg_tokenizer, path=self.test_data_dir,
                                              diff_max_len=self.diff_max_len,
@@ -74,7 +79,8 @@ class CMGDataModule(pl.LightningDataModule):
         return DataLoader(self.train, **self.train_dataloader_conf)
 
     def val_dataloader(self):
-        return DataLoader(self.val, **self.val_dataloader_conf)
+        return [DataLoader(self.val_jiang, **self.val_dataloader_conf),
+                DataLoader(self.val_github, **self.val_dataloader_conf)]
 
     def test_dataloader(self):
         return DataLoader(self.test, **self.test_dataloader_conf)
