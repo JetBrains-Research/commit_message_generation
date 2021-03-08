@@ -20,35 +20,21 @@ nltk.download('wordnet')
 
 class EncoderDecoderModule(pl.LightningModule):
     def __init__(self,
-                 num_layers_encoder: int,
-                 num_layers_decoder: int,
+                 encoder_name_or_path: str,
+                 decoder_name_or_path: str,
                  actual_generation: bool,
                  src_tokenizer: RobertaTokenizer,
                  trg_tokenizer: GPT2Tokenizer,
                  **kwargs):
         super().__init__()
 
-        self.num_layers_encoder = num_layers_encoder
-        self.num_layers_decoder = num_layers_decoder
         self.actual_generation = actual_generation
         self._src_tokenizer = src_tokenizer
         self._trg_tokenizer = trg_tokenizer
         self.save_hyperparameters()
 
-        # use randomly initialized RoBERTa as encoder
-        encoder_config = RobertaConfig()
-        encoder_config.num_hidden_layers = self.num_layers_encoder
-        encoder = RobertaModel(config=encoder_config)
-        encoder.resize_token_embeddings(len(self._src_tokenizer))
-
-        # use randomly initialized GPT-2 as decoder
-        decoder_config = GPT2Config()
-        decoder_config.n_layer = self.num_layers_decoder
-        decoder_config.is_decoder = True
-        decoder_config.add_cross_attention = True
-        gpt = GPT2LMHeadModel(config=decoder_config)
-
-        self.model = EncoderDecoderModel(encoder=encoder, decoder=gpt)
+        # use CodeBERT2distilGPT2
+        self.model = EncoderDecoderModel.from_encoder_decoder_pretrained(encoder_name_or_path, decoder_name_or_path)
 
         # cache is currently not supported by EncoderDecoder framework
         self.model.decoder.config.use_cache = False
