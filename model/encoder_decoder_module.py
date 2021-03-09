@@ -6,7 +6,8 @@ import wandb
 
 import torch
 import pytorch_lightning as pl
-from transformers import EncoderDecoderModel, RobertaTokenizer, GPT2Tokenizer, AdamW, get_linear_schedule_with_warmup
+from transformers import EncoderDecoderModel, RobertaModel, RobertaConfig, GPT2LMHeadModel, GPT2Config, \
+    RobertaTokenizer, GPT2Tokenizer, AdamW, get_linear_schedule_with_warmup
 
 from metrics import accuracy_MRR
 from datasets import load_metric
@@ -18,10 +19,8 @@ nltk.download('wordnet')
 class EncoderDecoderModule(pl.LightningModule):
     def __init__(self,
                  learning_rate: float,
-                 encoder_name_or_path: str,
-                 decoder_name_or_path: str,
-                 unfreeze_encoder_after: int,
-                 freeze_encoder_after: int,
+                 num_layers_encoder: int,
+                 num_layers_decoder: int,
                  src_tokenizer: RobertaTokenizer,
                  trg_tokenizer: GPT2Tokenizer,
                  num_epochs: int,
@@ -29,8 +28,6 @@ class EncoderDecoderModule(pl.LightningModule):
                  **kwargs):
         super().__init__()
 
-        self._unfreeze_after = unfreeze_encoder_after
-        self._freeze_after = freeze_encoder_after
         self._src_tokenizer = src_tokenizer
         self._trg_tokenizer = trg_tokenizer
         self._num_epochs = num_epochs
@@ -39,8 +36,22 @@ class EncoderDecoderModule(pl.LightningModule):
 
         self.save_hyperparameters()
 
-        # use CodeBERTa as encoder and distilGTP-2 as decoder
-        self.model = EncoderDecoderModel.from_encoder_decoder_pretrained(encoder_name_or_path, decoder_name_or_path)
+        # use randomly initialized RoBERTa as encoder
+        encoder_config = RobertaConfig()
+        encoder_config.num_hidden_layers = num_layers_encoder
+        encoder = RobertaModel(config=encoder_config)
+
+        # resize embeddings to match CodeBERT vocab
+        encoder.resize_token_embeddings(len(self._src_tokenizer))
+
+        # use randomly initialized GPT-2 as decoder
+        decoder_config = GPT2Config()
+        decoder_config.n_layer = num_layers_decoder
+        decoder_config.is_decoder = True
+        decoder_config.add_cross_attention = True
+        decoder = GPT2LMHeadModel(config=decoder_config)
+
+        self.model = EncoderDecoderModel(encoder=encoder, decoder=decoder)
 
         # cache is currently not supported by EncoderDecoder framework
         self.model.decoder.config.use_cache = False
@@ -89,17 +100,6 @@ class EncoderDecoderModule(pl.LightningModule):
     def generate(self, batch):
         return self.model.generate(input_ids=batch['diff_input_ids'],
                                    attention_mask=batch['diff_attention_mask'])
-
-    def on_train_epoch_start(self) -> None:
-        # unfreeze codebert on certain epoch
-        if self.current_epoch == self._unfreeze_after:
-            for param in self.model.encoder.parameters():
-                param.requires_grad = True
-
-        # freeze codebert on certain epoch
-        if self.current_epoch == self._freeze_after:
-            for param in self.model.encoder.parameters():
-                param.requires_grad = False
 
     def training_step(self, batch, batch_idx):
         self.examples_count += len(batch['diff_input_ids'])

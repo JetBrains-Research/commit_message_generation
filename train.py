@@ -29,13 +29,6 @@ def main(cfg: DictConfig) -> None:
                                            num_epochs=cfg.trainer.max_epochs,
                                            num_batches=len(dm.train_dataloader()) + len(dm.val_dataloader()))
 
-    # freeze codebert
-    for param in encoder_decoder.model.encoder.parameters():
-        param.requires_grad = False
-    # unfreeze embeddings
-    for param in encoder_decoder.model.encoder.embeddings.parameters():
-        param.requires_grad = True
-
     trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
     trainer_logger.watch(encoder_decoder, log='gradients', log_freq=250)
     lr_logger = LearningRateLogger()
