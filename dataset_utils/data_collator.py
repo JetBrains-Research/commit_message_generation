@@ -35,7 +35,7 @@ class DataCollator:
         for message_ids in message_inputs:
             if len(message_ids) > 8:
                 cur_generation_ids = [message_ids[:len(message_ids) - 5]]
-                cur_generation_labels = [[- 100 for _ in message_ids[:len(message_ids)]]]
+                cur_generation_labels = [[- 100 for _ in message_ids[:len(message_ids) - 5]]]
                 cur_generation_labels[0].extend(message_ids[len(message_ids) - 5:])
 
             else:

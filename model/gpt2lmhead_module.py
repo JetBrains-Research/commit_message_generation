@@ -49,10 +49,10 @@ class GPT2LMHeadModule(pl.LightningModule):
         self.examples_count = 0
 
     def forward(self, batch):
-        self.examples_count += len(batch['input_ids'])
-        return self.model(input_ids=batch['input_ids'],
-                          attention_mask=batch['attention_mask'],
-                          labels=batch['labels'])
+        self.examples_count += len(batch['msg_input_ids'])
+        return self.model(input_ids=batch['msg_input_ids'],
+                          attention_mask=batch['msg_attention_mask'],
+                          labels=batch['msg_labels'])
 
     def actual_generation_step(self, batch):
         preds = self.model.generate(input_ids=batch['generation_input_ids'],
@@ -64,7 +64,7 @@ class GPT2LMHeadModule(pl.LightningModule):
         preds[:, :-5] = self._tokenizer.pad_token_id
 
         # assign history & padding tokens to pad_token_id to avoid logging them in table
-        targets_whole_seq = batch['labels'].detach().clone()
+        targets_whole_seq = batch['msg_labels'].detach().clone()
         targets_whole_seq[targets_whole_seq == -100] = self._tokenizer.pad_token_id
         targets_completion = batch['generation_labels'].detach().clone()
         targets_completion[targets_completion == -100] = self._tokenizer.pad_token_id
@@ -89,14 +89,14 @@ class GPT2LMHeadModule(pl.LightningModule):
     def next_token_metrics_step(self, batch):
         scores = self(batch).logits
         # calculate metrics
-        acc_top1, acc_top5, MRR_top5 = accuracy_MRR(scores, batch['labels'], top_k=5, shift=True)
+        acc_top1, acc_top5, MRR_top5 = accuracy_MRR(scores, batch['msg_labels'], top_k=5, shift=True)
 
         # get top k predictions for each token in each batch
         _, top_k_predictions = torch.topk(scores, k=5)
 
         # assign history & padding tokens to pad_token_id to avoid logging them in table
-        top_k_predictions[batch['labels'] == -100, :] = self._tokenizer.pad_token_id
-        targets_no_history = batch['labels']
+        top_k_predictions[batch['msg_labels'] == -100, :] = self._tokenizer.pad_token_id
+        targets_no_history = batch['msg_labels']
         targets_no_history[targets_no_history == -100] = self._tokenizer.pad_token_id
 
         # decode top k predictions and targets

@@ -88,14 +88,16 @@ class EncoderDecoderModule(pl.LightningModule):
         # consider only 5 generated tokens
         preds[:, :-5] = self._trg_tokenizer.pad_token_id
 
-        # assign -100 in message to pad_token_id to be able to decode but avoid logging them in table
-        message_completion = batch['generation_labels'].detach().clone()
-        message_completion[message_completion == -100] = self._trg_tokenizer.pad_token_id
+        # assign history & padding tokens to pad_token_id to avoid logging them in table
+        targets_whole_seq = batch['msg_labels'].detach().clone()
+        targets_whole_seq[targets_whole_seq == -100] = self._trg_tokenizer.pad_token_id
+        targets_completion = batch['generation_labels'].detach().clone()
+        targets_completion[targets_completion == -100] = self._trg_tokenizer.pad_token_id
 
         # decode generated sequences and targets into strings
         decoded_targets_whole_seq, decoded_targets_completion, decoded_preds = \
-            self.decode_for_actual_generation(batch['msg_input_ids'],
-                                              message_completion,
+            self.decode_for_actual_generation(targets_whole_seq,
+                                              targets_completion,
                                               preds)
 
         # add data to a little table with examples
@@ -124,10 +126,12 @@ class EncoderDecoderModule(pl.LightningModule):
 
         # assign target pad tokens idx to pad_token_id to avoid logging them in table
         top_k_predictions[labels == -100, :] = self._trg_tokenizer.pad_token_id
+        targets_no_history = batch['msg_labels']
+        targets_no_history[targets_no_history == -100] = self._trg_tokenizer.pad_token_id
 
         # decode top k predictions and targets
         preds, source, targets = self.decode_for_metrics(top_k_predictions,
-                                                         batch['diff_input_ids'], batch['msg_input_ids'])
+                                                         batch['diff_input_ids'], targets_no_history)
 
         # add data to a little table with examples
         self.table_data["Source"].extend(source)

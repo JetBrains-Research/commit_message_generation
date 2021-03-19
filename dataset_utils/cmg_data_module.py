@@ -62,7 +62,8 @@ class CMGDataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # called on every GPU
         if self.with_history:
-            self.test = CMGDatasetWithHistory.load_data(self._trg_tokenizer, path=self.dataset_root,
+            self.test = CMGDatasetWithHistory.load_data(self._src_tokenizer, self._trg_tokenizer,
+                                                        path=self.dataset_root,
                                                         diff_max_len=self.diff_max_len,
                                                         msg_max_len=self.msg_max_len)
         else:

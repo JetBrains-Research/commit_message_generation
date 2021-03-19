@@ -39,7 +39,7 @@ class DataCollatorWithHistory:
 
             if len(message_ids) > 8:
                 cur_generation_ids = [message_ids[:len(message_ids) - 5]]
-                cur_generation_labels = [[- 100 for _ in message_ids[:len(message_ids)]]]
+                cur_generation_labels = [[- 100 for _ in message_ids[:len(message_ids) - 5]]]
                 cur_generation_labels[0].extend(message_ids[len(message_ids) - 5:])
             else:
                 cur_generation_ids = [message_ids[:len(message_ids) // 2]]
@@ -119,8 +119,13 @@ class DataCollatorWithHistory:
         all_generation_masks = torch.stack(all_generation_masks)
         all_generation_labels = torch.stack(all_generation_labels)
 
-        return {"input_ids": all_ids, "attention_mask": all_masks, "labels": all_labels,
-                "generation_input_ids": all_generation_ids, "generation_attention_mask": all_generation_masks,
+        return {"diff_input_ids": torch.stack([e["diff_input_ids"] for e in examples]),
+                "diff_attention_mask": torch.stack([e["diff_attention_mask"] for e in examples]),
+                "msg_input_ids": all_ids,
+                "msg_attention_mask": all_masks,
+                "msg_labels": all_labels,
+                "generation_input_ids": all_generation_ids,
+                "generation_attention_mask": all_generation_masks,
                 "generation_labels": all_generation_labels}
 
 
