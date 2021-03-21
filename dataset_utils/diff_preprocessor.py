@@ -1,6 +1,7 @@
 import itertools
 import os
 from typing import Tuple, List
+import pandas as pd
 
 
 def tokenize_git_diff_output_string(git_diff_output: str) -> List[List[str]]:
@@ -118,7 +119,7 @@ class DiffPreprocessor:
         return diff + '\n'
 
     @staticmethod
-    def get_prev_and_updated_for_diffs(git_diff_outputs: List[str]) -> List[str]:
+    def preprocess_diffs(git_diff_outputs: List[str]) -> List[str]:
         diff_res = []
         for git_diff_output in git_diff_outputs:
             diff = DiffPreprocessor.get_prev_and_updated(git_diff_output)
@@ -128,12 +129,22 @@ class DiffPreprocessor:
 
     @staticmethod
     def create_files(ds_root_path: str):
-        for part in ['train', 'val', 'test']:
-            cur_path = os.path.join(ds_root_path, part)
-            with open(os.path.join(cur_path, 'diff.txt')) as diff_file, \
-                 open(os.path.join(cur_path, 'new_diff.txt'), 'w') as new_diff_file:
-                diff = DiffPreprocessor.get_prev_and_updated_for_diffs(diff_file.readlines())
-                new_diff_file.writelines(diff)
+        if 'Jiang' in ds_root_path:
+            parts = []
+        else:
+            parts = ['train', 'val', 'test']
+
+        for part in parts:
+            df = pd.read_csv(os.path.join(ds_root_path, f'{part}.csv'), names=['diff', 'msg', 'id'])
+            diff = DiffPreprocessor.preprocess_diffs(df['diff'].tolist())
+            df['diff'] = diff
+            df.to_csv(os.path.join(ds_root_path, f'{part}.csv'), header=None, index=None)
+
+        if 'Jiang' in ds_root_path:
+            df = pd.read_csv(os.path.join(ds_root_path, 'val.csv'), names=['diff', 'msg'])
+            diff = DiffPreprocessor.preprocess_diffs(df['diff'].tolist())
+            df['diff'] = diff
+            df.to_csv(os.path.join(ds_root_path, 'val.csv'), header=None, index=None)
 
 
 if __name__ == "__main__":
