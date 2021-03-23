@@ -24,7 +24,7 @@ class DataCollatorWithHistory:
                                                  torch.Tensor]]]
     ) -> Dict[str, torch.Tensor]:
         message_inputs = [e["msg_input_ids"] for e in examples]  # 2D - list of lists
-        history_inputs = [e["history_input_ids"] for e in examples]  # 3D - list of lists of lists D:
+        history_inputs = [e["history_input_ids"] for e in examples]  # 3D - list of lists (empty/lists of lists)
 
         all_ids = []                   # input for training or metrics: history + cur_msg
         all_generation_ids = []        # 'prompt' for generation: history
@@ -41,23 +41,26 @@ class DataCollatorWithHistory:
             cur_generation_ids = []
             cur_len = len(message_ids)
 
+            # empty history
+            if len(history_ids) == 0:
+                cur_generation_ids.insert(0, [self.tokenizer.bos_token_id])
+
             for history_input_ids in history_ids[::-1]:
-                if cur_len + len(history_input_ids) > self.max_len:
+                # insert prev messages from history until we reach max_len
+                if cur_len + len(history_input_ids) + 2 > self.max_len:
                     break
                 cur_len += len(history_input_ids)
 
-                if len(history_input_ids) > 0:
-                    cur_ids.insert(0, history_input_ids + self.tokenizer(r' \n ').input_ids)
-                    cur_generation_ids.insert(0, history_input_ids + self.tokenizer(r' \n ').input_ids)
-                cur_labels.insert(0, [-100 for _ in history_input_ids])
-                cur_generation_labels.insert(0, [-100 for _ in history_input_ids])
+                cur_ids.insert(0, history_input_ids + self.tokenizer(r' \n ').input_ids)
+                cur_generation_ids.insert(0, history_input_ids + self.tokenizer(r' \n ').input_ids)
+
+                cur_labels.insert(0, [-100 for _ in history_input_ids + self.tokenizer(r' \n ').input_ids])
+                cur_generation_labels.insert(0, [-100 for _ in history_input_ids + self.tokenizer(r' \n ').input_ids])
 
             # flatten everything into one sequence and convert to tensor of torch.int64
             cur_ids = torch.tensor([ex for sublist in cur_ids for ex in sublist], dtype=torch.int64)
             cur_generation_ids = torch.tensor([ex for sublist in cur_generation_ids for ex in sublist],
                                               dtype=torch.int64)
-            if len(cur_generation_ids.size()) == 0:
-                cur_generation_ids = torch.tensor([self.tokenizer.bos_token_id])
 
             cur_labels = torch.tensor([ex for sublist in cur_labels for ex in sublist], dtype=torch.int64)
             cur_generation_labels = torch.tensor([ex for sublist in cur_generation_labels for ex in sublist],

@@ -10,14 +10,11 @@ class RandomSamplerByAuthor(Sampler):
 
         Args:
             data_source (Dataset): dataset to sample from
-            list_of_iters (List[Iterator]): list of iterators, each iterator corresponding to certain author's commits
     """
 
     def __init__(self, data_source: Sized,
-                 list_of_iters: List[Iterator],
                  generator=None):
         self.data_source = data_source
-        self.list_of_iters = list_of_iters
         self.generator = generator
 
     def __iter__(self):
@@ -27,7 +24,7 @@ class RandomSamplerByAuthor(Sampler):
         else:
             generator = self.generator
 
-        x = self.list_of_iters.copy()
+        x = self.data_source.get_iterators_by_authors()
         while len(x) > 0:
             idx = torch.randint(high=len(x), size=(), generator=generator).data
             try:
@@ -53,14 +50,16 @@ if __name__ == "__main__":
                                                    path='../raw_data/CleanedJiang/test.csv')
 
     data_collator = DataCollatorWithHistory(tokenizer=msg_tokenizer, max_len=1024)
-    sampler = RandomSamplerByAuthor(test_dataset, test_dataset.get_iterators_by_authors())
+    sampler = RandomSamplerByAuthor(test_dataset)
 
     test_dataloader = DataLoader(test_dataset, batch_size=4, collate_fn=data_collator, sampler=sampler)
     i = 0
     for batch in test_dataloader:
         print("Message (history + cur_msg)")
+        print(batch['msg_input_ids'])
         print(msg_tokenizer.batch_decode(batch['msg_input_ids'], skip_special_tokens=True))
         print("Generation (history)")
+        print(batch['generation_input_ids'])
         print(msg_tokenizer.batch_decode(batch['generation_input_ids'], skip_special_tokens=True))
         print()
         i += 1

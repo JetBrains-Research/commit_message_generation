@@ -94,12 +94,6 @@ class EncoderDecoderModule(pl.LightningModule):
                           labels=batch['msg_labels'])
 
     def generate(self, batch):
-        if 'generation_input_ids' not in batch \
-                or len(batch['generation_input_ids'].size()) == 0 \
-                or 0 in batch['generation_input_ids'].size():
-            return self.model.generate(input_ids=batch['diff_input_ids'],
-                                       attention_mask=batch['diff_attention_mask'])
-
         return self.model.generate(input_ids=batch['diff_input_ids'],
                                    attention_mask=batch['diff_attention_mask'],
                                    decoder_input_ids=batch['generation_input_ids'],
@@ -126,7 +120,7 @@ class EncoderDecoderModule(pl.LightningModule):
                                                                                              gen_sequence)
 
                 # add data to a little table with examples
-                self.train_table_data["Source"].extend(decoded_source)
+                self.train_table_data["Diff"].extend(decoded_source)
                 self.train_table_data["Target"].extend(decoded_targets_no_history)
                 self.train_table_data["Target (with history)"].extend(decoded_targets)
                 self.train_table_data["Prediction"].extend(decoded_preds)
@@ -200,7 +194,7 @@ class EncoderDecoderModule(pl.LightningModule):
                                                                                      gen_sequence)
 
         # add data to a little table with examples
-        self.test_table_data["Source"].extend(decoded_source)
+        self.test_table_data["Diff"].extend(decoded_source)
         self.test_table_data["Target"].extend(decoded_targets_no_history)
         self.test_table_data["Target (with history)"].extend(decoded_targets)
         self.test_table_data["Prediction"].extend(decoded_preds)
@@ -241,13 +235,14 @@ class EncoderDecoderModule(pl.LightningModule):
         targets_no_history[batch['msg_labels'] == -100] = self._trg_tokenizer.pad_token_id
 
         decoded_source = self.decode_src(batch['diff_input_ids'])[0]
-
-        decoded_targets_no_history, decoded_preds = self.decode_trg(targets_no_history,
-                                                                    gen_sequence)
+        decoded_targets_no_history, decoded_targets, decoded_preds = self.decode_trg(targets_no_history,
+                                                                                     batch['msg_input_ids'],
+                                                                                     gen_sequence)
 
         # add data to a little table with examples
-        self.val_table_data["Source"].extend(decoded_source)
+        self.val_table_data["Diff"].extend(decoded_source)
         self.val_table_data["Target"].extend(decoded_targets_no_history)
+        self.val_table_data["Target (with history)"].extend(decoded_targets)
         self.val_table_data["Prediction"].extend(decoded_preds)
 
         # add batches to metrics

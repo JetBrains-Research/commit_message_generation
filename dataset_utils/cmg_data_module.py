@@ -36,14 +36,6 @@ class CMGDataModule(pl.LightningDataModule):
         self.val_dataloader_conf = val_dataloader_conf
         self.test_dataloader_conf = test_dataloader_conf
 
-        # make sure GPT2 appends EOS in begin
-        # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
-        def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-            outputs = [self.bos_token_id] + token_ids_0
-            return outputs
-
-        GPT2Tokenizer.build_inputs_with_special_tokens = build_inputs_with_special_tokens
-
         self._src_tokenizer = RobertaTokenizer.from_pretrained(encoder_name_or_path)
         self._trg_tokenizer = GPT2Tokenizer.from_pretrained(decoder_name_or_path)
 
@@ -73,15 +65,15 @@ class CMGDataModule(pl.LightningDataModule):
         if stage == 'fit' or stage is None:
             self.train = CMGDatasetWithHistory.load_data(self._src_tokenizer, self._trg_tokenizer,
                                                          path=f"{self.dataset_root}/train.csv")
-            self.train_sampler = RandomSamplerByAuthor(self.train, self.train.get_iterators_by_authors())
+            self.train_sampler = RandomSamplerByAuthor(self.train)
 
             self.val_github = CMGDatasetWithHistory.load_data(self._src_tokenizer, self._trg_tokenizer,
                                                               path=f"{hydra.utils.to_absolute_path('raw_data')}/github_data/val.csv")
-            self.val_github_sampler = RandomSamplerByAuthor(self.val_github, self.val_github.get_iterators_by_authors())
+            self.val_github_sampler = RandomSamplerByAuthor(self.val_github)
         if stage == 'test' or stage is None:
             self.test = CMGDatasetWithHistory.load_data(self._src_tokenizer, self._trg_tokenizer,
                                                         path=f"{self.dataset_root}/test.csv")
-            self.test_sampler = RandomSamplerByAuthor(self.test, self.test.get_iterators_by_authors())
+            self.test_sampler = RandomSamplerByAuthor(self.test)
 
     def train_dataloader(self):
         return DataLoader(self.train, **self.train_dataloader_conf,

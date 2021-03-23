@@ -97,7 +97,7 @@ if __name__ == "__main__":
     print("Test:", len(test_dataset))
     print()
 
-    for i in range(3):
+    for i in range(10):
         print(f"===Example {i+1}===")
         print()
 
@@ -105,12 +105,11 @@ if __name__ == "__main__":
         input = test_dataset[idx]
 
         print("Current diff input ids")
-        print(input['diff_input_ids'])
         print(diff_tokenizer.decode(input['diff_input_ids']))
         print()
         print("Current message input ids")
-        print(input['message_input_ids'])
-        print(msg_tokenizer.decode(input['message_input_ids']))
+        print(input['msg_input_ids'])
+        print(msg_tokenizer.decode(input['msg_input_ids']))
         print()
         print("Current history input ids")
         print(input['history_input_ids'])
