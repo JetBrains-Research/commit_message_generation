@@ -98,31 +98,32 @@ class EncoderDecoderModule(pl.LightningModule):
                                    attention_mask=batch['diff_attention_mask'],
                                    decoder_input_ids=batch['generation_input_ids'],
                                    decoder_attention_mask=batch['generation_attention_mask'],
-                                   max_length=batch['generation_labels'].shape[1])
+                                   max_length=batch['msg_input_ids'].shape[1])
 
     def training_step(self, batch, batch_idx):
         self.examples_count += len(batch['diff_input_ids'])
         loss, logits = self(batch)[:2]
 
         # log train examples on every 1000th batch in epoch
-        if self.global_step % 100 == 0:
+        if self.global_step % 1000 == 0:
             with torch.no_grad():
                 gen_sequence = self.generate(batch)
                 gen_input_len = batch['generation_input_ids'].shape[1]
                 gen_sequence = [i[gen_input_len:] for i in gen_sequence.tolist()]  # leave only generated part
 
-                targets_no_history = batch['generation_labels'].detach().clone().to(self.device)
-                targets_no_history[batch['generation_labels'] == -100] = self._trg_tokenizer.pad_token_id
+                targets_no_history = batch['msg_input_ids'].detach().clone().to(self.device)
+                targets_no_history[batch['msg_labels'] == -100] = self._trg_tokenizer.pad_token_id
 
                 decoded_source = self.decode_src(batch['diff_input_ids'])[0]
-                decoded_targets_no_history, decoded_targets, decoded_preds = self.decode_trg(targets_no_history,
-                                                                                             batch['msg_input_ids'],
-                                                                                             gen_sequence)
+                decoded_targets_no_history, decoded_history, decoded_preds = \
+                    self.decode_trg(targets_no_history,
+                                    batch['generation_input_ids'],
+                                    gen_sequence)
 
                 # add data to a little table with examples
                 self.train_table_data["Diff"].extend(decoded_source)
+                self.train_table_data["History (generation input)"].extend(decoded_history)
                 self.train_table_data["Target"].extend(decoded_targets_no_history)
-                self.train_table_data["Target (with history)"].extend(decoded_targets)
                 self.train_table_data["Prediction"].extend(decoded_preds)
 
         self.logger.experiment.log({"train_loss_step": loss}, step=self.examples_count)
@@ -181,6 +182,7 @@ class EncoderDecoderModule(pl.LightningModule):
         self.log('val_MRR_top5', val_MRR_top5, on_step=False, on_epoch=True, prog_bar=True, logger=False)
 
     def test_step(self, batch, batch_idx):
+        # generate
         gen_sequence = self.generate(batch)
         gen_input_len = batch['generation_input_ids'].shape[1]
         gen_sequence = [i[gen_input_len:] for i in gen_sequence.tolist()]  # leave only generated part
@@ -189,14 +191,15 @@ class EncoderDecoderModule(pl.LightningModule):
         targets_no_history[batch['msg_labels'] == -100] = self._trg_tokenizer.pad_token_id
 
         decoded_source = self.decode_src(batch['diff_input_ids'])[0]
-        decoded_targets_no_history, decoded_targets, decoded_preds = self.decode_trg(targets_no_history,
-                                                                                     batch['msg_input_ids'],
-                                                                                     gen_sequence)
+        decoded_targets_no_history, decoded_history, decoded_preds = \
+            self.decode_trg(targets_no_history,
+                            batch['generation_input_ids'],
+                            gen_sequence)
 
         # add data to a little table with examples
         self.test_table_data["Diff"].extend(decoded_source)
+        self.test_table_data["History (generation input)"].extend(decoded_history)
         self.test_table_data["Target"].extend(decoded_targets_no_history)
-        self.test_table_data["Target (with history)"].extend(decoded_targets)
         self.test_table_data["Prediction"].extend(decoded_preds)
 
         # add batches to metrics
@@ -235,14 +238,15 @@ class EncoderDecoderModule(pl.LightningModule):
         targets_no_history[batch['msg_labels'] == -100] = self._trg_tokenizer.pad_token_id
 
         decoded_source = self.decode_src(batch['diff_input_ids'])[0]
-        decoded_targets_no_history, decoded_targets, decoded_preds = self.decode_trg(targets_no_history,
-                                                                                     batch['msg_input_ids'],
-                                                                                     gen_sequence)
+        decoded_targets_no_history, decoded_history, decoded_preds = \
+            self.decode_trg(targets_no_history,
+                            batch['generation_input_ids'],
+                            gen_sequence)
 
         # add data to a little table with examples
         self.val_table_data["Diff"].extend(decoded_source)
+        self.val_table_data["History (generation input)"].extend(decoded_history)
         self.val_table_data["Target"].extend(decoded_targets_no_history)
-        self.val_table_data["Target (with history)"].extend(decoded_targets)
         self.val_table_data["Prediction"].extend(decoded_preds)
 
         # add batches to metrics
@@ -257,6 +261,7 @@ class EncoderDecoderModule(pl.LightningModule):
         """
         val step for github dataloader - calculate metrics for completion
         """
+        # breaks here
         loss, scores = self(batch)[:2]
 
         # calculate metrics

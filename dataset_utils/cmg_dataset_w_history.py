@@ -66,7 +66,7 @@ class CMGDatasetWithHistory(Dataset):
         iters = [value for _, value in df.groupby('id').groups.items()]
 
         diff_enc = diff_tokenizer(diffs, truncation=True, padding=True,
-                                  return_tensors='pt', add_special_tokens=True)
+                                  return_tensors='pt', add_special_tokens=True, max_length=500)
         msg_input_ids = msg_tokenizer(msgs, truncation=True).input_ids
 
         # create history as dict {repo id: all messages from this repo (as lists of tokens)}
