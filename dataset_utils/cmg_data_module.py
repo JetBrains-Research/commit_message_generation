@@ -11,7 +11,7 @@ from omegaconf import DictConfig
 
 from dataset_utils.cmg_dataset_w_history import CMGDatasetWithHistory
 from dataset_utils.data_collator_w_history import DataCollatorWithHistory
-from dataset_utils.random_sampler_by_author import RandomSamplerByAuthor
+from dataset_utils.sampler_by_author import RandomSamplerByAuthor, SamplerByAuthor
 from dataset_utils.diff_preprocessor import DiffPreprocessor
 
 
@@ -20,6 +20,7 @@ class CMGDataModule(pl.LightningDataModule):
                  dataset_root: str,
                  diff_max_len: int,
                  msg_max_len: int,
+                 history_max_len: int,
                  encoder_name_or_path: str,
                  decoder_name_or_path: str,
                  train_dataloader_conf: DictConfig,
@@ -31,6 +32,7 @@ class CMGDataModule(pl.LightningDataModule):
 
         self.diff_max_len = diff_max_len
         self.msg_max_len = msg_max_len
+        self.history_max_len = history_max_len
 
         self.train_dataloader_conf = train_dataloader_conf
         self.val_dataloader_conf = val_dataloader_conf
@@ -43,7 +45,7 @@ class CMGDataModule(pl.LightningDataModule):
         # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
         self._trg_tokenizer.pad_token = self._trg_tokenizer.unk_token
 
-        self.data_collator = DataCollatorWithHistory(tokenizer=self._trg_tokenizer, max_len=512)
+        self.data_collator = DataCollatorWithHistory(tokenizer=self._trg_tokenizer, max_len=self.history_max_len)
 
         # datasets are initialized later
         self.train = None
@@ -69,11 +71,11 @@ class CMGDataModule(pl.LightningDataModule):
 
             self.val_github = CMGDatasetWithHistory.load_data(self._src_tokenizer, self._trg_tokenizer,
                                                               path=f"{hydra.utils.to_absolute_path('raw_data')}/github_data/val.csv")
-            self.val_github_sampler = RandomSamplerByAuthor(self.val_github)
+            self.val_github_sampler = SamplerByAuthor(self.val_github)
         if stage == 'test' or stage is None:
             self.test = CMGDatasetWithHistory.load_data(self._src_tokenizer, self._trg_tokenizer,
                                                         path=f"{self.dataset_root}/test.csv")
-            self.test_sampler = RandomSamplerByAuthor(self.test)
+            self.test_sampler = SamplerByAuthor(self.test)
 
     def train_dataloader(self):
         return DataLoader(self.train, **self.train_dataloader_conf,
