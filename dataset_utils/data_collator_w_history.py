@@ -129,9 +129,13 @@ if __name__ == '__main__':
 
     data_collator = DataCollatorWithHistory(tokenizer=msg_tokenizer, max_len=512)
 
-    test_dataloader = DataLoader(test_dataset, batch_size=4, collate_fn=data_collator)
+    test_dataloader = DataLoader(test_dataset, batch_size=4, collate_fn=data_collator, shuffle=True)
 
     for batch in test_dataloader:
+        print('========== HISTORY + MESSAGE ============')
+        print(msg_tokenizer.batch_decode(batch['msg_input_ids'], skip_special_tokens=True))
+        print('========== HISTORY ============')
+        print(msg_tokenizer.batch_decode(batch['generation_input_ids'], skip_special_tokens=True))
         assert batch['diff_input_ids'].shape[1] <= 500
         assert batch['msg_input_ids'].shape[1] <= 512
         assert batch['generation_input_ids'].shape[1] <= 512

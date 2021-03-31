@@ -8,6 +8,7 @@ dataset:
   train_dataloader_conf:
     batch_size: 4
     num_workers: 4
+    shuffle: true
   val_dataloader_conf:
     batch_size: 4
     num_workers: 4

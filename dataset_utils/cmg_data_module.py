@@ -53,7 +53,6 @@ class CMGDataModule(pl.LightningDataModule):
         self.test = None
 
         # samplers are initialized later
-        self.train_sampler = None
         self.val_github_sampler = None
         self.test_sampler = None
 
@@ -67,7 +66,6 @@ class CMGDataModule(pl.LightningDataModule):
         if stage == 'fit' or stage is None:
             self.train = CMGDatasetWithHistory.load_data(self._src_tokenizer, self._trg_tokenizer,
                                                          path=f"{self.dataset_root}/train.csv")
-            self.train_sampler = RandomSamplerByAuthor(self.train)
 
             self.val_github = CMGDatasetWithHistory.load_data(self._src_tokenizer, self._trg_tokenizer,
                                                               path=f"{hydra.utils.to_absolute_path('raw_data')}/github_data/val.csv")
@@ -79,7 +77,7 @@ class CMGDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         return DataLoader(self.train, **self.train_dataloader_conf,
-                          collate_fn=self.data_collator, sampler=self.train_sampler)
+                          collate_fn=self.data_collator)
 
     def val_dataloader(self):
         return [DataLoader(self.test, **self.test_dataloader_conf,
