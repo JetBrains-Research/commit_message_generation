@@ -49,11 +49,11 @@ class CMGDataModule(pl.LightningDataModule):
 
         # datasets are initialized later
         self.train = None
-        self.val_github = None
+        self.val = None
         self.test = None
 
         # samplers are initialized later
-        self.val_github_sampler = None
+        self.val_sampler = None
         self.test_sampler = None
 
     def prepare_data(self):
@@ -67,9 +67,9 @@ class CMGDataModule(pl.LightningDataModule):
             self.train = CMGDatasetWithHistory.load_data(self._src_tokenizer, self._trg_tokenizer,
                                                          path=f"{self.dataset_root}/train.csv")
 
-            self.val_github = CMGDatasetWithHistory.load_data(self._src_tokenizer, self._trg_tokenizer,
-                                                              path=f"{hydra.utils.to_absolute_path('raw_data')}/github_data/val.csv")
-            self.val_github_sampler = SamplerByAuthor(self.val_github)
+            self.val = CMGDatasetWithHistory.load_data(self._src_tokenizer, self._trg_tokenizer,
+                                                              path=f"{self.dataset_root}/val.csv")
+            self.val_sampler = SamplerByAuthor(self.val_github)
         if stage == 'test' or stage is None:
             self.test = CMGDatasetWithHistory.load_data(self._src_tokenizer, self._trg_tokenizer,
                                                         path=f"{self.dataset_root}/test.csv")
@@ -80,10 +80,8 @@ class CMGDataModule(pl.LightningDataModule):
                           collate_fn=self.data_collator)
 
     def val_dataloader(self):
-        return [DataLoader(self.test, **self.test_dataloader_conf,
-                           collate_fn=self.data_collator, sampler=self.test_sampler),
-                DataLoader(self.val_github, **self.val_dataloader_conf,
-                           collate_fn=self.data_collator, sampler=self.val_github_sampler)]
+        return DataLoader(self.val, **self.val_dataloader_conf,
+                          collate_fn=self.data_collator, sampler=self.val_sampler)
 
     def test_dataloader(self):
         return DataLoader(self.test, **self.test_dataloader_conf,
