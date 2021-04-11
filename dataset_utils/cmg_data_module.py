@@ -11,15 +11,12 @@ from omegaconf import DictConfig
 
 from dataset_utils.cmg_dataset_w_history import CMGDatasetWithHistory
 from dataset_utils.data_collator_w_history import DataCollatorWithHistory
-from dataset_utils.sampler_by_author import RandomSamplerByAuthor, SamplerByAuthor
-from dataset_utils.diff_preprocessor import DiffPreprocessor
+from dataset_utils.data_preprocessor import DataPreprocessor
 
 
 class CMGDataModule(pl.LightningDataModule):
     def __init__(self,
                  dataset_root: str,
-                 diff_max_len: int,
-                 msg_max_len: int,
                  history_max_len: int,
                  encoder_name_or_path: str,
                  decoder_name_or_path: str,
@@ -29,9 +26,6 @@ class CMGDataModule(pl.LightningDataModule):
         super().__init__()
 
         self.dataset_root = hydra.utils.to_absolute_path(dataset_root)
-
-        self.diff_max_len = diff_max_len
-        self.msg_max_len = msg_max_len
         self.history_max_len = history_max_len
 
         self.train_dataloader_conf = train_dataloader_conf
@@ -45,35 +39,28 @@ class CMGDataModule(pl.LightningDataModule):
         # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
         self._trg_tokenizer.pad_token = self._trg_tokenizer.unk_token
 
-        self.data_collator = DataCollatorWithHistory(tokenizer=self._trg_tokenizer, max_len=self.history_max_len)
+        self.data_collator = DataCollatorWithHistory(src_tokenizer=self._src_tokenizer,
+                                                     trg_tokenizer=self._trg_tokenizer,
+                                                     max_len=self.history_max_len)
 
         # datasets are initialized later
         self.train = None
         self.val = None
         self.test = None
 
-        # samplers are initialized later
-        self.val_sampler = None
-        self.test_sampler = None
-
     def prepare_data(self):
         # called only on 1 GPU
-        if 'train.csv' not in os.listdir(self.dataset_root):
-            DiffPreprocessor.create_files(self.dataset_root)
+        if 'train.json' not in os.listdir(self.dataset_root):
+            DataPreprocessor.create_files(self.dataset_root)
 
     def setup(self, stage=None):
         # called on every GPU
         if stage == 'fit' or stage is None:
-            self.train = CMGDatasetWithHistory.load_data(self._src_tokenizer, self._trg_tokenizer,
-                                                         path=f"{self.dataset_root}/train.csv")
+            self.train = CMGDatasetWithHistory.load_data(self.dataset_root, 'train')
 
-            self.val = CMGDatasetWithHistory.load_data(self._src_tokenizer, self._trg_tokenizer,
-                                                              path=f"{self.dataset_root}/val.csv")
-            self.val_sampler = SamplerByAuthor(self.val_github)
+            self.val = CMGDatasetWithHistory.load_data(self.dataset_root, 'val')
         if stage == 'test' or stage is None:
-            self.test = CMGDatasetWithHistory.load_data(self._src_tokenizer, self._trg_tokenizer,
-                                                        path=f"{self.dataset_root}/test.csv")
-            self.test_sampler = SamplerByAuthor(self.test)
+            self.test = CMGDatasetWithHistory.load_data(self.dataset_root, 'test')
 
     def train_dataloader(self):
         return DataLoader(self.train, **self.train_dataloader_conf,
@@ -81,8 +68,8 @@ class CMGDataModule(pl.LightningDataModule):
 
     def val_dataloader(self):
         return DataLoader(self.val, **self.val_dataloader_conf,
-                          collate_fn=self.data_collator, sampler=self.val_sampler)
+                          collate_fn=self.data_collator)
 
     def test_dataloader(self):
         return DataLoader(self.test, **self.test_dataloader_conf,
-                          collate_fn=self.data_collator, sampler=self.test_sampler)
+                          collate_fn=self.data_collator)
