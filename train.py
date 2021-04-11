@@ -29,7 +29,7 @@ def main(cfg: DictConfig) -> None:
                                            src_tokenizer=dm._src_tokenizer,
                                            trg_tokenizer=dm._trg_tokenizer,
                                            num_epochs=cfg.trainer.max_epochs,
-                                           num_batches=len(dm.train_dataloader()))
+                                           num_batches=dm.train._len)
 
     # logger
     trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True

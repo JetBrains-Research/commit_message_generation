@@ -244,7 +244,7 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = AdamW(self.parameters(), lr=self.learning_rate)
-        scheduler = {'scheduler': get_linear_schedule_with_warmup(optimizer, self._num_batches * 5,
+        scheduler = {'scheduler': get_linear_schedule_with_warmup(optimizer, 4000,
                                                                   self._num_epochs * self._num_batches),
                      'interval': 'step',
                      'frequency': 1}

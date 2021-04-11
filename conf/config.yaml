@@ -1,23 +1,17 @@
 dataset:
-  dataset_root: raw_data/CleanedJiang
-  diff_max_len: 110
-  msg_max_len: 30
+  dataset_root: raw_data/github_data
   history_max_len: 512
   encoder_name_or_path: microsoft/codebert-base
   decoder_name_or_path: distilgpt2
   train_dataloader_conf:
     batch_size: 4
-    num_workers: 4
-    shuffle: true
   val_dataloader_conf:
     batch_size: 4
-    num_workers: 4
   test_dataloader_conf:
     batch_size: 4
-    num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: test history (with improvements)
+  name: new data
   project: commit_message_generation
 model:
   learning_rate: 1e-4
@@ -25,6 +19,7 @@ model:
   num_layers_decoder: 4
 trainer:
   gpus: 1
-  max_epochs: 40
+  max_epochs: 2
   num_sanity_val_steps: 2
+  val_check_interval: 10000
   accumulate_grad_batches: 1
