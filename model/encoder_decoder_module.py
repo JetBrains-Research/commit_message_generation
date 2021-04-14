@@ -156,9 +156,10 @@ class EncoderDecoderModule(pl.LightningModule):
         acc_top1, acc_top5, MRR_top5 = accuracy_MRR(scores, batch['msg_labels'], top_k=5, shift=True)
 
         # generate
-        gen_sequence = self.generate(batch)
+        gen_sequences = self.generate(batch)
         gen_input_len = batch['generation_input_ids'].shape[1]
-        gen_sequence = [i[gen_input_len:] for i in gen_sequence.tolist()]  # leave only generated part
+
+        gen_sequences = [seq[gen_input_len:] for seq in gen_sequences.tolist()]  # leave only generated part
 
         targets_no_history = batch['msg_input_ids'].detach().clone().to(self.device)
         targets_no_history[batch['msg_labels'] == -100] = self._trg_tokenizer.pad_token_id
@@ -167,7 +168,7 @@ class EncoderDecoderModule(pl.LightningModule):
         decoded_targets_no_history, decoded_history, decoded_preds = \
             self.decode_trg(targets_no_history,
                             batch['generation_input_ids'],
-                            gen_sequence)
+                            gen_sequences)
 
         # add data to a little table with examples
         self.tables[stage]["Diff"].extend(decoded_source)
@@ -186,7 +187,7 @@ class EncoderDecoderModule(pl.LightningModule):
     def generation_and_metrics_epoch_end(self, outputs, stage):
         """
         Logic for validation & testing epoch end:
-        1) Aggregate accuracy@1, accuracy@5, MRR@5, BLEU, ROUGE, METEOR
+        1) Calculate final accuracy@1, accuracy@5, MRR@5, BLEU, ROUGE, METEOR
         2) Create wandb table with examples
         3) (in val stage only) Aggregate loss and log metric(s) for ModelCheckpoint
         4) Log everything in wandb.
@@ -218,7 +219,6 @@ class EncoderDecoderModule(pl.LightningModule):
             results["val_loss"] = loss
             # needed for ModelCheckpoint
             self.log('val_MRR_top5', MRR_top5, on_step=False, on_epoch=True, prog_bar=True, logger=False)
-
         self.logger.experiment.log(results,
                                    step=self.examples_count)
 

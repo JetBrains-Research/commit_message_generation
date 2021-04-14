@@ -8,11 +8,17 @@ from transformers import PreTrainedTokenizerBase
 @dataclass
 class DataCollatorWithHistory:
     """
-    Data collator used to collate author's history with current message.
-    - diff_input_ids, diff_attention_mask: pad and concatenate into tensor
-    - msg_input_ids, msg_attention_mask: history + current message
-    - msg_labels: -100 on history part to avoid computing loss
-    - generation_input_ids, generation_attention_mask: history
+    Data collator used to
+    1) collate author's history with current message
+    2) pad and concatenate everything into tensors
+
+    Resulting batch contains keys:
+    - diff_input_ids, diff_attention_mask: simply diffs, used for everything
+    - msg_input_ids, msg_attention_mask, msg_labels: history + current message, used for training and completion metrics
+        - format: history_1 \\n ... history_k \\n cur_msg
+    - generation_input_ids, generation_attention_mask: history, used as context/prompt for generation
+        - format when history is not empty: <|endoftext|s> history_1 \\n ... history_k \\n
+        - format when history is empty: <|endoftext|>
     """
 
     src_tokenizer: PreTrainedTokenizerBase
@@ -40,12 +46,8 @@ class DataCollatorWithHistory:
         for message_ids, history_ids in zip(message_inputs, history_inputs):
             cur_ids = [message_ids[:self.max_len]]
             cur_labels = [message_ids[:self.max_len]]
-            cur_generation_ids = []
+            cur_generation_ids = [[self.trg_tokenizer.bos_token_id]]
             cur_len = len(message_ids[:self.max_len])
-
-            # empty history
-            if len(history_ids) == 0:
-                cur_generation_ids.insert(0, [self.trg_tokenizer.bos_token_id])
 
             for history_input_ids in history_ids[::-1]:
                 # insert prev messages from history until we reach max_len
@@ -55,14 +57,13 @@ class DataCollatorWithHistory:
                 cur_len += len(history_input_ids) + len(self.trg_tokenizer(r' \n ').input_ids)
 
                 cur_ids.insert(0, history_input_ids + self.trg_tokenizer(r' \n ').input_ids)
-                cur_generation_ids.insert(0, history_input_ids + self.trg_tokenizer(r' \n ').input_ids)
+                cur_generation_ids.insert(1, history_input_ids + self.trg_tokenizer(r' \n ').input_ids)
                 cur_labels.insert(0, [-100 for _ in history_input_ids + self.trg_tokenizer(r' \n ').input_ids])
 
             # flatten everything into one sequence and convert to tensor of torch.int64
             cur_ids = torch.tensor([ex for sublist in cur_ids for ex in sublist], dtype=torch.int64)
             cur_generation_ids = torch.tensor([ex for sublist in cur_generation_ids for ex in sublist],
                                               dtype=torch.int64)
-
             cur_labels = torch.tensor([ex for sublist in cur_labels for ex in sublist], dtype=torch.int64)
 
             # create ones for attention mask
@@ -132,29 +133,3 @@ class DataCollatorWithHistory:
                 "msg_labels": all_msg_labels,
                 "generation_input_ids": all_generation_ids,
                 "generation_attention_mask": all_generation_masks}
-
-
-if __name__ == '__main__':
-    from dataset_utils.cmg_dataset_w_history import CMGDatasetWithHistory
-    from transformers import GPT2Tokenizer, RobertaTokenizer
-    from torch.utils.data import DataLoader
-
-    diff_tokenizer = RobertaTokenizer.from_pretrained('microsoft/codebert-base')
-    msg_tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
-    msg_tokenizer.pad_token = msg_tokenizer.unk_token
-
-    train_dataset = CMGDatasetWithHistory.load_data('../raw_data/github_data/', 'train')
-
-    data_collator = DataCollatorWithHistory(src_tokenizer=diff_tokenizer, trg_tokenizer=msg_tokenizer, max_len=512)
-
-    train_dataloader = DataLoader(train_dataset, batch_size=4, collate_fn=data_collator)
-
-    for batch in tqdm(train_dataloader):
-        assert batch['diff_input_ids'].shape[1] <= 500
-        assert batch['msg_input_ids'].shape[1] <= 512
-        assert batch['generation_input_ids'].shape[1] <= 512
-
-    for batch in tqdm(train_dataloader):
-        assert batch['diff_input_ids'].shape[1] <= 500
-        assert batch['msg_input_ids'].shape[1] <= 512
-        assert batch['generation_input_ids'].shape[1] <= 512

@@ -18,6 +18,9 @@ def main(cfg: DictConfig) -> None:
     # -----------------------
     pl.seed_everything(42)
 
+    cfg.dataset.local_rank = int(os.environ.get("LOCAL_RANK", 0))
+    cfg.dataset.world_size = cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1
+
     print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
 
     # data
@@ -29,7 +32,7 @@ def main(cfg: DictConfig) -> None:
                                            src_tokenizer=dm._src_tokenizer,
                                            trg_tokenizer=dm._trg_tokenizer,
                                            num_epochs=cfg.trainer.max_epochs,
-                                           num_batches=dm.train._len)
+                                           num_batches=dm.train._len // cfg.dataset.train_dataloader_conf.batch_size)
 
     # logger
     trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
@@ -41,23 +44,15 @@ def main(cfg: DictConfig) -> None:
     checkpoint_callback = ModelCheckpoint(
         dirpath='checkpoint',
         save_top_k=1,
+        save_last=True,
         verbose=True,
         monitor='val_MRR_top5',
-        mode='max'
-    )
-
-    early_stopping_callback = EarlyStopping(
-        monitor='val_MRR_top5',
-        min_delta=0.00,
-        patience=5,
-        verbose=True,
         mode='max'
     )
 
     # trainer
     trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger, callbacks=[lr_logger,
-                                                                          checkpoint_callback,
-                                                                          early_stopping_callback])
+                                                                          checkpoint_callback])
 
     # -----------------------
     #         train         -

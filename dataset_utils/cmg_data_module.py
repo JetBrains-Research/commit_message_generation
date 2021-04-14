@@ -20,6 +20,8 @@ class CMGDataModule(pl.LightningDataModule):
                  history_max_len: int,
                  encoder_name_or_path: str,
                  decoder_name_or_path: str,
+                 local_rank: int,
+                 world_size: int,
                  train_dataloader_conf: DictConfig,
                  val_dataloader_conf: DictConfig,
                  test_dataloader_conf: DictConfig):
@@ -27,6 +29,9 @@ class CMGDataModule(pl.LightningDataModule):
 
         self.dataset_root = hydra.utils.to_absolute_path(dataset_root)
         self.history_max_len = history_max_len
+
+        self.local_rank = local_rank
+        self.world_size = world_size
 
         self.train_dataloader_conf = train_dataloader_conf
         self.val_dataloader_conf = val_dataloader_conf
@@ -56,20 +61,23 @@ class CMGDataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # called on every GPU
         if stage == 'fit' or stage is None:
-            self.train = CMGDatasetWithHistory.load_data(self.dataset_root, 'train')
+            self.train = CMGDatasetWithHistory.load_data(self.dataset_root + '/train',
+                                                         rank=self.local_rank,
+                                                         world_size=self.world_size)
 
-            self.val = CMGDatasetWithHistory.load_data(self.dataset_root, 'val')
+            self.val = CMGDatasetWithHistory.load_data(self.dataset_root + '/val',
+                                                       rank=self.local_rank,
+                                                       world_size=self.world_size)
         if stage == 'test' or stage is None:
-            self.test = CMGDatasetWithHistory.load_data(self.dataset_root, 'test')
+            self.test = CMGDatasetWithHistory.load_data(self.dataset_root + '/test',
+                                                        rank=self.local_rank,
+                                                        world_size=self.world_size)
 
     def train_dataloader(self):
-        return DataLoader(self.train, **self.train_dataloader_conf,
-                          collate_fn=self.data_collator)
+        return self.train.get_dataloader(**self.train_dataloader_conf, collate_fn=self.data_collator)
 
     def val_dataloader(self):
-        return DataLoader(self.val, **self.val_dataloader_conf,
-                          collate_fn=self.data_collator)
+        return self.val.get_dataloader(**self.val_dataloader_conf, collate_fn=self.data_collator)
 
     def test_dataloader(self):
-        return DataLoader(self.test, **self.test_dataloader_conf,
-                          collate_fn=self.data_collator)
+        return self.test.get_dataloader(**self.test_dataloader_conf, collate_fn=self.data_collator)
