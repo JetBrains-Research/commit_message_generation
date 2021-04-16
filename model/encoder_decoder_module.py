@@ -95,15 +95,6 @@ class EncoderDecoderModule(pl.LightningModule):
         self.model.config.early_stopping = True
         self.model.config.num_beams = 4
 
-        self.bleu = load_metric("bleu")
-        self.rouge = load_metric("rouge")
-        self.meteor = load_metric("meteor")
-
-        # to log tables with examples
-        self.tables = {'train': defaultdict(list),
-                       'val': defaultdict(list),
-                       'test': defaultdict(list)}
-
         # to make logs for different batch sizes prettier
         self.examples_count = 0
 
@@ -118,18 +109,6 @@ class EncoderDecoderModule(pl.LightningModule):
                           decoder_attention_mask=batch['msg_attention_mask'],
                           labels=batch['msg_labels'])
 
-    def generate(self, batch):
-        print('\n==Generation==')
-        print('Diff shape', batch['diff_input_ids'].shape)
-        print('History + current message shape', batch['msg_input_ids'].shape)
-        print('History shape', batch['generation_input_ids'].shape)
-        print()
-        return self.model.generate(input_ids=batch['diff_input_ids'],
-                                   attention_mask=batch['diff_attention_mask'],
-                                   decoder_input_ids=batch['generation_input_ids'],
-                                   decoder_attention_mask=batch['generation_attention_mask'],
-                                   max_length=batch['generation_attention_mask'].shape[1] + 50)
-
     def training_step(self, batch, batch_idx):
         self.examples_count += len(batch['diff_input_ids'])
         loss, logits = self(batch)[:2]
@@ -138,16 +117,7 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def training_epoch_end(self, outputs):
         train_loss_mean = torch.stack([x["loss"] for x in outputs]).mean()
-
-        try:
-            df = pd.DataFrame.from_dict(self.tables['train'])
-            table = wandb.Table(dataframe=df)
-            self.tables['train'].clear()
-
-            self.logger.experiment.log({"train_examples": table,
-                                        "train_loss_epoch": train_loss_mean}, step=self.examples_count)
-        except IndexError:
-            self.logger.experiment.log({"train_loss_epoch": train_loss_mean}, step=self.examples_count)
+        self.logger.experiment.log({"train_loss_epoch": train_loss_mean}, step=self.examples_count)
 
     def metrics_step(self, batch):
         """
