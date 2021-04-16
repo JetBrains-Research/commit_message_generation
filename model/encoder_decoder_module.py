@@ -95,10 +95,6 @@ class EncoderDecoderModule(pl.LightningModule):
         self.model.config.early_stopping = True
         self.model.config.num_beams = 4
 
-        print("\n====MODEL CONFIG====\n")
-        print(self.model.config)
-        print()
-
         self.bleu = load_metric("bleu")
         self.rouge = load_metric("rouge")
         self.meteor = load_metric("meteor")
@@ -112,6 +108,10 @@ class EncoderDecoderModule(pl.LightningModule):
         self.examples_count = 0
 
     def forward(self, batch):
+        print('\n==Forward==')
+        print('Diff shape', batch['diff_input_ids'].shape)
+        print('History + current message shape', batch['msg_input_ids'].shape)
+        print()
         return self.model(input_ids=batch['diff_input_ids'],
                           attention_mask=batch['diff_attention_mask'],
                           decoder_input_ids=batch['msg_input_ids'],
@@ -119,38 +119,20 @@ class EncoderDecoderModule(pl.LightningModule):
                           labels=batch['msg_labels'])
 
     def generate(self, batch):
+        print('\n==Generation==')
+        print('Diff shape', batch['diff_input_ids'].shape)
+        print('History + current message shape', batch['msg_input_ids'].shape)
+        print('History shape', batch['generation_input_ids'].shape)
+        print()
         return self.model.generate(input_ids=batch['diff_input_ids'],
                                    attention_mask=batch['diff_attention_mask'],
                                    decoder_input_ids=batch['generation_input_ids'],
                                    decoder_attention_mask=batch['generation_attention_mask'],
-                                   max_length=batch['msg_input_ids'].shape[1])
+                                   max_length=batch['generation_attention_mask'].shape[1] + 50)
 
     def training_step(self, batch, batch_idx):
         self.examples_count += len(batch['diff_input_ids'])
         loss, logits = self(batch)[:2]
-
-        # log train examples on every 1000th batch in epoch
-        if self.global_step % 1000 == 0:
-            with torch.no_grad():
-                gen_sequence = self.generate(batch)
-                gen_input_len = batch['generation_input_ids'].shape[1]
-                gen_sequence = [i[gen_input_len:] for i in gen_sequence.tolist()]  # leave only generated part
-
-                targets_no_history = batch['msg_input_ids'].detach().clone().to(self.device)
-                targets_no_history[batch['msg_labels'] == -100] = self._trg_tokenizer.pad_token_id
-
-                decoded_source = self.decode_src(batch['diff_input_ids'])[0]
-                decoded_targets_no_history, decoded_history, decoded_preds = \
-                    self.decode_trg(targets_no_history,
-                                    batch['generation_input_ids'],
-                                    gen_sequence)
-
-                # add data to a little table with examples
-                self.tables['train']["Diff"].extend(decoded_source)
-                self.tables['train']["History (generation input)"].extend(decoded_history)
-                self.tables['train']["Target"].extend(decoded_targets_no_history)
-                self.tables['train']["Prediction"].extend(decoded_preds)
-
         self.logger.experiment.log({"train_loss_step": loss}, step=self.examples_count)
         return {"loss": loss}
 
@@ -167,75 +149,28 @@ class EncoderDecoderModule(pl.LightningModule):
         except IndexError:
             self.logger.experiment.log({"train_loss_epoch": train_loss_mean}, step=self.examples_count)
 
-    def generation_and_metrics_step(self, batch, stage):
+    def metrics_step(self, batch):
         """
         Logic for validation & testing steps:
         1) Calculate accuracy@1, accuracy@5 and MRR@5 from model output and labels
-        2) Generate sequence and add batches to BLEU, ROUGE, METEOR
-        3) Add decoded sequences to table, return loss and metrics
-        The difference is only in table to append.
         """
         loss, scores = self(batch)[:2]
-
         # calculate metrics
         acc_top1, acc_top5, MRR_top5 = accuracy_MRR(scores, batch['msg_labels'], top_k=5, shift=True)
-
-        # generate
-        gen_sequences = self.generate(batch)
-        gen_input_len = batch['generation_input_ids'].shape[1]
-
-        gen_sequences = [seq[gen_input_len:] for seq in gen_sequences.tolist()]  # leave only generated part
-
-        targets_no_history = batch['msg_input_ids'].detach().clone().to(self.device)
-        targets_no_history[batch['msg_labels'] == -100] = self._trg_tokenizer.pad_token_id
-
-        decoded_source = self.decode_src(batch['diff_input_ids'])[0]
-        decoded_targets_no_history, decoded_history, decoded_preds = \
-            self.decode_trg(targets_no_history,
-                            batch['generation_input_ids'],
-                            gen_sequences)
-
-        # add data to a little table with examples
-        self.tables[stage]["Diff"].extend(decoded_source)
-        self.tables[stage]["History (generation input)"].extend(decoded_history)
-        self.tables[stage]["Target"].extend(decoded_targets_no_history)
-        self.tables[stage]["Prediction"].extend(decoded_preds)
-
-        # add batches to metrics
-        self.bleu.add_batch(predictions=[line.split() for line in decoded_preds],
-                            references=[[line.split()] for line in decoded_targets_no_history])
-        self.rouge.add_batch(predictions=decoded_preds, references=decoded_targets_no_history)
-        self.meteor.add_batch(predictions=decoded_preds, references=decoded_targets_no_history)
-
         return {"loss": loss, "acc_top1": acc_top1, "acc_top5": acc_top5, "MRR_top5": MRR_top5}
 
-    def generation_and_metrics_epoch_end(self, outputs, stage):
+    def metrics_epoch_end(self, outputs, stage):
         """
         Logic for validation & testing epoch end:
-        1) Calculate final accuracy@1, accuracy@5, MRR@5, BLEU, ROUGE, METEOR
-        2) Create wandb table with examples
-        3) (in val stage only) Aggregate loss and log metric(s) for ModelCheckpoint
-        4) Log everything in wandb.
+        1) Calculate final accuracy@1, accuracy@5, MRR@5
+        2) (in val stage only) Aggregate loss and log metric(s) for ModelCheckpoint
+        3) Log everything in wandb.
         """
-        bleu = self.bleu.compute()
-        rouge = self.rouge.compute()
-        meteor = self.meteor.compute()
-
         acc_top1 = np.mean([x["acc_top1"] for x in outputs])
         acc_top5 = np.mean([x["acc_top5"] for x in outputs])
         MRR_top5 = np.mean([x["MRR_top5"] for x in outputs])
 
-        df = pd.DataFrame.from_dict(self.tables[stage])
-        table = wandb.Table(dataframe=df)
-        self.tables[stage].clear()
-
-        results = {f"{stage}_examples": table,
-                   f"{stage}_bleu": bleu["bleu"],
-                   f"{stage}_rouge1": rouge["rouge1"].mid.fmeasure,
-                   f"{stage}_rouge2": rouge["rouge2"].mid.fmeasure,
-                   f"{stage}_rougeL": rouge["rougeL"].mid.fmeasure,
-                   f"{stage}_meteor": meteor["meteor"],
-                   f"{stage}_acc_top1": acc_top1,
+        results = {f"{stage}_acc_top1": acc_top1,
                    f"{stage}_acc_top5": acc_top5,
                    f"{stage}_MRR_top5": MRR_top5}
 
@@ -248,16 +183,16 @@ class EncoderDecoderModule(pl.LightningModule):
                                    step=self.examples_count)
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        return self.generation_and_metrics_step(batch, stage='val')
+        return self.metrics_step(batch)
 
     def validation_epoch_end(self, outputs):
-        self.generation_and_metrics_epoch_end(outputs, stage='val')
+        self.metrics_epoch_end(outputs, stage='val')
 
     def test_step(self, batch, batch_idx):
-        return self.generation_and_metrics_step(batch, stage='test')
+        return self.metrics_step(batch)
 
     def test_epoch_end(self, outputs):
-        self.generation_and_metrics_epoch_end(outputs, stage='test')
+        self.metrics_epoch_end(outputs, stage='test')
 
     def decode_src(self, *args):
         return tuple(self._src_tokenizer.batch_decode(arg, skip_special_tokens=True,

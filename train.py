@@ -21,8 +21,10 @@ def main(cfg: DictConfig) -> None:
     cfg.dataset.local_rank = int(os.environ.get("LOCAL_RANK", 0))
     cfg.dataset.world_size = cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1
 
-    print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
+    print('Local rank', cfg.dataset.local_rank)
+    print('World size', cfg.dataset.world_size)
 
+    print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
     # data
     dm = CMGDataModule(**cfg.dataset)
     dm.setup()

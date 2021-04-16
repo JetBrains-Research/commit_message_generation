@@ -46,7 +46,8 @@ class CMGDataModule(pl.LightningDataModule):
 
         self.data_collator = DataCollatorWithHistory(src_tokenizer=self._src_tokenizer,
                                                      trg_tokenizer=self._trg_tokenizer,
-                                                     max_len=self.history_max_len)
+                                                     max_len=self.history_max_len,
+                                                     testing=False)
 
         # datasets are initialized later
         self.train = None

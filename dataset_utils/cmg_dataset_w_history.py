@@ -124,7 +124,9 @@ if __name__ == "__main__":
 
     for i, input in enumerate(test_dataloader):
         print("Current generation input ids")
-        print(msg_tokenizer.batch_decode(input['generation_input_ids'], skip_special_tokens=True))
+        print(msg_tokenizer.batch_decode(input['generation_input_ids']))
+        print("Current message input ids")
+        print(msg_tokenizer.batch_decode(input['msg_input_ids']))
         print()
 
         if i == 5:
