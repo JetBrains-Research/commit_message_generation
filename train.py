@@ -8,6 +8,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from model.encoder_decoder_module import EncoderDecoderModule
+from model.gpt2_lm_head_module import GPT2LMHeadModule
 from dataset_utils.cmg_data_module import CMGDataModule
 
 
@@ -30,15 +31,27 @@ def main(cfg: DictConfig) -> None:
     dm.setup()
 
     # main module with model logic
-    encoder_decoder = EncoderDecoderModule(**cfg.model,
-                                           src_tokenizer=dm._src_tokenizer,
-                                           trg_tokenizer=dm._trg_tokenizer,
-                                           num_epochs=cfg.trainer.max_epochs,
-                                           num_batches=dm.train._len // cfg.dataset.train_dataloader_conf.batch_size)
+    if cfg.model.encoder_decoder:
+        # seq2seq model
+        model = EncoderDecoderModule(**cfg.model,
+                                     src_tokenizer=dm._src_tokenizer,
+                                     trg_tokenizer=dm._trg_tokenizer,
+                                     num_epochs=cfg.trainer.max_epochs,
+                                     num_batches=dm.train._len // (
+                                             cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.gpus),
+                                     num_gpus=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1)
+    else:
+        # single decoder
+        model = GPT2LMHeadModule(**cfg.model,
+                                 tokenizer=dm._trg_tokenizer,
+                                 num_epochs=cfg.trainer.max_epochs,
+                                 num_batches=dm.train._len // (
+                                         cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.gpus),
+                                 num_gpus=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1)
 
     # logger
     trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
-    trainer_logger.watch(encoder_decoder, log='gradients', log_freq=250)
+    trainer_logger.watch(model, log='gradients', log_freq=250)
 
     # callbacks
     lr_logger = LearningRateLogger()
@@ -59,11 +72,11 @@ def main(cfg: DictConfig) -> None:
     # -----------------------
     #         train         -
     # -----------------------
-    trainer.fit(encoder_decoder, dm)
+    trainer.fit(model, dm)
     # -----------------------
     #          test         -
     # -----------------------
-    trainer.test(ckpt_path=checkpoint_callback.best_model_path, datamodule=dm)
+    trainer.test(model=model, datamodule=dm)
 
 
 if __name__ == '__main__':
