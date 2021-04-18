@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import IterableDataset, DataLoader
 from transformers import RobertaTokenizer, GPT2Tokenizer
 
-from dataset_utils.data_collator_w_history import DataCollatorWithHistory
+from dataset_utils.data_collators import DataCollatorWithHistory
 
 
 class CMGDatasetWithHistory(IterableDataset):

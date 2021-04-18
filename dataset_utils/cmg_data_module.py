@@ -2,15 +2,13 @@ import os
 
 import pytorch_lightning as pl
 
-from torch.utils.data import DataLoader
-
 from transformers import RobertaTokenizer, GPT2Tokenizer
 
 import hydra
 from omegaconf import DictConfig
 
 from dataset_utils.cmg_dataset_w_history import CMGDatasetWithHistory
-from dataset_utils.data_collator_w_history import DataCollatorWithHistory
+from dataset_utils.data_collators import DataCollatorWithHistory, DataCollatorWithoutHistory
 from dataset_utils.data_preprocessor import DataPreprocessor
 
 
@@ -22,6 +20,7 @@ class CMGDataModule(pl.LightningDataModule):
                  decoder_name_or_path: str,
                  local_rank: int,
                  world_size: int,
+                 with_history: bool,
                  train_dataloader_conf: DictConfig,
                  val_dataloader_conf: DictConfig,
                  test_dataloader_conf: DictConfig):
@@ -44,10 +43,16 @@ class CMGDataModule(pl.LightningDataModule):
         # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
         self._trg_tokenizer.pad_token = self._trg_tokenizer.unk_token
 
-        self.data_collator = DataCollatorWithHistory(src_tokenizer=self._src_tokenizer,
-                                                     trg_tokenizer=self._trg_tokenizer,
-                                                     max_len=self.history_max_len,
-                                                     testing=False)
+        if with_history:
+            self.data_collator = DataCollatorWithHistory(src_tokenizer=self._src_tokenizer,
+                                                         trg_tokenizer=self._trg_tokenizer,
+                                                         max_len=self.history_max_len,
+                                                         testing=False)
+        else:
+            self.data_collator = DataCollatorWithoutHistory(src_tokenizer=self._src_tokenizer,
+                                                            trg_tokenizer=self._trg_tokenizer,
+                                                            max_len=self.history_max_len,
+                                                            testing=False)
 
         # datasets are initialized later
         self.train = None
