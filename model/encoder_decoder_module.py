@@ -25,6 +25,7 @@ class EncoderDecoderModule(pl.LightningModule):
                  trg_tokenizer: GPT2Tokenizer,
                  num_epochs: int,
                  num_batches: int,
+                 num_gpus: int,
                  num_layers_encoder: Optional[int] = None,
                  num_layers_decoder: Optional[int] = None,
                  encoder_name_or_path: Optional[str] = None,
@@ -36,6 +37,7 @@ class EncoderDecoderModule(pl.LightningModule):
         self._trg_tokenizer = trg_tokenizer
         self._num_epochs = num_epochs
         self._num_batches = num_batches
+        self._num_gpus = num_gpus
         self.learning_rate = learning_rate
 
         self.save_hyperparameters()
@@ -84,25 +86,10 @@ class EncoderDecoderModule(pl.LightningModule):
         # do not tie output embeddings to input embeddings
         self.model.config.tie_word_embeddings = False
 
-        # set decoding params
-        self.model.config.decoder_start_token_id = self._trg_tokenizer.bos_token_id
-        self.model.config.bos_token_id = self._trg_tokenizer.bos_token_id
-        self.model.config.eos_token_id = self._trg_tokenizer.eos_token_id
-        self.model.config.pad_token_id = self._trg_tokenizer.pad_token_id
-        self.model.config.max_length = 30
-        self.model.config.min_length = 2
-        self.model.config.no_repeat_ngram_size = 4
-        self.model.config.early_stopping = True
-        self.model.config.num_beams = 4
-
         # to make logs for different batch sizes prettier
         self.examples_count = 0
 
     def forward(self, batch):
-        print('\n==Forward==')
-        print('Diff shape', batch['diff_input_ids'].shape)
-        print('History + current message shape', batch['msg_input_ids'].shape)
-        print()
         return self.model(input_ids=batch['diff_input_ids'],
                           attention_mask=batch['diff_attention_mask'],
                           decoder_input_ids=batch['msg_input_ids'],
@@ -164,17 +151,9 @@ class EncoderDecoderModule(pl.LightningModule):
     def test_epoch_end(self, outputs):
         self.metrics_epoch_end(outputs, stage='test')
 
-    def decode_src(self, *args):
-        return tuple(self._src_tokenizer.batch_decode(arg, skip_special_tokens=True,
-                                                      clean_up_tokenization_spaces=False) for arg in args)
-
-    def decode_trg(self, *args):
-        return tuple(self._trg_tokenizer.batch_decode(arg, skip_special_tokens=True,
-                                                      clean_up_tokenization_spaces=False) for arg in args)
-
     def configure_optimizers(self):
         optimizer = AdamW(self.parameters(), lr=self.learning_rate)
-        scheduler = {'scheduler': get_linear_schedule_with_warmup(optimizer, 4000,
+        scheduler = {'scheduler': get_linear_schedule_with_warmup(optimizer, 4000 // self._num_gpus,
                                                                   self._num_epochs * self._num_batches),
                      'interval': 'step',
                      'frequency': 1}
