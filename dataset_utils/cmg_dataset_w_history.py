@@ -1,127 +1,129 @@
-import numpy as np
-import pandas as pd
-from collections import defaultdict
-from typing import List, Dict, Any
+import os
+import json
+import random
 
+from typing import List, Dict, Generator, Iterator
 import torch
-from torch.utils.data import Dataset
-from transformers import PreTrainedTokenizerBase, RobertaTokenizer, GPT2Tokenizer
+from torch.utils.data import IterableDataset, DataLoader
+from transformers import RobertaTokenizer, GPT2Tokenizer
+
+from dataset_utils.data_collators import DataCollatorWithHistory
 
 
-class CMGDatasetWithHistory(Dataset):
-    """Defines a map-style dataset for commit message generation task.
-    This version provides history from the same author for each commit.
-    Therefore for each commit it's author and it's position inside it's author's history are keeped.
-    """
-
+class CMGDatasetWithHistory(IterableDataset):
     def __init__(self,
-                 diff_input_ids: torch.Tensor,
-                 diff_attention_mask: torch.Tensor,
-                 msg_input_ids: List[List[int]],
-                 msg_authors: List[Any],
-                 msg_positions_in_history: List[int],
-                 history: Dict[Any, List[List[int]]],
-                 iters: List[List[int]]):
+                 filename: str,
+                 history: Dict[str, List[int]],
+                 rank: int,
+                 world_size: int):
+        """
+        Defines an iterable-style dataset for commit message generation task.
+        This version provides history from the same author for each commit.
+        :param filename: file to read diff, author ids and positions in history from
+        :param history: dictionary with full message history for each author
+        :param rank: rank of the process in DDP (must be 0 if you have single process)
+        :param world_size: amount of processes in DDP (must be 1 if you have single process)
+        """
 
-        self.diff_input_ids = diff_input_ids
-        self.diff_attention_mask = diff_attention_mask
-
-        self.msg_input_ids = msg_input_ids
-        self.msg_authors = msg_authors
-
-        self.msg_positions_in_history = msg_positions_in_history
+        self.filename = filename
         self.history = history
 
-        self._iters = iters
+        with open(filename, 'r') as f:
+            self._len = sum(1 for _ in f)
 
-    def __getitem__(self, idx):
-        try:
-            history_idx = self.msg_positions_in_history[idx]
-            history_msgs = self.history[self.msg_authors[idx]][:history_idx]
-        except KeyError:  # if there are no examples for this author =(
-            history_msgs = []
-        return {"diff_input_ids": self.diff_input_ids[idx],
-                "diff_attention_mask": self.diff_attention_mask[idx],
-                "msg_input_ids": self.msg_input_ids[idx],
-                "history_input_ids": history_msgs}
-
-    def __len__(self):
-        return len(self.msg_input_ids)
-
-    def get_iterators_by_authors(self):
-        return [iter(value) for value in self._iters]
+        self._gpu_rank = rank
+        self._gpu_world_size = world_size
+        self._num_workers = None
 
     @staticmethod
-    def load_data(diff_tokenizer: PreTrainedTokenizerBase,
-                  msg_tokenizer: PreTrainedTokenizerBase,
-                  path: str):
+    def _init_worker_fn(worker_id: int) -> None:
+        """Init each worker for DataLoader in a proper way."""
+        worker_info = torch.utils.data.get_worker_info()
+        assert worker_id == worker_info.id
+        self: CMGDatasetWithHistory = worker_info.dataset
+        self.process_rank = self._gpu_rank * self._num_workers + worker_info.id
+        self.world_size = self._gpu_world_size * self._num_workers
 
-        df = pd.read_csv(path, names=['diff', 'msg', 'id'])
-        df['id_position'] = df.groupby('id').cumcount()
+    def _get_examples_generator(self) -> Generator[Dict[str, List[int]], None, None]:
+        """
+        For multiprocessing support:
+        process_rank = current process id
+        world_size = # of processes
+        This function yields local_rank'th row from every world_size rows.
+        """
+        with open(self.filename) as f:
+            for i, line in enumerate(f):
+                if i % self.world_size == self.process_rank:
+                    line = json.loads(line.strip())
+                    yield {'diff_input_ids': line['diff_input_ids'],
+                           'msg_input_ids': self.history[str(line['author'])][line['pos_in_history']],
+                           'history_input_ids': self.history[str(line['author'])][:line['pos_in_history']]}
 
-        diffs = df['diff'].tolist()
-        msgs = df['msg'].tolist()
-        ids = df['id'].tolist()
-        positions_in_history = df['id_position'].tolist()
-        iters = [value for _, value in df.groupby('id').groups.items()]
+    def __iter__(self) -> Iterator[Dict[str, List[int]]]:
+        assert self._num_workers is not None, f"You must access __iter__ through DataLoader"
+        return iter(self._get_examples_generator())
 
-        diff_enc = diff_tokenizer(diffs, truncation=True, padding=True,
-                                  return_tensors='pt', add_special_tokens=True, max_length=500)
-        msg_input_ids = msg_tokenizer(msgs, truncation=True).input_ids
+    def get_dataloader(self, batch_size: int, num_workers: int, collate_fn: DataCollatorWithHistory) -> DataLoader:
+        """Creates DataLoader in a proper way."""
+        assert num_workers >= 0, "num_workers must be at least 0"
+        if num_workers == 0:
+            # We need to initialize at least 1 worker in order to call worker_init_fn
+            num_workers = 1
+        self._num_workers = num_workers
 
-        # create history as dict {repo id: all messages from this repo (as lists of tokens)}
-        history = defaultdict(list)
-        for msg, id in zip(msg_input_ids, ids):
-            history[id].append(msg)
+        return DataLoader(
+            dataset=self,
+            batch_size=batch_size,  # TODO: https://pytorch.org/docs/stable/data.html#disable-automatic-batching (?)
+            num_workers=num_workers,
+            collate_fn=collate_fn,
+            pin_memory=torch.cuda.is_available(),
+            worker_init_fn=CMGDatasetWithHistory._init_worker_fn,
+        )
 
-        return CMGDatasetWithHistory(diff_input_ids=diff_enc.input_ids,
-                                     diff_attention_mask=diff_enc.attention_mask,
-                                     msg_input_ids=msg_input_ids,
-                                     msg_authors=ids,
-                                     msg_positions_in_history=positions_in_history,
-                                     history=history,
-                                     iters=iters)
+    @staticmethod
+    def load_data(dataset_root: str,
+                  rank: int,
+                  world_size: int):
+        """
+        Load dataset from files on disk.
+        :param dataset_root: path to dataset, including part (train/val/test)
+        :param rank: current GPU
+        :param world_size: number of GPUs
+        """
+
+        with open(dataset_root + '_history.json', 'r') as infile:
+            history = json.load(infile)
+
+        return CMGDatasetWithHistory(dataset_root + '.json',
+                                     history,
+                                     rank,
+                                     world_size)
 
 
 if __name__ == "__main__":
     diff_tokenizer = RobertaTokenizer.from_pretrained('microsoft/codebert-base')
     msg_tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
+    msg_tokenizer.pad_token = msg_tokenizer.unk_token
 
-    train_dataset = CMGDatasetWithHistory.load_data(diff_tokenizer, msg_tokenizer,
-                                                    '../raw_data/CleanedJiang/train.csv')
+    test_dataset = CMGDatasetWithHistory.load_data('../raw_data/github_data/test',
+                                                   rank=0,
+                                                   world_size=1)
 
-    test_dataset = CMGDatasetWithHistory.load_data(diff_tokenizer, msg_tokenizer,
-                                                   '../raw_data/CleanedJiang/test.csv')
+    data_collator = DataCollatorWithHistory(src_tokenizer=diff_tokenizer,
+                                            trg_tokenizer=msg_tokenizer,
+                                            max_len=512)
 
-    print("Train:", len(train_dataset))
-    print("Test:", len(test_dataset))
+    test_dataloader = test_dataset.get_dataloader(num_workers=4, batch_size=4, collate_fn=data_collator)
+
+    print("Test")
     print()
 
-    for i in range(10):
-        print(f"===Example {i+1}===")
-        print()
-
-        idx = np.random.randint(len(test_dataset))
-        input = test_dataset[idx]
-
-        print("Current diff input ids")
-        print(diff_tokenizer.decode(input['diff_input_ids']))
-        print()
+    for i, input in enumerate(test_dataloader):
+        print("Current generation input ids")
+        print(msg_tokenizer.batch_decode(input['generation_input_ids']))
         print("Current message input ids")
-        print(input['msg_input_ids'])
-        print(msg_tokenizer.decode(input['msg_input_ids']))
+        print(msg_tokenizer.batch_decode(input['msg_input_ids']))
         print()
-        print("Current history input ids")
-        print(input['history_input_ids'])
-        print(msg_tokenizer.batch_decode(input['history_input_ids']))
-        print()
-        print("Current position in history")
-        print(test_dataset.msg_positions_in_history[idx])
-        print()
-        print("Current author")
-        print(test_dataset.msg_authors[idx])
-        print()
-        print("Full history for current author")
-        print(test_dataset.history[test_dataset.msg_authors[idx]])
-        print(msg_tokenizer.batch_decode(test_dataset.history[test_dataset.msg_authors[idx]]))
-        print()
+
+        if i == 5:
+            break

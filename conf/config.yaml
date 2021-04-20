@@ -1,10 +1,10 @@
 dataset:
   dataset_root: raw_data/github_data
-  diff_max_len: 512
-  msg_max_len: 512
-  history_max_len: 512
+  history_max_len: 200
   encoder_name_or_path: microsoft/codebert-base
   decoder_name_or_path: distilgpt2
+  local_rank: 0
+  world_size: 1
   train_dataloader_conf:
     batch_size: 4
     num_workers: 4
@@ -16,8 +16,9 @@ logger:
   name:
   project: commit_message_generation
 model:
+  encoder_decoder: false
   decoder_name_or_path: distilgpt2
-  actual_generation: false
+  actual_generation: true
 trainer:
   gpus: 1
   max_epochs: 40
