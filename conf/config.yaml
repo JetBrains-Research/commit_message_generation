@@ -3,25 +3,26 @@ dataset:
   history_max_len: 200
   encoder_name_or_path: microsoft/codebert-base
   decoder_name_or_path: distilgpt2
+  with_history: true
   local_rank: 0
   world_size: 1
   train_dataloader_conf:
-    batch_size: 4
+    batch_size: 8
     num_workers: 4
   test_dataloader_conf:
-    batch_size: 4
-    num_workers: 4
+    batch_size: 8
+    num_workers: 1
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name:
   project: commit_message_generation
 model:
-  encoder_decoder: false
+  encoder_decoder: true
   decoder_name_or_path: distilgpt2
-  actual_generation: true
+  actual_generation: false
 trainer:
   gpus: 1
   max_epochs: 40
+  precision: 16
+  amp_level: O1
   num_sanity_val_steps: 2
   accumulate_grad_batches: 1
-

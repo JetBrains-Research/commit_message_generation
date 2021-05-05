@@ -8,13 +8,14 @@ import hydra
 from omegaconf import DictConfig
 
 from dataset_utils.cmg_dataset_w_history import CMGDatasetWithHistory
-from dataset_utils.data_collators import DataCollatorWithHistory
+from dataset_utils.data_collators import DataCollatorWithHistory, DataCollatorWithoutHistory
 
 
 class CMGDataModule(pl.LightningDataModule):
     def __init__(self,
                  dataset_root: str,
                  history_max_len: int,
+                 with_history: bool,
                  encoder_name_or_path: str,
                  decoder_name_or_path: str,
                  local_rank: int,
@@ -38,10 +39,14 @@ class CMGDataModule(pl.LightningDataModule):
         # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
         self._trg_tokenizer.pad_token = self._trg_tokenizer.unk_token
 
-        self.data_collator = DataCollatorWithHistory(src_tokenizer=self._src_tokenizer,
-                                                     trg_tokenizer=self._trg_tokenizer,
-                                                     max_len=self.history_max_len,
-                                                     testing=False)
+        if with_history:
+            self.data_collator = DataCollatorWithHistory(src_tokenizer=self._src_tokenizer,
+                                                         trg_tokenizer=self._trg_tokenizer,
+                                                         max_len=self.history_max_len)
+        else:
+            self.data_collator = DataCollatorWithoutHistory(src_tokenizer=self._src_tokenizer,
+                                                            trg_tokenizer=self._trg_tokenizer,
+                                                            max_len=self.history_max_len)
 
         # datasets are initialized later
         self.train = None

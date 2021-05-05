@@ -84,6 +84,7 @@ class GPT2LMHeadModule(pl.LightningModule):
         self.meteor.add_batch(predictions=decoded_preds, references=decoded_targets_no_history)
 
     def next_token_metrics_step(self, batch):
+        print(batch['msg_input_ids'].shape)
         scores = self(batch).logits
         # calculate metrics
         acc_top1, acc_top5, MRR_top5 = accuracy_MRR(scores, batch['msg_labels'], top_k=5, shift=True)
@@ -112,14 +113,15 @@ class GPT2LMHeadModule(pl.LightningModule):
                                         "test_rougeL": rouge["rougeL"].mid.fmeasure,
                                         "test_meteor": meteor["meteor"]}, step=self.examples_count)
         else:
-            test_acc_top1 = np.mean([x["acc_top1"] for x in outputs])
-            test_acc_top5 = np.mean([x["acc_top5"] for x in outputs])
-            test_MRR_top5 = np.mean([x["MRR_top5"] for x in outputs])
-
-            self.logger.experiment.log({"test_acc_top1": test_acc_top1,
-                                        "test_acc_top5": test_acc_top5,
-                                        "test_MRR_top5": test_MRR_top5},
-                                       step=self.examples_count)
+            df = pd.DataFrame.from_dict({'acc_top1': [x["acc_top1"] for x in outputs],
+                                         'acc_top5': [x["acc_top5"] for x in outputs],
+                                         'MRR_top5': [x["MRR_top5"] for x in outputs]})
+            wandb.Table.MAX_ROWS = 15000
+            table = wandb.Table(dataframe=df)
+            self.logger.experiment.log({"test_metrics_for_CI": table,
+                                        "test_acc_top1": np.mean([x["acc_top1"] for x in outputs]),
+                                        "test_acc_top5": np.mean([x["acc_top5"] for x in outputs]),
+                                        "test_MRR_top5": np.mean([x["MRR_top5"] for x in outputs])}, step=9000001)
 
     def decode_trg(self, *args):
         return tuple(self._tokenizer.batch_decode(arg, skip_special_tokens=True,

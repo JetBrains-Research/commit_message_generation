@@ -2,12 +2,12 @@ import os
 import json
 import random
 
-from typing import List, Dict, Generator, Iterator
+from typing import List, Dict, Generator, Iterator, Union
 import torch
 from torch.utils.data import IterableDataset, DataLoader
 from transformers import RobertaTokenizer, GPT2Tokenizer
 
-from dataset_utils.data_collators import DataCollatorWithHistory
+from dataset_utils.data_collators import DataCollatorWithHistory, DataCollatorWithoutHistory
 
 
 class CMGDatasetWithHistory(IterableDataset):
@@ -63,7 +63,8 @@ class CMGDatasetWithHistory(IterableDataset):
         assert self._num_workers is not None, f"You must access __iter__ through DataLoader"
         return iter(self._get_examples_generator())
 
-    def get_dataloader(self, batch_size: int, num_workers: int, collate_fn: DataCollatorWithHistory) -> DataLoader:
+    def get_dataloader(self, batch_size: int, num_workers: int,
+                       collate_fn: Union[DataCollatorWithHistory, DataCollatorWithoutHistory]) -> DataLoader:
         """Creates DataLoader in a proper way."""
         assert num_workers >= 0, "num_workers must be at least 0"
         if num_workers == 0:
@@ -109,7 +110,7 @@ if __name__ == "__main__":
                                                    rank=0,
                                                    world_size=1)
 
-    data_collator = DataCollatorWithHistory(src_tokenizer=diff_tokenizer,
+    data_collator = DataCollatorWithoutHistory(src_tokenizer=diff_tokenizer,
                                             trg_tokenizer=msg_tokenizer,
                                             max_len=512)
 
