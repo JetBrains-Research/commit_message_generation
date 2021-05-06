@@ -22,10 +22,10 @@ To use this project, follow these steps:
 
     This project has the following prerequisites:
     * Python 3.8
-    * Neural networks frameworks: [PyTorch](https://pytorch.org/), [🤗 Transformers]() and [PyTorch Lightning](https://www.pytorchlightning.ai/)
+    * Neural networks frameworks: [PyTorch](https://pytorch.org/), [🤗 Transformers](https://huggingface.co/transformers/) and [PyTorch Lightning](https://www.pytorchlightning.ai/)
     * Configuration: [Hydra](https://hydra.cc/)
     * Experiments tracking: [Weights & Biases](https://wandb.ai/site)
-    * Metrics-related stuff: [🤗 Datasets](), [NLTK](https://www.nltk.org/), [rouge-score](https://pypi.org/project/rouge-score/)
+    * Metrics-related stuff: [🤗 Datasets](https://huggingface.co/docs/datasets/), [NLTK](https://www.nltk.org/), [rouge-score](https://pypi.org/project/rouge-score/)
 
     You can install Python packages with [pip](https://pip.pypa.io/en/stable/):
     ```
