@@ -7,7 +7,7 @@ This repository contains code for training and evaluation of Transformer-based m
 
 Several pretrained models are available [as Weights & Biases artifacts](https://wandb.ai/saridormi/commit_message_generation/artifacts/model). You can simply download them or do whatever can be done with artifacts *(see [Weights & Biases docs](https://docs.wandb.ai/guides/artifacts) for more information)*.
 
-Also, as part of this project, data about ~1.3M commits from open GitHub repositories was collected and preprocessed *(later I'll add more information)*.  Dataset is available [at Google Drive](https://drive.google.com/drive/folders/1MgwVpvD2QYL5F3xZGdmb40T7RHdQEe7y)  or [as Weights & Biases artifact](https://wandb.ai/saridormi/commit_message_generation/artifacts/dataset) as well. 
+Also, as part of this project, data about ~1.3M commits from open GitHub repositories was collected and preprocessed, see [this repo](https://github.com/saridormi/commits_dataset) for more information.
 
 ## Usage
 > **OS:** Linux (should work on Windows too, but I haven't fully tested it)
@@ -36,11 +36,6 @@ To use this project, follow these steps:
     conda env create -f environment.yml
     ```
 3. **Prepare data**
-- Using existing data
-
-You can download tokenized and ready-to-use dataset [here](https://drive.google.com/drive/folders/1MgwVpvD2QYL5F3xZGdmb40T7RHdQEe7y) (`tokenized` folder).
-
-- Using your own data
 
 > ❗ When project runs for the first time, data gets preprocessed and tokenized, which can take a long time.
     
