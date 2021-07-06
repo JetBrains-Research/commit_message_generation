@@ -1,5 +1,4 @@
 import pytest
-import torch
 from src.data import DataProcessor
 
 
