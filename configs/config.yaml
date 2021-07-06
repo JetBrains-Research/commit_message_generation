@@ -1,0 +1,10 @@
+data_processor:
+  prompt_max_len: 200
+  diff_tokenizer_name_or_path: microsoft/codebert-base
+  msg_tokenizer_name_or_path: distilgpt2
+  nl_token: \n
+model:
+  decoder_name_or_path: distilgpt2
+  generation_kwargs:
+    num_beams: 5
+    num_beam_hyps_to_keep: 5

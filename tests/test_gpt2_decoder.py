@@ -65,9 +65,4 @@ def test_decoder_with_and_without_encoder(encoder_input, decoder_input, default_
         num_beam_hyps_to_keep=5,
         output_scores=True,
     )
-    print("With encoder:")
-    print(decoder_tokenizer.batch_decode(result_w_encoder.sequences, skip_special_tokens=True))
-    print()
-    print("Without encoder:")
-    print(decoder_tokenizer.batch_decode(result_no_encoder.sequences, skip_special_tokens=True))
     assert not torch.equal(result_no_encoder.sequences_scores, result_w_encoder.sequences_scores)
