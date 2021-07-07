@@ -1,7 +1,7 @@
 import os
 import numpy as np  # type: ignore
 from time import time
-from typing import Dict, Tuple, List, Type
+from typing import Dict, Tuple, List
 from onnx import ModelProto, TensorProto, helper  # type: ignore
 from onnxruntime import InferenceSession  # type: ignore
 from onnxruntime.transformers import bert_test_data  # type: ignore
@@ -151,7 +151,7 @@ class DataCreator:
         test_cases: int = 1,
         verbose: bool = False,
         random_seed: int = None,
-    ) -> List[Dict[str, Type[np.ndarray]]]:
+    ) -> List[Dict[str, np.ndarray]]:
         """
         Find graph inputs for given RoBERTa model_utils and create given number of fake input data for testing.
 
@@ -190,7 +190,7 @@ class DataCreator:
         return inputs
 
     @staticmethod
-    def save_input(data: List[Dict[str, Type[np.ndarray]]], output_dir: str):
+    def save_input(data: List[Dict[str, np.ndarray]], output_dir: str):
         """
         Save given input data to .pb files.
 
@@ -207,7 +207,7 @@ class DataCreator:
                     )
 
     @staticmethod
-    def save_output(data: List[Tuple[Type[np.ndarray], Type[np.ndarray]]], output_dir: str):
+    def save_output(data: List[Tuple[np.ndarray, np.ndarray]], output_dir: str):
         """
         Save given data to .pb files.
 
@@ -231,9 +231,7 @@ class DataCreator:
                 )
 
     @staticmethod
-    def run_inference(
-        inputs: Dict[str, Type[np.ndarray]], model_path: str, iters: int = 1
-    ) -> Tuple[Type[np.ndarray], Type[np.ndarray]]:
+    def run_inference(inputs: Dict[str, np.ndarray], model_path: str, iters: int = 1) -> Tuple[np.ndarray, np.ndarray]:
         """
         Run model on given inputs given number of times.
 

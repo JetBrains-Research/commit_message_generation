@@ -5,7 +5,7 @@ import torch
 import pytorch_lightning as pl
 from transformers import EncoderDecoderModel, RobertaModel, RobertaConfig, GPT2LMHeadModel, GPT2Config  # type: ignore
 from transformers import RobertaTokenizer, GPT2Tokenizer, AdamW, get_linear_schedule_with_warmup  # type: ignore
-from metrics import accuracy_MRR
+from metrics import accuracy_MRR  # type: ignore
 
 
 class EncoderDecoderModule(pl.LightningModule):

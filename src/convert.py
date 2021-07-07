@@ -1,8 +1,8 @@
 import hydra
 import os
 from omegaconf import DictConfig
-from .onnx_utils import ONNXConverter
-from .onnx_utils import DataCreator
+from onnx_utils import ONNXConverter  # type: ignore
+from onnx_utils import DataCreator    # type: ignore
 
 
 @hydra.main(config_path="..", config_name="config")
