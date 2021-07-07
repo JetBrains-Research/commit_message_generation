@@ -1,0 +1,20 @@
+converter:
+  wandb_artifact: commit_message_generation/full_transformer4_4_best_and_last:v0
+  tokenizer: microsoft/codebert-base
+  opset: 11
+  seq2seq_model_path: onnx_utils/data/seq2seq_model
+  encoder_path: onnx_utils/data/encoder
+  onnx_encoder_path: onnx_utils/data/onnx/encoder.onnx
+  optimized_onnx_encoder_path: onnx_utils/data/optimized_encoder.onnx
+data_creator:
+  model_path: onnx_utils/data/optimized_encoder.onnx
+  dictionary_size: 50265
+test_data_params:
+  batch_size: 1
+  sequence_length: 10
+  input_path: onnx_utils/data/inputs
+  output_path: onnx_utils/data/outputs
+  n_iters: 5
+  test_cases: 5
+
+

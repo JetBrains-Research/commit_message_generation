@@ -1,36 +1,28 @@
-import pandas as pd
-import numpy as np
-from collections import defaultdict
+import numpy as np  # type: ignore
 from copy import copy
 from typing import Optional
-
-import wandb
-
 import torch
 import pytorch_lightning as pl
-from transformers import EncoderDecoderModel, RobertaModel, RobertaConfig, GPT2LMHeadModel, GPT2Config, \
-    RobertaTokenizer, GPT2Tokenizer, AdamW, get_linear_schedule_with_warmup
-
+from transformers import EncoderDecoderModel, RobertaModel, RobertaConfig, GPT2LMHeadModel, GPT2Config  # type: ignore
+from transformers import RobertaTokenizer, GPT2Tokenizer, AdamW, get_linear_schedule_with_warmup  # type: ignore
 from metrics import accuracy_MRR
-from datasets import load_metric
-import nltk
-
-nltk.download('wordnet')
 
 
 class EncoderDecoderModule(pl.LightningModule):
-    def __init__(self,
-                 learning_rate: float,
-                 src_tokenizer: RobertaTokenizer,
-                 trg_tokenizer: GPT2Tokenizer,
-                 num_epochs: int,
-                 num_batches: int,
-                 num_gpus: int,
-                 num_layers_encoder: Optional[int] = None,
-                 num_layers_decoder: Optional[int] = None,
-                 encoder_name_or_path: Optional[str] = None,
-                 decoder_name_or_path: Optional[str] = None,
-                 **kwargs):
+    def __init__(
+        self,
+        learning_rate: float,
+        src_tokenizer: RobertaTokenizer,
+        trg_tokenizer: GPT2Tokenizer,
+        num_epochs: int,
+        num_batches: int,
+        num_gpus: int,
+        num_layers_encoder: Optional[int] = None,
+        num_layers_decoder: Optional[int] = None,
+        encoder_name_or_path: Optional[str] = None,
+        decoder_name_or_path: Optional[str] = None,
+        **kwargs,
+    ):
         super().__init__()
 
         self._src_tokenizer = src_tokenizer
@@ -75,8 +67,10 @@ class EncoderDecoderModule(pl.LightningModule):
             decoder_config.add_cross_attention = True
             decoder = GPT2LMHeadModel(config=decoder_config)
         else:
-            raise ValueError("You have to specify either num_layers for training from scratch \
-                                          or paths for loading pretrained models")
+            raise ValueError(
+                "You have to specify either num_layers for training from scratch \
+                                          or paths for loading pretrained models"
+            )
 
         self.model = EncoderDecoderModel(encoder=encoder, decoder=decoder)
 
@@ -90,14 +84,16 @@ class EncoderDecoderModule(pl.LightningModule):
         self.examples_count = 0
 
     def forward(self, batch):
-        return self.model(input_ids=batch['diff_input_ids'],
-                          attention_mask=batch['diff_attention_mask'],
-                          decoder_input_ids=batch['msg_input_ids'],
-                          decoder_attention_mask=batch['msg_attention_mask'],
-                          labels=batch['msg_labels'])
+        return self.model(
+            input_ids=batch["diff_input_ids"],
+            attention_mask=batch["diff_attention_mask"],
+            decoder_input_ids=batch["msg_input_ids"],
+            decoder_attention_mask=batch["msg_attention_mask"],
+            labels=batch["msg_labels"],
+        )
 
     def training_step(self, batch, batch_idx):
-        self.examples_count += len(batch['diff_input_ids'])
+        self.examples_count += len(batch["diff_input_ids"])
         loss, logits = self(batch)[:2]
         self.logger.experiment.log({"train_loss_step": loss}, step=self.examples_count)
         return {"loss": loss}
@@ -109,11 +105,11 @@ class EncoderDecoderModule(pl.LightningModule):
     def metrics_step(self, batch):
         """
         Logic for validation & testing steps:
-        1) Calculate accuracy@1, accuracy@5 and MRR@5 from model output and labels
+        1) Calculate accuracy@1, accuracy@5 and MRR@5 from model_utils output and labels
         """
         loss, scores = self(batch)[:2]
         # calculate metrics
-        acc_top1, acc_top5, MRR_top5 = accuracy_MRR(scores, batch['msg_labels'], top_k=5, shift=True)
+        acc_top1, acc_top5, MRR_top5 = accuracy_MRR(scores, batch["msg_labels"], top_k=5, shift=True)
         return {"loss": loss, "acc_top1": acc_top1, "acc_top5": acc_top5, "MRR_top5": MRR_top5}
 
     def metrics_epoch_end(self, outputs, stage):
@@ -127,36 +123,36 @@ class EncoderDecoderModule(pl.LightningModule):
         acc_top5 = np.mean([x["acc_top5"] for x in outputs])
         MRR_top5 = np.mean([x["MRR_top5"] for x in outputs])
 
-        results = {f"{stage}_acc_top1": acc_top1,
-                   f"{stage}_acc_top5": acc_top5,
-                   f"{stage}_MRR_top5": MRR_top5}
+        results = {f"{stage}_acc_top1": acc_top1, f"{stage}_acc_top5": acc_top5, f"{stage}_MRR_top5": MRR_top5}
 
-        if stage == 'val':
+        if stage == "val":
             loss = torch.stack([x["loss"] for x in outputs]).mean()
             results["val_loss"] = loss
             # needed for ModelCheckpoint
-            self.log('val_MRR_top5', MRR_top5, on_step=False, on_epoch=True, prog_bar=True, logger=False)
-        self.logger.experiment.log(results,
-                                   step=self.examples_count)
+            self.log("val_MRR_top5", MRR_top5, on_step=False, on_epoch=True, prog_bar=True, logger=False)
+        self.logger.experiment.log(results, step=self.examples_count)
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         return self.metrics_step(batch)
 
     def validation_epoch_end(self, outputs):
-        self.metrics_epoch_end(outputs, stage='val')
+        self.metrics_epoch_end(outputs, stage="val")
 
     def test_step(self, batch, batch_idx):
         return self.metrics_step(batch)
 
     def test_epoch_end(self, outputs):
-        self.metrics_epoch_end(outputs, stage='test')
+        self.metrics_epoch_end(outputs, stage="test")
 
     def configure_optimizers(self):
         optimizer = AdamW(self.parameters(), lr=self.learning_rate)
-        scheduler = {'scheduler': get_linear_schedule_with_warmup(optimizer, 4000 // self._num_gpus,
-                                                                  self._num_epochs * self._num_batches),
-                     'interval': 'step',
-                     'frequency': 1}
+        scheduler = {
+            "scheduler": get_linear_schedule_with_warmup(
+                optimizer, 4000 // self._num_gpus, self._num_epochs * self._num_batches
+            ),
+            "interval": "step",
+            "frequency": 1,
+        }
         return [optimizer], [scheduler]
 
     @staticmethod
@@ -179,7 +175,8 @@ class EncoderDecoderModule(pl.LightningModule):
             #                             num=student_config.num_hidden_layers, endpoint=True)
             step = (teacher_config.num_hidden_layers - 1) / (student_config.num_hidden_layers - 1)
             for student_layer, teacher_layer in enumerate(
-                    int(i * step) for i in range(student_config.num_hidden_layers)):
+                int(i * step) for i in range(student_config.num_hidden_layers)
+            ):
                 student.encoder.layer[student_layer] = teacher.encoder.layer[teacher_layer]
 
         else:

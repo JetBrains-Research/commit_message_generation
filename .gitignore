@@ -1,5 +1,5 @@
 /raw_data/
-/onnx_utils/data/
+data/
 __pycache__/
 .idea
 /asd.py
