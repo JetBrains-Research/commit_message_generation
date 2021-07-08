@@ -3,8 +3,11 @@ black
 mypy
 pytest
 
-# requirements for EncoderDecoderModule
+# trying to fix mypy errors
 numpy==1.20.2
+sympy
+
+# requirements for EncoderDecoderModule
 torch==1.7.0
 pytorch-lightning==1.1.4
 transformers==4.2.1
@@ -15,5 +18,5 @@ nltk==3.5
 rouge_score==0.0.4
 
 # onnx-related stuff
-onnxruntime
-onnx
+onnxruntime==1.6.0
+onnx==1.8.1
