@@ -2,7 +2,9 @@ import os
 import numpy as np  # type: ignore
 from time import time
 from typing import Dict, Tuple, List
+import onnx  # type: ignore
 from onnx import ModelProto, TensorProto, helper  # type: ignore
+from onnx.numpy_helper import to_array  # type: ignore
 from onnxruntime import InferenceSession  # type: ignore
 from onnxruntime.transformers import bert_test_data  # type: ignore
 from onnxruntime.transformers.onnx_model import OnnxModel  # type: ignore
@@ -77,8 +79,8 @@ class DataCreator:
         # Copyright (c) Microsoft Corporation.  All rights reserved.
         # Licensed under the MIT License.
         #--------------------------------------------------------------------------
-        Find graph inputs for RoBERTa model_utils. First, we will deduce inputs from EmbedLayerNormalization node. If not found,
-        we will guess the meaning of graph inputs based on naming.
+        Find graph inputs for RoBERTa model_utils. First, we will deduce inputs from EmbedLayerNormalization node.
+        If not found, we will guess the meaning of graph inputs based on naming.
 
         Args:
             onnx_file (str): onnx model path
@@ -171,8 +173,8 @@ class DataCreator:
             random_mask_length (bool): whether mask random number of words at the end
 
         Returns:
-            List[Dict[str,numpy.ndarray]]: list of test cases, where each test case is a dictonary with input name as key
-            and a tensor as value
+            List[Dict[str,numpy.ndarray]]: list of test cases, where each test case is a dictonary with input name
+            as key and a tensor as value
         """
         input_ids, input_mask = DataCreator.get_roberta_inputs(model_path)
         inputs = bert_test_data.fake_test_data(
@@ -205,6 +207,21 @@ class DataCreator:
                             key, TensorProto.INT64, example[key].shape, example[key].flatten()
                         ).SerializeToString()
                     )
+
+    @staticmethod
+    def read_data(input_dir: str) -> Dict[str, np.ndarray]:
+        """
+        Read all .pb files from given directory into single dictionary
+
+        :param input_dir: path to folder to read data from
+        :return: inputs: dictionary with filenames as keys and np.arrays as values
+        """
+        # TODO: might not be the most convenient option with several test cases
+        inputs = {}
+        for input_name in os.listdir(input_dir):
+            if ".pb" in input_name:
+                inputs[input_name.split(".")[0]] = to_array(onnx.load_tensor(os.path.join(input_dir, input_name)))
+        return inputs
 
     @staticmethod
     def save_output(data: List[Tuple[np.ndarray, np.ndarray]], output_dir: str):
