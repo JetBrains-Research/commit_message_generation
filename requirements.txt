@@ -6,3 +6,6 @@ pytest
 # deep Learning
 torch==1.7.0
 transformers==4.2.1
+
+# utilities
+hydra-core==1.0.5
