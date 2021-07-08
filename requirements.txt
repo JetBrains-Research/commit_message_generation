@@ -3,9 +3,11 @@ black
 mypy
 pytest
 
-# trying to fix mypy errors
+# trying to fix mypy & pytest errors
 numpy==1.20.2
+onnxconverter_common
 sympy
+coloredlogs
 
 # requirements for EncoderDecoderModule
 torch==1.7.0
