@@ -51,9 +51,7 @@ def test_decoder_with_and_without_encoder(encoder_input, decoder_input, default_
         max_length=50,
         min_length=1,
         num_beams=5,
-        num_beam_hyps_to_keep=5,
-        output_scores=True,
-        return_dict_in_generate=True,
+        num_return_sequences=5,
     )
 
     result_no_encoder = decoder.generate(
@@ -62,7 +60,6 @@ def test_decoder_with_and_without_encoder(encoder_input, decoder_input, default_
         max_length=50,
         min_length=1,
         num_beams=5,
-        num_beam_hyps_to_keep=5,
-        output_scores=True,
+        num_return_sequences=5,
     )
-    assert not torch.equal(result_no_encoder.sequences_scores, result_w_encoder.sequences_scores)
+    assert not torch.equal(result_no_encoder["scores"], result_w_encoder["scores"])

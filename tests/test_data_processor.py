@@ -1,5 +1,5 @@
 import pytest
-from src.data import DataProcessor
+from src.data_utils import DataProcessor
 
 
 @pytest.fixture

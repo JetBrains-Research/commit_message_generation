@@ -1,8 +1,8 @@
 import torch
 from transformers import GPT2LMHeadModel, BeamSearchScorer  # type: ignore
-from transformers.generation_utils import GenerationMixin  # type: ignore
+from transformers.generation_utils import GenerationMixin, BeamSearchOutput  # type: ignore
 from transformers.file_utils import ModelOutput  # type: ignore
-from typing import Optional, Dict, List, Callable
+from typing import Optional, Dict, List, Callable, Union
 
 
 class GPT2Decoder(GPT2LMHeadModel):
@@ -26,35 +26,40 @@ class GPT2Decoder(GPT2LMHeadModel):
 
     def generate(
         self,
-        input_ids: torch.LongTensor,
-        attention_mask: Optional[torch.LongTensor] = None,
+        input_ids: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[ModelOutput] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
+        min_length: Optional[int] = None,
+        max_length: Optional[int] = 20,
+        num_beams: Optional[int] = 1,
+        num_return_sequences: Optional[int] = 1,
+        early_stopping: Optional[bool] = None,
+        num_beam_groups: Optional[int] = None,
+        length_penalty: Optional[float] = None,
         repetition_penalty: Optional[float] = None,
         no_repeat_ngram_size: Optional[int] = None,
         bad_words_ids: Optional[List[List[int]]] = None,
         diversity_penalty: Optional[float] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
-        min_length: Optional[int] = None,
-        length_penalty: Optional[float] = None,
-        max_length: Optional[int] = 20,
-        num_beams: Optional[int] = 1,
-        do_early_stopping: Optional[bool] = None,
-        num_beam_hyps_to_keep: Optional[int] = 1,
-        num_beam_groups: Optional[int] = None,
-        output_scores: Optional[bool] = True,
-        return_dict_in_generate: Optional[bool] = True,
-    ):
-        # set init values
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Generate sequences conditioned on provided inputs via beam search.
+
+        Note: signature is almost the same as in `generate` method from transformers,
+        see `transformers.generation_utils.GenerationMixin.generate` for more information.
+
+        :return: dictionary (with keys `sequences` and `sequences_scores`)
+        """
         num_beam_groups = num_beam_groups if num_beam_groups is not None else self.config.num_beam_groups
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
-        do_early_stopping = do_early_stopping if do_early_stopping is not None else self.config.early_stopping
+        early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
 
         if num_beam_groups > num_beams:  # type: ignore
             raise ValueError("`num_beam_groups` has to be smaller or equal to `num_beams`")
 
-        if num_beam_hyps_to_keep > num_beams:  # type: ignore
-            raise ValueError("`num_beam_hyps_to_keep` has to be smaller or equal to `num_beams`")
+        if num_return_sequences > num_beams:  # type: ignore
+            raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`")
 
         logits_processors_list = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
@@ -74,13 +79,15 @@ class GPT2Decoder(GPT2LMHeadModel):
             num_beams=num_beams,
             device=self.device,
             length_penalty=length_penalty,
-            do_early_stopping=do_early_stopping,
-            num_beam_hyps_to_keep=num_beam_hyps_to_keep,
+            do_early_stopping=early_stopping,
+            num_beam_hyps_to_keep=num_return_sequences,
             num_beam_groups=num_beam_groups,
         )
 
-        is_encoder_decoder = encoder_outputs is not None
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids, device=self.device)
 
+        is_encoder_decoder = encoder_outputs is not None
         input_ids, model_kwargs = GenerationMixin._expand_inputs_for_generation(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -93,7 +100,7 @@ class GPT2Decoder(GPT2LMHeadModel):
         if encoder_hidden_states is not None and encoder_attention_mask is None:
             encoder_attention_mask = torch.ones(encoder_hidden_states.size()[:2], device=self.device)
 
-        return self.beam_search(
+        beam_search_output = self.beam_search(
             input_ids=input_ids,
             attention_mask=model_kwargs["attention_mask"],
             beam_scorer=beam_search_scorer,
@@ -101,8 +108,9 @@ class GPT2Decoder(GPT2LMHeadModel):
             max_length=max_length,
             pad_token_id=self.config.pad_token_id,
             eos_token_id=self.config.eos_token_id,
-            output_scores=output_scores,
-            return_dict_in_generate=return_dict_in_generate,
+            output_scores=True,
+            return_dict_in_generate=True,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
         )
+        return {"sequences": beam_search_output.sequences, "scores": beam_search_output.sequences_scores}

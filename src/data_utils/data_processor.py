@@ -24,7 +24,10 @@ class DataProcessor:
         self.nl_token = nl_token  # this might not be needed? (newline char in input is most likely \n by default)
 
     def __call__(self, msg: str, history: List[str], diff: Optional[str] = None) -> Dict[str, torch.Tensor]:
-        processed_input = {"decoder_input_ids": self.prepare_decoder_input(msg, history)}
+        processed_input = {
+            "decoder_input_ids": self.prepare_decoder_input(msg, history),
+            "encoder_input_ids": torch.empty(0),
+        }
         if diff:
             processed_input.update({"encoder_input_ids": self.prepare_encoder_input(diff)})
         return processed_input

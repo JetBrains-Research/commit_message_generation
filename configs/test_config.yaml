@@ -1,0 +1,13 @@
+data_processor:
+  prompt_max_len: 200
+  diff_tokenizer_name_or_path: distilbert-base-cased
+  msg_tokenizer_name_or_path: distilgpt2
+  nl_token: \n
+model:
+  encoder_name_or_path: distilbert-base-cased
+  decoder_name_or_path: distilgpt2
+generation_kwargs:
+  min_length: 5
+  max_length: 40
+  num_beams: 5
+  num_return_sequences: 5
