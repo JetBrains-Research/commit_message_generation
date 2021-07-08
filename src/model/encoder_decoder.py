@@ -5,7 +5,7 @@ from transformers import AutoModel, AutoConfig, PreTrainedModel  # type: ignore
 from transformers.file_utils import ModelOutput  # type: ignore
 
 
-class EncoderDecoder:
+class EncoderDecoder(torch.nn.Module):
     def __init__(
         self,
         encoder_name_or_path: Optional[str] = None,
@@ -21,6 +21,7 @@ class EncoderDecoder:
         :param encoder: already initialized encoder model
         :param decoder: already initialized decoder model
         """
+        super(EncoderDecoder, self).__init__()
         if encoder is None:
             if encoder_name_or_path is None:
                 raise ValueError("You have to provide either `encoder` or `encoder_name_or_path`")

@@ -8,6 +8,7 @@ def default_data_processor():
         "prompt_max_len": 200,
         "diff_tokenizer_name_or_path": "microsoft/codebert-base",
         "msg_tokenizer_name_or_path": "distilgpt2",
+        "preprocessing": True,
     }
     return DataProcessor(**default_config)
 
@@ -57,6 +58,8 @@ def test_preprocess_msg(default_data_processor, test_input, expected_output):
 )
 def test_concat_history_and_msg(default_data_processor, test_input_msg, test_input_history, expected_output):
     test_input_msg = default_data_processor.tokenize(test_input_msg, default_data_processor.msg_tokenizer)
-    test_input_history = default_data_processor.tokenize(test_input_history, default_data_processor.msg_tokenizer)
+    test_input_history = [
+        default_data_processor.tokenize(old_msg, default_data_processor.msg_tokenizer) for old_msg in test_input_history
+    ]
     result = default_data_processor.concat_history_and_msg(msg=test_input_msg, history=test_input_history)
     assert default_data_processor.msg_tokenizer.batch_decode(result, skip_special_tokens=True) == expected_output

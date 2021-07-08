@@ -15,11 +15,13 @@ def generate(
 ) -> Dict[str, torch.Tensor]:
     cfg = omegaconf.OmegaConf.load(config_path)
     data_processor = DataProcessor(**cfg.data_processor)
-    model = EncoderDecoder(**cfg.model)
+    model = EncoderDecoder(**cfg.model).to(cfg.device)
     model_input = data_processor(msg=msg, history=history, diff=diff)
+    cfg.generation_kwargs.min_length += model_input["decoder_input_ids"].shape[1]
+    cfg.generation_kwargs.max_length += model_input["decoder_input_ids"].shape[1]
     return model.generate(
-        input_ids=model_input["decoder_input_ids"],
-        encoder_input_ids=model_input["encoder_input_ids"],
+        input_ids=model_input["decoder_input_ids"].to(cfg.device),
+        encoder_input_ids=model_input["encoder_input_ids"].to(cfg.device),
         encoder_outputs=encoder_outputs,
         **cfg.generation_kwargs
     )

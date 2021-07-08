@@ -16,44 +16,48 @@ class DataProcessor:
         prompt_max_len: int,
         diff_tokenizer_name_or_path: str,
         msg_tokenizer_name_or_path: str,
+        preprocessing: bool = False,
         nl_token: str = "\n",
     ):
         self.prompt_max_len = prompt_max_len
         self.diff_tokenizer = AutoTokenizer.from_pretrained(diff_tokenizer_name_or_path, use_fast=True)
         self.msg_tokenizer = AutoTokenizer.from_pretrained(msg_tokenizer_name_or_path, use_fast=True)
         self.nl_token = nl_token  # this might not be needed? (newline char in input is most likely \n by default)
+        self.preprocessing = preprocessing
 
     def __call__(self, msg: str, history: List[str], diff: Optional[str] = None) -> Dict[str, torch.Tensor]:
         processed_input = {
-            "decoder_input_ids": self.prepare_decoder_input(msg, history),
+            "decoder_input_ids": self.prepare_decoder_input(msg, history, self.preprocessing),
             "encoder_input_ids": torch.empty(0),
         }
         if diff:
-            processed_input.update({"encoder_input_ids": self.prepare_encoder_input(diff)})
+            processed_input["encoder_input_ids"] = self.prepare_encoder_input(diff, self.preprocessing)
         return processed_input
 
-    def prepare_encoder_input(self, diff: str) -> torch.Tensor:
+    def prepare_encoder_input(self, diff: str, preprocess: bool) -> torch.Tensor:
         """
         This method prepares input (diff) for encoder:
-        1) Preprocesses diff
+        1) (optional) Preprocesses diff
         2) Tokenizes diff
         """
-        preprocessed_diff = self.preprocess_diff(diff)
-        tokenized_diff = self.tokenize(preprocessed_diff, self.diff_tokenizer)
+        if preprocess:
+            diff = self.preprocess_diff(diff)
+        tokenized_diff = self.tokenize(diff, self.diff_tokenizer)
         return tokenized_diff
 
-    def prepare_decoder_input(self, msg: str, history: List[str]) -> torch.Tensor:
+    def prepare_decoder_input(self, msg: str, history: List[str], preprocess: bool) -> torch.Tensor:
         """
         This method prepares input (message & history) for decoder:
-        1) Preprocesses message and history
+        1) (optional) Preprocesses message and history
         2) Tokenizes message and history
         3) Concatenates history with message
         """
-        preprocessed_msg = self.preprocess_msg(msg)
-        preprocessed_history = [self.preprocess_msg(old_msg) for old_msg in history]
+        if preprocess:
+            msg = self.preprocess_msg(msg)
+            history = [self.preprocess_msg(old_msg) for old_msg in history]
 
-        tokenized_msg = self.tokenize(preprocessed_msg, self.msg_tokenizer)
-        tokenized_history = self.tokenize(preprocessed_history, self.msg_tokenizer)
+        tokenized_msg = self.tokenize(msg, self.msg_tokenizer)
+        tokenized_history = [self.tokenize(old_msg, self.msg_tokenizer) for old_msg in history]
         return self.concat_history_and_msg(tokenized_msg, tokenized_history)
 
     def preprocess_diff(self, diff: str) -> str:
@@ -156,11 +160,17 @@ class DataProcessor:
         if not inputs:
             return torch.empty(0)
         tokenized_inputs = tokenizer(
-            inputs, padding=False, truncation=True, return_tensors="pt", return_attention_mask=False, **tokenizer_kwargs
+            inputs,
+            padding=False,
+            truncation=True,
+            return_tensors="pt",
+            max_length=510,
+            return_attention_mask=False,
+            **tokenizer_kwargs
         )
         return tokenized_inputs.input_ids
 
-    def concat_history_and_msg(self, msg: torch.Tensor, history: torch.Tensor) -> torch.Tensor:
+    def concat_history_and_msg(self, msg: torch.Tensor, history: List[torch.Tensor]) -> torch.Tensor:
         """
         This method concatenates history with current message.
         Resulting generation prompt looks the following way:
@@ -169,10 +179,10 @@ class DataProcessor:
         msg = msg[:, : self.prompt_max_len - 2]  # truncate message if necessary
         cur_len = msg.shape[1]
         # insert previous messages from history until we reach max_len
-        for old_msg in torch.flip(history, dims=[0]):
+        for old_msg in history[::-1]:
             if cur_len + old_msg.shape[0] + len(self.msg_tokenizer(" \n ").input_ids) > self.prompt_max_len - 2:
                 break
-            msg = torch.cat((old_msg.unsqueeze(0), self.tokenize(" \n ", self.msg_tokenizer), msg), dim=1)
+            msg = torch.cat((old_msg, self.tokenize(" \n ", self.msg_tokenizer), msg), dim=1)
             cur_len = msg.shape[1]
 
         # add <bos> and <eos> tokens
