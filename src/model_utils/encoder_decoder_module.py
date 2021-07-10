@@ -57,7 +57,6 @@ def accuracy_MRR(
     return acc_top_1, acc_top_k, MRR_top_k
 
 
-
 class EncoderDecoderModule(pl.LightningModule):
     def __init__(
         self,

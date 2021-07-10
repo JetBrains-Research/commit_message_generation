@@ -3,7 +3,7 @@ import wandb
 from typing import Union
 from pathlib import Path
 from onnxruntime.transformers import optimizer  # type: ignore
-from transformers.convert_graph_to_onnx import convert  # type: ignore
+from transformers.convert_graph_to_onnx import convert, quantize  # type: ignore
 from transformers import AutoConfig  # type: ignore
 from src.model_utils import EncoderDecoderModule
 
@@ -38,13 +38,14 @@ class ONNXConverter:
         self.onnx_encoder_path = onnx_encoder_path
         self.optimized_onnx_encoder_path = optimized_onnx_encoder_path
 
-    def convert_and_optimize(self):
+    def convert_and_optimize(self) -> Path:
         """
         Performs all possibly necessary steps:
             1) Downloads seq2seq model weights from wandb
             2) Saves encoder from seq2seq model separately
             3) Converts encoder to ONNX
             4) Optimizes ONNX graph
+            5) Quantizes ONNX graph
         """
         if not (os.path.exists(self.seq2seq_model_path) and os.path.isdir(self.seq2seq_model_path)) or not os.listdir(
             self.seq2seq_model_path
@@ -74,6 +75,8 @@ class ONNXConverter:
                 onnx_encoder_path=self.onnx_encoder_path,
                 optimized_onnx_encoder_path=self.optimized_onnx_encoder_path,
             )
+
+        return ONNXConverter.quantize_onnx(Path(self.optimized_onnx_encoder_path))
 
     @staticmethod
     def get_wandb_artifact(wandb_artifact: str, seq2seq_model_path: Union[str, os.PathLike]):
@@ -119,6 +122,16 @@ class ONNXConverter:
         convert(framework="pt", model=encoder_path, tokenizer=tokenizer, output=Path(onnx_encoder_path), opset=opset)
 
     @staticmethod
+    def quantize_onnx(onnx_encoder_path: Path) -> Path:
+        """
+        Quantizes onnx encoder (via script from transformers).
+
+        :param onnx_encoder_path: path to converted .onnx encoder file
+        :returns: generated path to quantized model
+        """
+        return quantize(onnx_encoder_path)
+
+    @staticmethod
     def optimize_onnx(
         encoder_path: Union[str, os.PathLike],
         onnx_encoder_path: Union[str, os.PathLike],
@@ -135,5 +148,4 @@ class ONNXConverter:
         optimized_model = optimizer.optimize_model(
             onnx_encoder_path, model_type="bert", num_heads=config.num_attention_heads, hidden_size=config.hidden_size
         )
-        optimized_model.convert_model_float32_to_float16()
         optimized_model.save_model_to_file(optimized_onnx_encoder_path)
