@@ -34,25 +34,25 @@ class DataProcessor:
             processed_input["encoder_input_ids"] = self.prepare_encoder_input(diff, self.preprocessing)
         return processed_input
 
-    def prepare_encoder_input(self, diff: str, preprocess: bool) -> torch.Tensor:
+    def prepare_encoder_input(self, diff: str, preprocessing: bool) -> torch.Tensor:
         """
         This method prepares input (diff) for encoder:
         1) (optional) Preprocesses diff
         2) Tokenizes diff
         """
-        if preprocess:
+        if preprocessing:
             diff = self.preprocess_diff(diff)
         tokenized_diff = self.tokenize(diff, self.diff_tokenizer)
         return tokenized_diff
 
-    def prepare_decoder_input(self, msg: str, history: List[str], preprocess: bool) -> torch.Tensor:
+    def prepare_decoder_input(self, msg: str, history: List[str], preprocessing: bool) -> torch.Tensor:
         """
         This method prepares input (message & history) for decoder:
         1) (optional) Preprocesses message and history
         2) Tokenizes message and history
         3) Concatenates history with message
         """
-        if preprocess:
+        if preprocessing:
             msg = self.preprocess_msg(msg)
             history = [self.preprocess_msg(old_msg) for old_msg in history]
 
@@ -164,7 +164,7 @@ class DataProcessor:
             padding=False,
             truncation=True,
             return_tensors="pt",
-            max_length=510,
+            max_length=500,
             return_attention_mask=False,
             **tokenizer_kwargs
         )

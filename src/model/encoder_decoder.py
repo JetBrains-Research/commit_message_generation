@@ -56,7 +56,7 @@ class EncoderDecoder(torch.nn.Module):
         :param encoder_attention_mask: attention mask for encoder (optional)
         :param encoder_outputs: outputs of encoder (optional, but you have to provide `encoder_input_ids` otherwise)
         :param generation_kwargs: all other kwargs are passed to `GPT2Decoder.generate`
-        :return: dictionary (with keys `sequences`and `sequences_scores`)
+        :return: dictionary (with keys `sequences` and `scores`)
         """
         if encoder_outputs is None:
             if encoder_input_ids is not None and len(encoder_input_ids) != 0:

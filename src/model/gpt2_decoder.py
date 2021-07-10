@@ -49,7 +49,7 @@ class GPT2Decoder(GPT2LMHeadModel):
         Note: signature is almost the same as in `generate` method from transformers,
         see `transformers.generation_utils.GenerationMixin.generate` for more information.
 
-        :return: dictionary (with keys `sequences` and `sequences_scores`)
+        :return: dictionary (with keys `sequences` and `scores`)
         """
         num_beam_groups = num_beam_groups if num_beam_groups is not None else self.config.num_beam_groups
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
