@@ -3,7 +3,7 @@ import itertools
 import torch
 from typing import List, Union, Optional, Dict
 from string import punctuation
-from transformers import AutoTokenizer, PreTrainedTokenizerBase  # type: ignore
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 
 class DataProcessor:

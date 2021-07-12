@@ -1,7 +1,7 @@
 import omegaconf
 import torch
 from typing import Dict, Optional, List
-from transformers.file_utils import ModelOutput  # type: ignore
+from transformers.file_utils import ModelOutput
 from .data_utils import DataProcessor
 from .model import EncoderDecoder
 

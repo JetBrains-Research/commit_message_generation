@@ -1,8 +1,8 @@
 import torch
 from typing import Optional, Dict
 from .gpt2_decoder import GPT2Decoder
-from transformers import AutoModel, AutoConfig, PreTrainedModel  # type: ignore
-from transformers.file_utils import ModelOutput  # type: ignore
+from transformers import AutoModel, AutoConfig, PreTrainedModel
+from transformers.file_utils import ModelOutput
 
 
 class EncoderDecoder(torch.nn.Module):

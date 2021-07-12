@@ -1,8 +1,8 @@
 import torch
-from transformers import GPT2LMHeadModel, BeamSearchScorer  # type: ignore
-from transformers.generation_utils import GenerationMixin, BeamSearchOutput  # type: ignore
-from transformers.file_utils import ModelOutput  # type: ignore
-from typing import Optional, Dict, List, Callable, Union
+from transformers import GPT2LMHeadModel, BeamSearchScorer
+from transformers.generation_utils import GenerationMixin
+from transformers.file_utils import ModelOutput
+from typing import Optional, Dict, List, Callable
 
 
 class GPT2Decoder(GPT2LMHeadModel):
