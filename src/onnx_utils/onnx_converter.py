@@ -2,9 +2,9 @@ import os
 import wandb
 from typing import Union
 from pathlib import Path
-from onnxruntime.transformers import optimizer  # type: ignore
-from transformers.convert_graph_to_onnx import convert, quantize  # type: ignore
-from transformers import AutoConfig  # type: ignore
+from onnxruntime.transformers import optimizer
+from transformers.convert_graph_to_onnx import convert, quantize
+from transformers import AutoConfig
 from src.model_utils import EncoderDecoderModule
 
 

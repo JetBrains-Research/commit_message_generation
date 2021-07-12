@@ -1,10 +1,10 @@
-import numpy as np  # type: ignore
+import numpy as np
 from copy import copy
 from typing import Optional, Tuple
 import torch
 import pytorch_lightning as pl
-from transformers import EncoderDecoderModel, RobertaModel, RobertaConfig, GPT2LMHeadModel, GPT2Config  # type: ignore
-from transformers import RobertaTokenizer, GPT2Tokenizer, AdamW, get_linear_schedule_with_warmup  # type: ignore
+from transformers import EncoderDecoderModel, RobertaModel, RobertaConfig, GPT2LMHeadModel, GPT2Config
+from transformers import RobertaTokenizer, GPT2Tokenizer, AdamW, get_linear_schedule_with_warmup
 
 
 def accuracy_MRR(

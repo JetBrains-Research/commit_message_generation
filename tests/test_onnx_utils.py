@@ -1,4 +1,4 @@
-import numpy as np  # type: ignore
+import numpy as np
 import pytest
 import omegaconf
 from src.onnx_utils import ONNXConverter

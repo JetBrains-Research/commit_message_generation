@@ -1,13 +1,13 @@
 import os
-import numpy as np  # type: ignore
+import numpy as np
 from time import time
 from typing import Dict, Tuple, List
-import onnx  # type: ignore
-from onnx import ModelProto, TensorProto, helper  # type: ignore
-from onnx.numpy_helper import to_array  # type: ignore
-from onnxruntime import InferenceSession  # type: ignore
-from onnxruntime.transformers import bert_test_data  # type: ignore
-from onnxruntime.transformers.onnx_model import OnnxModel  # type: ignore
+import onnx
+from onnx import ModelProto, TensorProto, helper
+from onnx.numpy_helper import to_array
+from onnxruntime import InferenceSession
+from onnxruntime.transformers import bert_test_data
+from onnxruntime.transformers.onnx_model import OnnxModel
 
 
 class DataCreator:
