@@ -2,7 +2,7 @@ import torch
 from transformers import GPT2LMHeadModel, BeamSearchScorer
 from transformers.generation_utils import GenerationMixin
 from transformers.file_utils import ModelOutput
-from typing import Optional, Dict, List, Callable
+from typing import Optional, Dict, List, Callable, Union
 
 
 class GPT2Decoder(GPT2LMHeadModel):
@@ -42,7 +42,7 @@ class GPT2Decoder(GPT2LMHeadModel):
         bad_words_ids: Optional[List[List[int]]] = None,
         diversity_penalty: Optional[float] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> Dict[str, Union[float, torch.Tensor]]:
         """
         Generate sequences conditioned on provided inputs via beam search.
 

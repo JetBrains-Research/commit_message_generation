@@ -176,11 +176,11 @@ class DataProcessor:
         Resulting generation prompt looks the following way:
         - <bos> history_1 \n ... history_k \n msg <eos>
         """
-        msg = msg[:, : self.prompt_max_len - 2]  # truncate message if necessary
+        msg = msg[:, :self.prompt_max_len - 2]  # truncate message if necessary
         cur_len = msg.shape[1]
         # insert previous messages from history until we reach max_len
         for old_msg in history[::-1]:
-            if cur_len + old_msg.shape[0] + len(self.msg_tokenizer(" \n ").input_ids) > self.prompt_max_len - 2:
+            if cur_len + old_msg.shape[1] + len(self.msg_tokenizer(" \n ").input_ids) > self.prompt_max_len - 2:
                 break
             msg = torch.cat((old_msg, self.tokenize(" \n ", self.msg_tokenizer), msg), dim=1)
             cur_len = msg.shape[1]

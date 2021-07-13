@@ -1,5 +1,6 @@
 import torch
-from typing import Optional, Dict
+from time import time
+from typing import Optional, Dict, Tuple, Union
 from .gpt2_decoder import GPT2Decoder
 from transformers import AutoModel, AutoConfig, PreTrainedModel
 from transformers.file_utils import ModelOutput
@@ -46,7 +47,7 @@ class EncoderDecoder(torch.nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[ModelOutput] = None,
         **generation_kwargs
-    ) -> Dict[str, torch.Tensor]:
+    ) -> Tuple[Dict[str, Union[float, torch.Tensor]], float, float]:
         """
         Generate sequences conditioned on provided inputs via beam search.
 
@@ -58,14 +59,23 @@ class EncoderDecoder(torch.nn.Module):
         :param generation_kwargs: all other kwargs are passed to `GPT2Decoder.generate`
         :return: dictionary (with keys `sequences` and `scores`)
         """
+
+        start_time = time()
+
         if encoder_outputs is None:
             if encoder_input_ids is not None and len(encoder_input_ids) != 0:
                 encoder_outputs = self.encoder(input_ids=encoder_input_ids, attention_mask=encoder_attention_mask)
 
-        return self.decoder.generate(
+        encoder_time = time()
+
+        result = self.decoder.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
             encoder_outputs=encoder_outputs,
             encoder_attention_mask=encoder_attention_mask,
             **generation_kwargs
         )
+
+        generation_time = time()
+
+        return result, encoder_time - start_time, generation_time - encoder_time
