@@ -51,6 +51,7 @@ class GPT2Decoder(GPT2LMHeadModel):
 
         :return: dictionary (with keys `sequences` and `scores`)
         """
+        # use default values from model config for several parameters if they are not passed explicitly
         num_beam_groups = num_beam_groups if num_beam_groups is not None else self.config.num_beam_groups
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
         early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
@@ -61,6 +62,7 @@ class GPT2Decoder(GPT2LMHeadModel):
         if num_return_sequences > num_beams:  # type: ignore
             raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`")
 
+        # get list of logits processors according to parameters (reusing method from transformers)
         logits_processors_list = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
@@ -73,6 +75,7 @@ class GPT2Decoder(GPT2LMHeadModel):
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
         )
 
+        # get beam search scorer according to parameters
         beam_search_scorer = BeamSearchScorer(
             batch_size=input_ids.shape[0],
             max_length=max_length,
@@ -84,9 +87,11 @@ class GPT2Decoder(GPT2LMHeadModel):
             num_beam_groups=num_beam_groups,
         )
 
+        # make tensor of ones for attention mask if it is not passed explicitly
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids, device=self.device)
 
+        # expand inputs for running beam search (1st dimension is multiplied by num_beams)
         is_encoder_decoder = encoder_outputs is not None
         input_ids, model_kwargs = GenerationMixin._expand_inputs_for_generation(
             input_ids=input_ids,
@@ -96,10 +101,12 @@ class GPT2Decoder(GPT2LMHeadModel):
             is_encoder_decoder=is_encoder_decoder,
         )
 
+        # make tensor of ones for encoder attention mask if it is not passed explicitly
         encoder_hidden_states = model_kwargs["encoder_outputs"][0] if encoder_outputs is not None else None
         if encoder_hidden_states is not None and encoder_attention_mask is None:
             encoder_attention_mask = torch.ones(encoder_hidden_states.size()[:2], device=self.device)
 
+        # run beam search
         beam_search_output = self.beam_search(
             input_ids=input_ids,
             attention_mask=model_kwargs["attention_mask"],

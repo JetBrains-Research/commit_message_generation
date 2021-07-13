@@ -14,7 +14,7 @@ class EncoderDecoder(torch.nn.Module):
         decoder: Optional[GPT2Decoder] = None,
     ):
         """
-        Class for supporting the use of encoder before generation.
+        Class for supporting optional use of encoder before generation.
 
         :param encoder_name_or_path: model name on huggingface hub or path to directory with pretrained weights
         :param decoder_name_or_path: model name on huggingface hub or path to directory with pretrained weights
@@ -58,10 +58,12 @@ class EncoderDecoder(torch.nn.Module):
         :param generation_kwargs: all other kwargs are passed to `GPT2Decoder.generate`
         :return: dictionary (with keys `sequences` and `scores`)
         """
+        # run encoder on encoder_input_ids (if encoder_outputs are not defined)
         if encoder_outputs is None:
             if encoder_input_ids is not None and len(encoder_input_ids) != 0:
                 encoder_outputs = self.encoder(input_ids=encoder_input_ids, attention_mask=encoder_attention_mask)
 
+        # pass encoder outputs to decoder
         return self.decoder.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
