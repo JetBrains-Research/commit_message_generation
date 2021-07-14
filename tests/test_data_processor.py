@@ -5,10 +5,12 @@ from src.data_utils import DataProcessor
 @pytest.fixture
 def default_data_processor():
     default_config = {
+        "history_max_len": 50,
         "prompt_max_len": 200,
         "diff_tokenizer_name_or_path": "microsoft/codebert-base",
         "msg_tokenizer_name_or_path": "distilgpt2",
         "preprocessing": True,
+        "nl_token": "<nl>",
     }
     return DataProcessor(**default_config)
 
@@ -17,11 +19,11 @@ def default_data_processor():
     "test_input,expected_output",
     [
         (
-            "<FILE> some/path \n - smth.old{} \n + smth.new() \n unchanged line",
+            "<FILE> some/path <nl> - smth.old{} <nl> + smth.new() <nl> unchanged line",
             "some / path \n - smth . old { } \n + smth . new ( ) \n",
         ),
         (
-            "Binary files some/path/a and some/path/b differ \n",
+            "Binary files some/path/a and some/path/b differ <nl>",
             "Binary files some / path / a and some / path / b differ \n",
         ),
         ("", ""),
@@ -35,7 +37,7 @@ def test_preprocess_diff(default_data_processor, test_input, expected_output):
     "test_input,expected_output",
     [
         (
-            "docs: update.all-contributorsrc [skip ci] \n Authored-by: someone <user@mail.com> \n",
+            "docs: update.all-contributorsrc [skip ci] <nl> Authored-by: someone <user@mail.com> <nl>",
             "docs : update . all - contributorsrc [ skip ci ] \n Authored - by : someone < user @ mail " ". com > \n",
         ),
         ("", ""),

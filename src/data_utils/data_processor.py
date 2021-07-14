@@ -13,12 +13,14 @@ class DataProcessor:
 
     def __init__(
         self,
+        history_max_len: int,
         prompt_max_len: int,
         diff_tokenizer_name_or_path: str,
         msg_tokenizer_name_or_path: str,
         preprocessing: bool = False,
         nl_token: str = "\n",
     ):
+        self.history_max_len = history_max_len
         self.prompt_max_len = prompt_max_len
         self.diff_tokenizer = AutoTokenizer.from_pretrained(diff_tokenizer_name_or_path, use_fast=True)
         self.msg_tokenizer = AutoTokenizer.from_pretrained(msg_tokenizer_name_or_path, use_fast=True)
@@ -54,7 +56,7 @@ class DataProcessor:
         """
         if preprocessing:
             msg = self.preprocess_msg(msg)
-            history = [self.preprocess_msg(old_msg) for old_msg in history]
+            history = [self.preprocess_msg(old_msg) for old_msg in history[-self.history_max_len :]]
 
         tokenized_msg = self.tokenize(msg, self.msg_tokenizer)
         tokenized_history = [self.tokenize(old_msg, self.msg_tokenizer) for old_msg in history]
@@ -70,6 +72,7 @@ class DataProcessor:
         """
         diff = re.sub("([" + punctuation + "\n\t\r])", r" \1 ", diff)
         diff = re.sub("< FILE >", "<FILE>", diff)
+        diff = re.sub("< nl >", "<nl>", diff)
         diff_lines = [line.split() for line in diff.split(self.nl_token)]
         processed_lines = []
 
@@ -144,6 +147,7 @@ class DataProcessor:
         (not very useful but we might want to add more sophisticated preprocessing later?)
         """
         msg = re.sub("([" + punctuation + "\n\t\r])", r" \1 ", msg)
+        msg = re.sub("< nl >", "<nl>", msg)
         msg = re.sub(r" +", " ", msg)
         msg = msg.strip(" ")
         return msg.replace(self.nl_token, "\n")
