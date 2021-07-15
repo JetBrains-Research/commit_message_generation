@@ -1,5 +1,4 @@
 data_processor:
-  history_max_len: 50
   prompt_max_len: 200
   diff_tokenizer_name_or_path: distilbert-base-cased
   msg_tokenizer_name_or_path: distilgpt2

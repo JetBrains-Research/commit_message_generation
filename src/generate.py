@@ -12,7 +12,6 @@ def generate(
     cfg: DictConfig,
     msg: str,
     history: List[str],
-    crop_prompt: bool = False,
     diff: Optional[str] = None,
     encoder_outputs: Optional[ModelOutput] = None,
 ) -> Dict[str, torch.Tensor]:
@@ -30,7 +29,6 @@ def generate(
         max_length=cfg.max_length + model_input["decoder_input_ids"].shape[1]
     )
 
-    # (optional) remove prompt from generated tensors
-    if crop_prompt:
-        results["sequences"] = results["sequences"][:, model_input["decoder_input_ids"].shape[1] :]
+    # remove prompt from generated tensors
+    results["sequences"] = results["sequences"][:, model_input["decoder_input_ids"].shape[1] :]
     return results

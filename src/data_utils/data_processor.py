@@ -13,59 +13,55 @@ class DataProcessor:
 
     def __init__(
         self,
-        history_max_len: int,
         prompt_max_len: int,
         diff_tokenizer_name_or_path: str,
         msg_tokenizer_name_or_path: str,
         preprocessing: bool = False,
         nl_token: str = "\n",
     ):
-        self.history_max_len = history_max_len
-        self.prompt_max_len = prompt_max_len
-        self.diff_tokenizer = AutoTokenizer.from_pretrained(diff_tokenizer_name_or_path, use_fast=True)
-        self.msg_tokenizer = AutoTokenizer.from_pretrained(msg_tokenizer_name_or_path, use_fast=True)
-        self.nl_token = nl_token  # this might not be needed? (newline char in input is most likely \n by default)
-        self.preprocessing = preprocessing
+        self._prompt_max_len = prompt_max_len
+        self._diff_tokenizer = AutoTokenizer.from_pretrained(diff_tokenizer_name_or_path, use_fast=True)
+        self._msg_tokenizer = AutoTokenizer.from_pretrained(msg_tokenizer_name_or_path, use_fast=True)
+        self._nl_token = nl_token  # this might not be needed? (newline char in input is most likely \n by default)
+        self._preprocessing = preprocessing
 
     def __call__(self, msg: str, history: List[str], diff: Optional[str] = None) -> Dict[str, torch.Tensor]:
         processed_input = {
-            "decoder_input_ids": self.prepare_decoder_input(msg, history, self.preprocessing),
+            "decoder_input_ids": self.prepare_decoder_input(msg, history),
             "encoder_input_ids": torch.empty(0),
         }
         if diff:
-            processed_input["encoder_input_ids"] = self.prepare_encoder_input(diff, self.preprocessing)
+            processed_input["encoder_input_ids"] = self.prepare_encoder_input(diff)
         return processed_input
 
-    def prepare_encoder_input(self, diff: str, preprocessing: bool) -> torch.Tensor:
+    def prepare_encoder_input(self, diff: str) -> torch.Tensor:
         """
         This method prepares input (diff) for encoder:
         1) (optional) Preprocesses diff
         2) Tokenizes diff
         """
-        if preprocessing:
+        if self._preprocessing:
             diff = self.preprocess_diff(diff)
-        tokenized_diff = self.tokenize(diff, self.diff_tokenizer)
+        tokenized_diff = self.tokenize(diff, self._diff_tokenizer, truncation=True, max_length=500)
         return tokenized_diff
 
-    def prepare_decoder_input(self, msg: str, history: List[str], preprocessing: bool) -> torch.Tensor:
+    def prepare_decoder_input(self, msg: str, history: List[str]) -> torch.Tensor:
         """
         This method prepares input (message & history) for decoder:
         1) (optional) Preprocesses message and history
         2) Tokenizes message and history
         3) Concatenates history with message
         """
-        if preprocessing:
+        if self._preprocessing:
             msg = self.preprocess_msg(msg)
-            history = [self.preprocess_msg(old_msg) for old_msg in history[-self.history_max_len :]]
 
-        tokenized_msg = self.tokenize(msg, self.msg_tokenizer)
-        tokenized_history = [self.tokenize(old_msg, self.msg_tokenizer) for old_msg in history]
-        return self.concat_history_and_msg(tokenized_msg, tokenized_history)
+        tokenized_msg = self.tokenize(msg, self._msg_tokenizer)
+        return self.concat_history_and_msg(tokenized_msg, history)
 
     def preprocess_diff(self, diff: str) -> str:
         """
         This method preprocessed single diff string.
-        Currently preprocessing for diffs includes the following:
+        Currently _preprocessing for diffs includes the following:
             - padding punctuation with spaces
             - removing some unnecessary special info
             - removing non-changed lines
@@ -73,7 +69,7 @@ class DataProcessor:
         diff = re.sub("([" + punctuation + "\n\t\r])", r" \1 ", diff)
         diff = re.sub("< FILE >", "<FILE>", diff)
         diff = re.sub("< nl >", "<nl>", diff)
-        diff_lines = [line.split() for line in diff.split(self.nl_token)]
+        diff_lines = [line.split() for line in diff.split(self._nl_token)]
         processed_lines = []
 
         for line in diff_lines:
@@ -140,17 +136,17 @@ class DataProcessor:
     def preprocess_msg(self, msg: str) -> str:
         """
         This method preprocessed single message string.
-        Currently preprocessing for messages includes the following:
+        Currently _preprocessing for messages includes the following:
             - padding punctuation with spaces
             - making sure that newline character is \n
 
-        (not very useful but we might want to add more sophisticated preprocessing later?)
+        (not very useful but we might want to add more sophisticated _preprocessing later?)
         """
         msg = re.sub("([" + punctuation + "\n\t\r])", r" \1 ", msg)
         msg = re.sub("< nl >", "<nl>", msg)
         msg = re.sub(r" +", " ", msg)
         msg = msg.strip(" ")
-        return msg.replace(self.nl_token, "\n")
+        return msg.replace(self._nl_token, "\n")
 
     def tokenize(
         self, inputs: Union[str, List[str]], tokenizer: PreTrainedTokenizerBase, **tokenizer_kwargs
@@ -164,40 +160,38 @@ class DataProcessor:
         if not inputs:
             return torch.empty(0)
         tokenized_inputs = tokenizer(
-            inputs,
-            padding=False,
-            truncation=True,
-            return_tensors="pt",
-            max_length=500,
-            return_attention_mask=False,
-            **tokenizer_kwargs
+            inputs, padding=False, return_tensors="pt", return_attention_mask=False, **tokenizer_kwargs
         )
         return tokenized_inputs.input_ids
 
-    def concat_history_and_msg(self, msg: torch.Tensor, history: List[torch.Tensor]) -> torch.Tensor:
+    def concat_history_and_msg(self, msg: torch.Tensor, history: List[str]) -> torch.Tensor:
         """
         This method concatenates history with current message.
         Resulting generation prompt looks the following way:
         - <bos> history_1 \n ... history_k \n msg <eos>
         """
-        msg = msg[:, : self.prompt_max_len - 2]  # truncate message if necessary
+        msg = msg[:, -(self._prompt_max_len - 2) :]  # truncate message if necessary
         cur_len = msg.shape[1]
-        # insert previous messages from history until we reach prompt_max_len tokens
+        # insert previous messages from history until we reach _prompt_max_len tokens
         for old_msg in history[::-1]:
+            if self._preprocessing:
+                old_msg = self.preprocess_msg(old_msg)
+            tokenized_old_msg = self.tokenize(old_msg, self._msg_tokenizer)
             if (
-                len(old_msg.shape) < 2
-                or cur_len + old_msg.shape[1] + len(self.msg_tokenizer(" \n ").input_ids) > self.prompt_max_len - 2
+                len(tokenized_old_msg.shape) < 2
+                or cur_len + tokenized_old_msg.shape[1] + len(self._msg_tokenizer(" \n ").input_ids)
+                > self._prompt_max_len - 2
             ):
                 break
-            msg = torch.cat((old_msg, self.tokenize(" \n ", self.msg_tokenizer), msg), dim=1)
+            msg = torch.cat((tokenized_old_msg, self.tokenize(" \n ", self._msg_tokenizer), msg), dim=1)
             cur_len = msg.shape[1]
 
         # add <bos> and <eos> tokens
         msg = torch.cat(
             (
-                torch.ones(1, 1) * self.msg_tokenizer.bos_token_id,
+                torch.ones(1, 1) * self._msg_tokenizer.bos_token_id,
                 msg,
-                torch.ones(1, 1) * self.msg_tokenizer.eos_token_id,
+                torch.ones(1, 1) * self._msg_tokenizer.eos_token_id,
             ),
             dim=1,
         )
