@@ -12,13 +12,15 @@ class DataProcessor:
     """
 
     def __init__(
-        self,
-        prompt_max_len: int,
-        diff_tokenizer_name_or_path: str,
-        msg_tokenizer_name_or_path: str,
-        preprocessing: bool = False,
-        nl_token: str = "\n",
+            self,
+            history_max_len: int,
+            prompt_max_len: int,
+            diff_tokenizer_name_or_path: str,
+            msg_tokenizer_name_or_path: str,
+            preprocessing: bool = False,
+            nl_token: str = "\n",
     ):
+        self.history_max_len = history_max_len
         self.prompt_max_len = prompt_max_len
         self.diff_tokenizer = AutoTokenizer.from_pretrained(diff_tokenizer_name_or_path, use_fast=True)
         self.msg_tokenizer = AutoTokenizer.from_pretrained(msg_tokenizer_name_or_path, use_fast=True)
@@ -54,7 +56,7 @@ class DataProcessor:
         """
         if preprocessing:
             msg = self.preprocess_msg(msg)
-            history = [self.preprocess_msg(old_msg) for old_msg in history]
+            history = [self.preprocess_msg(old_msg) for old_msg in history[-self.history_max_len:]]
 
         tokenized_msg = self.tokenize(msg, self.msg_tokenizer)
         tokenized_history = [self.tokenize(old_msg, self.msg_tokenizer) for old_msg in history]
@@ -70,6 +72,7 @@ class DataProcessor:
         """
         diff = re.sub("([" + punctuation + "\n\t\r])", r" \1 ", diff)
         diff = re.sub("< FILE >", "<FILE>", diff)
+        diff = re.sub("< nl >", "<nl>", diff)
         diff_lines = [line.split() for line in diff.split(self.nl_token)]
         processed_lines = []
 
@@ -114,9 +117,9 @@ class DataProcessor:
                 processed_lines.append(line)
 
             elif (
-                line[0] == "index"
-                or line[:2] == ["similarity", "index"]
-                or (line[:2] == ["@", "@"] and line[-2:] == ["@", "@"])
+                    line[0] == "index"
+                    or line[:2] == ["similarity", "index"]
+                    or (line[:2] == ["@", "@"] and line[-2:] == ["@", "@"])
             ):
                 # some special info that we are not interested in
                 # example 1: index 0000000 . . 3f26e45
@@ -140,16 +143,16 @@ class DataProcessor:
         Currently preprocessing for messages includes the following:
             - padding punctuation with spaces
             - making sure that newline character is \n
-
         (not very useful but we might want to add more sophisticated preprocessing later?)
         """
         msg = re.sub("([" + punctuation + "\n\t\r])", r" \1 ", msg)
+        msg = re.sub("< nl >", "<nl>", msg)
         msg = re.sub(r" +", " ", msg)
         msg = msg.strip(" ")
         return msg.replace(self.nl_token, "\n")
 
     def tokenize(
-        self, inputs: Union[str, List[str]], tokenizer: PreTrainedTokenizerBase, **tokenizer_kwargs
+            self, inputs: Union[str, List[str]], tokenizer: PreTrainedTokenizerBase, **tokenizer_kwargs
     ) -> torch.Tensor:
         """
         This method tokenizes input string(s) via tokenizer from Transformers.
@@ -174,23 +177,25 @@ class DataProcessor:
         """
         This method concatenates history with current message.
         Resulting generation prompt looks the following way:
-        - <bos> history_1 \n ... history_k \n msg <eos>
+        - <bos> history_1 \n ... history_k \n msg
         """
-        msg = msg[:, :self.prompt_max_len - 2]  # truncate message if necessary
+        msg = msg[:, : self.prompt_max_len - 1]  # truncate message if necessary
         cur_len = msg.shape[1]
-        # insert previous messages from history until we reach max_len
+        # insert previous messages from history until we reach prompt_max_len tokens
         for old_msg in history[::-1]:
-            if cur_len + old_msg.shape[1] + len(self.msg_tokenizer(" \n ").input_ids) > self.prompt_max_len - 2:
+            if (
+                    len(old_msg.shape) < 2
+                    or cur_len + old_msg.shape[1] + len(self.msg_tokenizer(" \n ").input_ids) > self.prompt_max_len - 1
+            ):
                 break
             msg = torch.cat((old_msg, self.tokenize(" \n ", self.msg_tokenizer), msg), dim=1)
             cur_len = msg.shape[1]
 
-        # add <bos> and <eos> tokens
+        # add <bos> token
         msg = torch.cat(
             (
                 torch.ones(1, 1) * self.msg_tokenizer.bos_token_id,
-                msg,
-                torch.ones(1, 1) * self.msg_tokenizer.eos_token_id,
+                msg
             ),
             dim=1,
         )
