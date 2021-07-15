@@ -10,7 +10,7 @@ df = pd.read_pickle("data/test.df")
 tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
 outfile = "data/output_without_eos.csv"
 
-cfg = omegaconf.OmegaConf.load("data/config.yaml")
+cfg = omegaconf.OmegaConf.load("configs/dataset_config.yaml")
 model = EncoderDecoder(**cfg.model)
 model.to(cfg.device)
 data_processor = DataProcessor(**cfg.data_processor)

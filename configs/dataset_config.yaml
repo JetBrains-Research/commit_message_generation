@@ -1,0 +1,17 @@
+data_processor:
+  history_max_len: 50
+  prompt_max_len: 200
+  diff_tokenizer_name_or_path: microsoft/codebert-base
+  msg_tokenizer_name_or_path: distilgpt2
+  preprocessing: true
+  nl_token: <nl>
+model:
+  encoder_name_or_path: ./pretrained_models/encoder
+  decoder_name_or_path: ./pretrained_models/decoder
+device: cpu
+generation_kwargs:
+  early_stopping: true
+  num_beams: 4
+  num_return_sequences: 1
+min_length: 5
+max_length: 5
