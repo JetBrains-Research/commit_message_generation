@@ -59,13 +59,13 @@ class EncoderDecoder(torch.nn.Module):
         :param generation_kwargs: all other kwargs are passed to `GPT2Decoder.generate`
         :return: dictionary (with keys `sequences` and `scores`)
         """
-
+        torch.cuda.synchronize()  # wait for all GPU tasks to complete
         start_time = time()
 
         if encoder_outputs is None:
             if encoder_input_ids is not None and len(encoder_input_ids) != 0:
                 encoder_outputs = self.encoder(input_ids=encoder_input_ids, attention_mask=encoder_attention_mask)
-
+        torch.cuda.synchronize()  # wait for all GPU tasks to complete
         encoder_time = time()
 
         result = self.decoder.generate(
@@ -75,7 +75,7 @@ class EncoderDecoder(torch.nn.Module):
             encoder_attention_mask=encoder_attention_mask,
             **generation_kwargs
         )
-
+        torch.cuda.synchronize()  # wait for all GPU tasks to complete
         generation_time = time()
 
         return result, encoder_time - start_time, generation_time - encoder_time
