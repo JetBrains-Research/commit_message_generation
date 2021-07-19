@@ -1,7 +1,7 @@
 import pytest
 import torch
 from transformers import AutoTokenizer, AutoModel, AutoConfig
-from src.model import GPT2Decoder
+from seq2seq_completion.model import GPT2Decoder
 
 torch.manual_seed(42)
 

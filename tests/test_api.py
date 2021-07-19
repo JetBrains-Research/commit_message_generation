@@ -1,8 +1,8 @@
 import pytest
 import omegaconf
-from src.generate import generate
-from src.model import EncoderDecoder
-from src.data_utils import DataProcessor
+from seq2seq_completion.api import ServerCMCApi
+from seq2seq_completion.model import EncoderDecoder
+from seq2seq_completion.data_utils import DataProcessor
 
 
 @pytest.fixture()
@@ -38,6 +38,8 @@ def default_test_setting():
         ),
     ],
 )
-def test_generate(default_test_setting, diff, msg, history):
+def test_completion(default_test_setting, diff, msg, history):
     cfg, model, data_processor = default_test_setting
-    generate(cfg=cfg, model=model, data_processor=data_processor, diff=diff, msg=msg, history=history)
+    ServerCMCApi._model = model
+    ServerCMCApi._processor = data_processor
+    ServerCMCApi.complete(diff=diff, msg=msg, history=history, **cfg.generation_kwargs)
