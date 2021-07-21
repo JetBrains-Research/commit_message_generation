@@ -1,14 +1,7 @@
 import torch
-from typing import Tuple
 from seq2seq_completion.model import EncoderDecoder
 from seq2seq_completion.data_utils import DataProcessor
-
-
-def load_aws_model(
-    encoder_name_or_path: str,
-    decoder_name_or_path: str,
-) -> Tuple[str, str]:
-    raise NotImplementedError
+from seq2seq_completion.api.aws import load_aws_model
 
 
 def create_model(encoder_name_or_path: str, decoder_name_or_path: str, device=None) -> EncoderDecoder:
