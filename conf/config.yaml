@@ -14,22 +14,20 @@ dataset:
     num_workers: 1
   test_dataloader_conf:
     batch_size: 32
-    num_workers: 1
+    num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: distilgpt2 with history
   project: commit_message_generation
 model:
-  encoder_decoder: false
+  encoder_decoder: true
   learning_rate: 1e-4
   encoder_name_or_path: microsoft/codebert-base
   decoder_name_or_path: distilgpt2
 trainer:
-  gpus: 8
-  accelerator: ddp
+  gpus: 1
   max_epochs: 5
   precision: 16
   amp_level: O1
   auto_select_gpus: true
-  num_sanity_val_steps: 100
+  num_sanity_val_steps: 0
   accumulate_grad_batches: 1
