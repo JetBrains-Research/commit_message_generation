@@ -5,7 +5,9 @@ from seq2seq_completion.api.aws import load_aws_model
 
 
 def create_model(encoder_name_or_path: str, decoder_name_or_path: str, device=None) -> EncoderDecoder:
-    encoder_path, decoder_path = load_aws_model(encoder_name_or_path, decoder_name_or_path)
+    encoder_path, decoder_path = load_aws_model(
+        encoder_name_or_path=encoder_name_or_path, decoder_name_or_path=decoder_name_or_path
+    )
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = EncoderDecoder(encoder_name_or_path=encoder_path, decoder_name_or_path=decoder_path)
     model.to(device)

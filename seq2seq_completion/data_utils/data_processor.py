@@ -25,9 +25,9 @@ class DataProcessor:
         self._nl_token = nl_token  # this might not be needed? (newline char in input is most likely \n by default)
         self._preprocessing = preprocessing
 
-    def __call__(self, msg: str, history: List[str], diff: Optional[str] = None) -> Dict[str, torch.Tensor]:
+    def __call__(self, decoder_context: str, diff: Optional[str] = None) -> Dict[str, torch.Tensor]:
         processed_input = {
-            "decoder_input_ids": self.prepare_decoder_input(msg, history),
+            "decoder_input_ids": self.prepare_decoder_input(decoder_context),
             "encoder_input_ids": torch.empty(0),
         }
         if diff:
@@ -36,7 +36,7 @@ class DataProcessor:
 
     def prepare_encoder_input(self, diff: str) -> torch.Tensor:
         """
-        This method prepares input (diff) for encoder:
+        This method prepares encoder input (diff)r:
         1) (optional) Preprocesses diff
         2) Tokenizes diff
         """
@@ -45,18 +45,25 @@ class DataProcessor:
         tokenized_diff = self.tokenize(diff, self._diff_tokenizer, truncation=True, max_length=500)
         return tokenized_diff
 
-    def prepare_decoder_input(self, msg: str, history: List[str]) -> torch.Tensor:
+    def prepare_decoder_input(self, decoder_context: str) -> torch.Tensor:
         """
-        This method prepares input (message & history) for decoder:
-        1) (optional) Preprocesses message and history
-        2) Tokenizes message and history
-        3) Concatenates history with message
+        This method prepares decoder input (consisting of history & message prefix):
+        1) (optional) Preprocesses input
+        2) Tokenizes input
+        3) Adds <bos> token at the beginning
         """
         if self._preprocessing:
-            msg = self.preprocess_msg(msg)
+            decoder_context = self.preprocess_msg(decoder_context)
 
-        tokenized_msg = self.tokenize(msg, self._msg_tokenizer)
-        return self.concat_history_and_msg(tokenized_msg, history)
+        tokenized_decoder_context = self.tokenize(decoder_context, self._msg_tokenizer)[:, -self._prompt_max_len :]
+        tokenized_decoder_context = torch.cat(
+            (
+                torch.ones(1, 1) * self._msg_tokenizer.bos_token_id,
+                tokenized_decoder_context,
+            ),
+            dim=1,
+        )
+        return tokenized_decoder_context.long()
 
     def preprocess_diff(self, diff: str) -> str:
         """
@@ -163,36 +170,3 @@ class DataProcessor:
             inputs, padding=False, return_tensors="pt", return_attention_mask=False, **tokenizer_kwargs
         )
         return tokenized_inputs.input_ids
-
-    def concat_history_and_msg(self, msg: torch.Tensor, history: List[str]) -> torch.Tensor:
-        """
-        This method concatenates history with current message.
-        Resulting generation prompt looks the following way:
-        - <bos> history_1 \n ... history_k \n msg <eos>
-        """
-        msg = msg[:, -(self._prompt_max_len - 2) :]  # truncate message if necessary
-        cur_len = msg.shape[1]
-        # insert previous messages from history until we reach _prompt_max_len tokens
-        for old_msg in history[::-1]:
-            if self._preprocessing:
-                old_msg = self.preprocess_msg(old_msg)
-            tokenized_old_msg = self.tokenize(old_msg, self._msg_tokenizer)
-            if (
-                len(tokenized_old_msg.shape) < 2
-                or cur_len + tokenized_old_msg.shape[1] + len(self._msg_tokenizer(" \n ").input_ids)
-                > self._prompt_max_len - 2
-            ):
-                break
-            msg = torch.cat((tokenized_old_msg, self.tokenize(" \n ", self._msg_tokenizer), msg), dim=1)
-            cur_len = msg.shape[1]
-
-        # add <bos> and <eos> tokens
-        msg = torch.cat(
-            (
-                torch.ones(1, 1) * self._msg_tokenizer.bos_token_id,
-                msg,
-                torch.ones(1, 1) * self._msg_tokenizer.eos_token_id,
-            ),
-            dim=1,
-        )
-        return msg.long()

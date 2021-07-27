@@ -2,4 +2,3 @@ data/
 raw_data/
 __pycache__/
 .idea
-/seq2seq_completion/api/aws.py

@@ -27,8 +27,7 @@ class ServerCMCApi:
 
     @staticmethod
     def complete(
-        msg: str,
-        history: List[str],
+        decoder_context: str,
         diff: Optional[str] = None,
         encoder_outputs: Optional[ModelOutput] = None,
         min_length: int = 5,
@@ -39,7 +38,7 @@ class ServerCMCApi:
         **generation_kwargs
     ) -> List[str]:
         # prepare input for generation
-        model_input = ServerCMCApi._processor(msg=msg, history=history, diff=diff)
+        model_input = ServerCMCApi._processor(decoder_context=decoder_context, diff=diff)
 
         # generate
         results = ServerCMCApi._model.generate(
