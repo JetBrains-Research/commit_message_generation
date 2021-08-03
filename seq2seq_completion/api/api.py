@@ -14,15 +14,16 @@ class ServerCMCApi:
         encoder_name_or_path: str,
         decoder_name_or_path: str,
         prompt_max_len: int,
-        diff_tokenizer_name_or_path: str,
-        msg_tokenizer_name_or_path: str,
         preprocessing: bool = True,
         device=None,
     ):
         ServerCMCApi._model = create_model(encoder_name_or_path, decoder_name_or_path, device)
 
         ServerCMCApi._processor = create_processor(
-            prompt_max_len, diff_tokenizer_name_or_path, msg_tokenizer_name_or_path, preprocessing
+            prompt_max_len,
+            encoder_name_or_path,
+            decoder_name_or_path,
+            preprocessing,
         )
 
     @staticmethod
@@ -35,7 +36,7 @@ class ServerCMCApi:
         num_beams: int = 4,
         num_return_sequences: int = 4,
         device=None,
-        **generation_kwargs
+        **generation_kwargs,
     ) -> List[str]:
         # prepare input for generation
         model_input = ServerCMCApi._processor(decoder_context=decoder_context, diff=diff)
@@ -49,7 +50,7 @@ class ServerCMCApi:
             num_return_sequences=num_return_sequences,
             min_length=min_length + model_input["decoder_input_ids"].shape[1],
             max_length=max_length + model_input["decoder_input_ids"].shape[1],
-            **generation_kwargs
+            **generation_kwargs,
         )
 
         # remove prompt from generated tensors
