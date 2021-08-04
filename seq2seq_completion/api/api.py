@@ -2,7 +2,7 @@ from typing import List, Optional
 from transformers.file_utils import ModelOutput
 from seq2seq_completion.model import EncoderDecoder
 from seq2seq_completion.data_utils import DataProcessor
-from seq2seq_completion.api.utils import create_model, create_processor
+from seq2seq_completion.api.setup_utils import create_model, create_processor
 
 
 class ServerCMCApi:
@@ -29,6 +29,7 @@ class ServerCMCApi:
     @staticmethod
     def complete(
         decoder_context: str,
+        prefix: Optional[str] = None,
         diff: Optional[str] = None,
         encoder_outputs: Optional[ModelOutput] = None,
         min_length: int = 5,
@@ -39,13 +40,15 @@ class ServerCMCApi:
         **generation_kwargs,
     ) -> List[str]:
         # prepare input for generation
-        model_input = ServerCMCApi._processor(decoder_context=decoder_context, diff=diff)
+        model_input = ServerCMCApi._processor(decoder_context=decoder_context, prefix=prefix, diff=diff)
 
         # generate
         results = ServerCMCApi._model.generate(
             input_ids=model_input["decoder_input_ids"].to(device),
             encoder_input_ids=model_input["encoder_input_ids"].to(device),
             encoder_outputs=encoder_outputs,
+            prefix=prefix,
+            tokenizer=ServerCMCApi._processor._msg_tokenizer,
             num_beams=num_beams,
             num_return_sequences=num_return_sequences,
             min_length=min_length + model_input["decoder_input_ids"].shape[1],

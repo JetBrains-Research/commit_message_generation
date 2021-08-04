@@ -1,7 +1,7 @@
 import torch
 from typing import Optional, Dict
 from .gpt2_decoder import GPT2Decoder
-from transformers import AutoModel, AutoConfig, PreTrainedModel
+from transformers import AutoModel, AutoConfig, PreTrainedModel, PreTrainedTokenizerBase
 from transformers.file_utils import ModelOutput
 
 
@@ -45,6 +45,8 @@ class EncoderDecoder(torch.nn.Module):
         encoder_input_ids: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[ModelOutput] = None,
+        prefix: Optional[str] = None,
+        tokenizer: Optional[PreTrainedTokenizerBase] = None,
         **generation_kwargs
     ) -> Dict[str, torch.Tensor]:
         """
@@ -69,5 +71,7 @@ class EncoderDecoder(torch.nn.Module):
             attention_mask=attention_mask,
             encoder_outputs=encoder_outputs,
             encoder_attention_mask=encoder_attention_mask,
+            prefix=prefix,
+            tokenizer=tokenizer,
             **generation_kwargs
         )

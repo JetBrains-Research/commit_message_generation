@@ -1,7 +1,10 @@
 import torch
 from seq2seq_completion.model import EncoderDecoder
 from seq2seq_completion.data_utils import DataProcessor
-from seq2seq_completion.api.aws_utils import load_aws_model
+
+
+def load_aws_model(encoder_name_or_path, decoder_name_or_path):
+    raise NotImplementedError
 
 
 def create_model(encoder_name_or_path: str, decoder_name_or_path: str, device=None) -> EncoderDecoder:

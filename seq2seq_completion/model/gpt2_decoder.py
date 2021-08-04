@@ -1,8 +1,10 @@
 import torch
-from transformers import GPT2LMHeadModel, BeamSearchScorer
+from transformers import GPT2LMHeadModel, BeamSearchScorer, PreTrainedTokenizerBase
 from transformers.generation_utils import GenerationMixin
 from transformers.file_utils import ModelOutput
-from typing import Optional, Dict, List, Callable
+from typing import Optional, Dict, List
+
+from seq2seq_completion.model.prefix_utils import PrefixConstrainedLogitsProcessor
 
 
 class GPT2Decoder(GPT2LMHeadModel):
@@ -30,10 +32,12 @@ class GPT2Decoder(GPT2LMHeadModel):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[ModelOutput] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
+        prefix: Optional[str] = None,
+        tokenizer: Optional[PreTrainedTokenizerBase] = None,
+        num_beams: int = 1,
+        num_return_sequences: int = 1,
         min_length: Optional[int] = None,
         max_length: Optional[int] = 20,
-        num_beams: Optional[int] = 1,
-        num_return_sequences: Optional[int] = 1,
         early_stopping: Optional[bool] = None,
         num_beam_groups: Optional[int] = None,
         length_penalty: Optional[float] = None,
@@ -41,7 +45,6 @@ class GPT2Decoder(GPT2LMHeadModel):
         no_repeat_ngram_size: Optional[int] = None,
         bad_words_ids: Optional[List[List[int]]] = None,
         diversity_penalty: Optional[float] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
     ) -> Dict[str, torch.Tensor]:
         """
         Generate sequences conditioned on provided inputs via beam search.
@@ -72,8 +75,13 @@ class GPT2Decoder(GPT2LMHeadModel):
             num_beams=num_beams,
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
-            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+            prefix_allowed_tokens_fn=None,
         )
+
+        if prefix is not None:
+            logits_processors_list.append(
+                PrefixConstrainedLogitsProcessor(prefix=prefix, tokenizer=tokenizer, num_beams=num_beams)
+            )
 
         # get beam search scorer according to parameters
         beam_search_scorer = BeamSearchScorer(

@@ -25,9 +25,11 @@ class DataProcessor:
         self._nl_token = nl_token  # this might not be needed? (newline char in input is most likely \n by default)
         self._preprocessing = preprocessing
 
-    def __call__(self, decoder_context: str, diff: Optional[str] = None) -> Dict[str, torch.Tensor]:
+    def __call__(
+        self, decoder_context: str, prefix: Optional[str] = None, diff: Optional[str] = None
+    ) -> Dict[str, torch.Tensor]:
         processed_input = {
-            "decoder_input_ids": self.prepare_decoder_input(decoder_context),
+            "decoder_input_ids": self.prepare_decoder_input(decoder_context, prefix),
             "encoder_input_ids": torch.empty(0),
         }
         if diff:
@@ -45,15 +47,24 @@ class DataProcessor:
         tokenized_diff = self.tokenize(diff, self._diff_tokenizer, truncation=True, max_length=500)
         return tokenized_diff
 
-    def prepare_decoder_input(self, decoder_context: str) -> torch.Tensor:
+    def prepare_decoder_input(self, decoder_context: str, prefix: Optional[str]) -> torch.Tensor:
         """
         This method prepares decoder input (consisting of history & message prefix):
         1) (optional) Preprocesses input
-        2) Tokenizes input
-        3) Adds <bos> token at the beginning
+        2) Removes last occurence of prefix
+        3) Tokenizes input
+        4) Adds <bos> token at the beginning
         """
         if self._preprocessing:
             decoder_context = self.preprocess_msg(decoder_context)
+
+        if prefix:
+            if " " + decoder_context.split()[-1] != prefix:
+                raise ValueError(
+                    "if `prefix` is defined, it is expected to be the last word in `decoder_context` "
+                    "(with leading space)"
+                )
+            decoder_context = decoder_context[: decoder_context.rfind(prefix)]
 
         tokenized_decoder_context = self.tokenize(decoder_context, self._msg_tokenizer)[:, -self._prompt_max_len :]
         tokenized_decoder_context = torch.cat(
