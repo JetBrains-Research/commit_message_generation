@@ -4,7 +4,7 @@ from transformers.generation_utils import GenerationMixin
 from transformers.file_utils import ModelOutput
 from typing import Optional, Dict, List
 
-from seq2seq_completion.model.prefix_utils import PrefixConstrainedLogitsProcessor
+from seq2seq_completion.model.prefix_utils import PrefixAllowedTokens
 
 
 class GPT2Decoder(GPT2LMHeadModel):
@@ -65,6 +65,12 @@ class GPT2Decoder(GPT2LMHeadModel):
         if num_return_sequences > num_beams:  # type: ignore
             raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`")
 
+        prefix_allowed_tokens_fn = (
+            PrefixAllowedTokens(prefix=prefix, context_len=input_ids.shape[1], tokenizer=tokenizer, num_beams=num_beams)
+            if prefix is not None
+            else None
+        )
+
         # get list of logits processors according to parameters (reusing method from transformers)
         logits_processors_list = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
@@ -75,13 +81,8 @@ class GPT2Decoder(GPT2LMHeadModel):
             num_beams=num_beams,
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
-            prefix_allowed_tokens_fn=None,
+            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
         )
-
-        if prefix is not None:
-            logits_processors_list.append(
-                PrefixConstrainedLogitsProcessor(prefix=prefix, tokenizer=tokenizer, num_beams=num_beams)
-            )
 
         # get beam search scorer according to parameters
         beam_search_scorer = BeamSearchScorer(
