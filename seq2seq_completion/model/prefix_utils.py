@@ -15,7 +15,8 @@ class PrefixAllowedTokens:
         decoded_sentence = self._tokenizer.decode(sentence[self._context_len :])
 
         # if we haven't generated prefix or its part yet, we can:
-        # 1
+        # 1) generate tokens starting with the prefix
+        # 2) generate tokens which are prefixes for the prefix
         if len(decoded_sentence) == 0:
             res = [
                 vocab[key]
@@ -27,6 +28,7 @@ class PrefixAllowedTokens:
             res = list(vocab.values())
         # if we've generated only part of the prefix, we can:
         # 1) generate tokens starting with its remaining part
+        # 2) generate tokens which are prefixes for its remaining part
         else:
             res = [
                 vocab[key]
