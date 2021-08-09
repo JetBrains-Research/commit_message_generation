@@ -6,9 +6,8 @@ import hydra
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
-from model.encoder_decoder_module import EncoderDecoderModule
-from model.gpt2lmhead_module import GPT2LMHeadModule
-from dataset_utils.cmg_data_module import CMGDataModule
+from src.model import EncoderDecoderModule, GPT2LMHeadModule
+from src.dataset_utils import CMGDataModule
 
 
 @hydra.main(config_path="conf", config_name="config")
@@ -23,30 +22,36 @@ def main(cfg: DictConfig) -> None:
     dm = CMGDataModule(**cfg.dataset)
 
     if cfg.model.encoder_decoder:
-        PATH = os.path.join(hydra.utils.get_original_cwd(), cfg.ckpt_path)
-        print("Checkpoint path\n", PATH, '\n')
-        model = EncoderDecoderModule.load_from_checkpoint(PATH, actual_generation=cfg.model.actual_generation, num_gpus=1)
-    else:
-        if 'ckpt_path' in cfg:
+        if "ckpt_path" in cfg:
             PATH = os.path.join(hydra.utils.get_original_cwd(), cfg.ckpt_path)
-            print("Checkpoint path\n", PATH, '\n')
+            print("Checkpoint path\n", PATH, "\n")
+            model = EncoderDecoderModule.load_from_checkpoint(
+                PATH, actual_generation=cfg.model.actual_generation, num_gpus=1
+            )
+        else:
+            model = EncoderDecoderModule(
+                **cfg.model, num_gpus=1, src_tokenizer=dm._src_tokenizer, trg_tokenizer=dm._trg_tokenizer
+            )
+    else:
+        if "ckpt_path" in cfg:
+            PATH = os.path.join(hydra.utils.get_original_cwd(), cfg.ckpt_path)
+            print("Checkpoint path\n", PATH, "\n")
 
             model = GPT2LMHeadModule.load_from_checkpoint(PATH, actual_generation=cfg.model.actual_generation)
         else:
-            model = GPT2LMHeadModule(decoder_name_or_path=cfg.model.decoder_name_or_path,
-                                     actual_generation=cfg.model.actual_generation,
-                                     tokenizer=dm._trg_tokenizer)
+            model = GPT2LMHeadModule(
+                decoder_name_or_path=cfg.model.decoder_name_or_path,
+                actual_generation=cfg.model.actual_generation,
+                tokenizer=dm._trg_tokenizer,
+            )
 
     trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
     trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger)
     # -----------------------
     #          test         -
     # -----------------------
-    if 'ckpt_path' in cfg:
-        trainer.test(ckpt_path=PATH, datamodule=dm, model=model)
-    else:
-        trainer.test(datamodule=dm, model=model)
+    trainer.test(datamodule=dm, model=model)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

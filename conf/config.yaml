@@ -6,14 +6,12 @@ dataset:
   with_history: true
   local_rank: 0
   world_size: 1
-  train_dataloader_conf:
-    batch_size: 8
-    num_workers: 4
   test_dataloader_conf:
-    batch_size: 8
+    batch_size: 16
     num_workers: 1
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
+  group: new metrics
   project: commit_message_generation
 model:
   encoder_decoder: true
@@ -21,8 +19,4 @@ model:
   actual_generation: false
 trainer:
   gpus: 1
-  max_epochs: 40
-  precision: 16
-  amp_level: O1
-  num_sanity_val_steps: 2
-  accumulate_grad_batches: 1
+ckpt_path: artifacts/full_transformer4_4_best_and_last:v0/epoch=4-step=767653.ckpt
