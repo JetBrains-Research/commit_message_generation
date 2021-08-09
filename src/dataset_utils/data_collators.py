@@ -46,7 +46,7 @@ class DataCollatorWithHistory:
             ]
             cur_labels = [[-100], message_ids[: self.max_len - 2], [-100]]
             cur_generation_ids = [[self.trg_tokenizer.bos_token_id]]
-            cur_len = len(cur_ids)
+            cur_len = len(message_ids[:self.max_len - 2]) + 2
 
             for history_input_ids in history_ids[::-1]:
                 # insert prev messages from history until we reach max_len
