@@ -1,10 +1,7 @@
 import json
-from typing import List, Dict, Generator, Iterator, Union
+from typing import List, Dict, Generator, Iterator, Callable
 import torch
 from torch.utils.data import IterableDataset, DataLoader
-from transformers import RobertaTokenizer, GPT2Tokenizer
-
-from src.dataset_utils.data_collators import DataCollatorWithHistory, DataCollatorWithoutHistory
 
 
 class CMGDatasetWithHistory(IterableDataset):
@@ -58,9 +55,7 @@ class CMGDatasetWithHistory(IterableDataset):
         assert self._num_workers is not None, f"You must access __iter__ through DataLoader"
         return iter(self._get_examples_generator())
 
-    def get_dataloader(
-        self, batch_size: int, num_workers: int, collate_fn: Union[DataCollatorWithHistory, DataCollatorWithoutHistory]
-    ) -> DataLoader:
+    def get_dataloader(self, batch_size: int, num_workers: int, collate_fn: Callable) -> DataLoader:
         """Creates DataLoader in a proper way."""
         assert num_workers >= 0, "num_workers must be at least 0"
         if num_workers == 0:
@@ -90,28 +85,3 @@ class CMGDatasetWithHistory(IterableDataset):
             history = json.load(infile)
 
         return CMGDatasetWithHistory(dataset_root + ".json", history, rank, world_size)
-
-
-if __name__ == "__main__":
-    diff_tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")
-    msg_tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
-    msg_tokenizer.pad_token = msg_tokenizer.unk_token
-
-    test_dataset = CMGDatasetWithHistory.load_data("../raw_data/github_data/test", rank=0, world_size=1)
-
-    data_collator = DataCollatorWithoutHistory(src_tokenizer=diff_tokenizer, trg_tokenizer=msg_tokenizer, max_len=512)
-
-    test_dataloader = test_dataset.get_dataloader(num_workers=4, batch_size=4, collate_fn=data_collator)
-
-    print("Test")
-    print()
-
-    for i, input in enumerate(test_dataloader):
-        print("Current generation input ids")
-        print(msg_tokenizer.batch_decode(input["generation_input_ids"]))
-        print("Current message input ids")
-        print(msg_tokenizer.batch_decode(input["msg_input_ids"]))
-        print()
-
-        if i == 5:
-            break

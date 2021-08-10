@@ -1,15 +1,15 @@
 import wandb
-
-from collections import defaultdict
 import pandas as pd
-
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
+import nltk
 import pytorch_lightning as pl
 
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
+from collections import defaultdict
 from torchmetrics import MetricCollection
-from src.metrics import Accuracy, MRR, EditSimilarity
 from datasets import load_metric
-import nltk
+
+from src.metrics import Accuracy, MRR, EditSimilarity, ExactMatch, ChrF
+from src.model.prefix_utils import PrefixAllowedTokens
 
 nltk.download("wordnet")
 
@@ -37,11 +37,21 @@ class GPT2LMHeadModule(pl.LightningModule):
         self.bleu = load_metric("bleu")
         self.rouge = load_metric("rouge")
         self.meteor = load_metric("meteor")
+        self.chrf = ChrF()
+
         self.completion_metrics = MetricCollection(
             {"acc_top1": Accuracy(top_k=1), "acc_top5": Accuracy(top_k=5), "MRR_top5": MRR(top_k=5)}, prefix="test_"
         )
 
         self.edit_similarity = EditSimilarity()
+        self.exact_match = MetricCollection(
+            {
+                "exact_match_top1": ExactMatch(n=1),
+                "exact_match_top2": ExactMatch(n=2),
+                "exact_match_top5": ExactMatch(n=5),
+            },
+            prefix="test_",
+        )
 
         self.table_data = defaultdict(list)
 
@@ -55,42 +65,18 @@ class GPT2LMHeadModule(pl.LightningModule):
         )
 
     def generate(self, batch):
+        prefix_fn = PrefixAllowedTokens(
+            prefix={i: prefix for i, prefix in enumerate(batch["prefix"])},
+            context_len={i: len(msg) for i, msg in enumerate(batch["msg_input_ids"])},
+            tokenizer=self._tokenizer,
+        )
         return self.model.generate(
-            input_ids=batch["generation_input_ids"],
-            attention_mask=batch["generation_attention_mask"],
-            max_length=batch["msg_input_ids"].shape[1],
+            input_ids=batch["msg_input_ids"],
+            attention_mask=batch["msg_attention_mask"],
+            prefix_allowed_tokens_fn=prefix_fn,
+            min_length=batch["msg_input_ids"].shape[1] + 5,
+            max_length=batch["msg_input_ids"].shape[1] + 5,
         )
-
-    def actual_generation_step(self, batch):
-        gen_sequence = self.generate(batch)
-        gen_input_len = batch["generation_input_ids"].shape[1]
-        gen_sequence = [i[gen_input_len:] for i in gen_sequence.tolist()]  # leave only generated part
-
-        targets_no_history = batch["msg_input_ids"].detach().clone().to(self.device)
-        targets_no_history[batch["msg_labels"] == -100] = self._tokenizer.pad_token_id
-
-        decoded_targets_no_history, decoded_history, decoded_preds = self.decode_trg(
-            targets_no_history, batch["generation_input_ids"], gen_sequence
-        )
-
-        # add data to a little table with examples
-        self.table_data["History (generation input)"].extend(decoded_history)
-        self.table_data["Target"].extend(decoded_targets_no_history)
-        self.table_data["Prediction"].extend(decoded_preds)
-
-        # add batches to metrics
-        self.bleu.add_batch(
-            predictions=[line.split() for line in decoded_preds],
-            references=[[line.split()] for line in decoded_targets_no_history],
-        )
-        self.rouge.add_batch(predictions=decoded_preds, references=decoded_targets_no_history)
-        self.meteor.add_batch(predictions=decoded_preds, references=decoded_targets_no_history)
-        self.exact_match(decoded_preds, decoded_targets_no_history)
-        self.edit_similarity(decoded_preds, decoded_targets_no_history)
-
-    def next_token_metrics_step(self, batch):
-        scores = self(batch).logits
-        return self.completion_metrics(scores, batch["msg_labels"])
 
     def test_step(self, batch, batch_idx):
         if self.actual_generation:
@@ -98,8 +84,40 @@ class GPT2LMHeadModule(pl.LightningModule):
         else:
             return self.next_token_metrics_step(batch)
 
+    def actual_generation_step(self, batch):
+        gen_sequence = self.generate(batch)
+        gen_input_len = batch["msg_input_ids"].shape[1]
+        gen_sequence = [i[gen_input_len:] for i in gen_sequence.tolist()]  # leave only generated part
+
+        decoded_context, decoded_preds = self.decode_trg(batch["msg_input_ids"], gen_sequence)
+        decoded_preds = [pred[len(prefix) :] for pred, prefix in zip(decoded_preds, batch["prefix"])]
+
+        # add data to a little table with examples
+        self.table_data["Context"].extend(
+            [context.strip() + " " + prefix.strip() for context, prefix in zip(decoded_context, batch["prefix"])]
+        )
+        self.table_data["Target"].extend(batch["target"])
+        self.table_data["Prediction"].extend(decoded_preds)
+        # add batches to metrics
+        self.bleu.add_batch(
+            predictions=[line.split() for line in decoded_preds],
+            references=[[line.split()] for line in batch["target"]],
+        )
+        self.chrf.add_batch(
+            predictions=[line.split() for line in decoded_preds], references=[line.split() for line in batch["target"]]
+        )
+        self.rouge.add_batch(predictions=decoded_preds, references=batch["target"])
+        self.meteor.add_batch(predictions=decoded_preds, references=batch["target"])
+        self.edit_similarity(decoded_preds, batch["target"])
+        self.exact_match(decoded_preds, batch["target"])
+
+    def next_token_metrics_step(self, batch):
+        scores = self(batch).logits
+        return self.completion_metrics(scores, batch["msg_labels"])
+
     def test_epoch_end(self, outputs):
         if self.actual_generation:
+            chrf = self.chrf.compute()
             bleu = self.bleu.compute()
             rouge = self.rouge.compute()
             meteor = self.meteor.compute()
@@ -117,6 +135,7 @@ class GPT2LMHeadModule(pl.LightningModule):
                 "test_rougeL": rouge["rougeL"].mid.fmeasure,
                 "test_meteor": meteor["meteor"],
                 "test_edit_similarity": edit_sim,
+                "test_chrf": chrf["chrf"],
             }
             test_metrics.update({key: exact_match[key].cpu().item() for key in exact_match})
 

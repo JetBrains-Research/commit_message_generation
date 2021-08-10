@@ -6,7 +6,7 @@ import hydra
 from omegaconf import DictConfig
 
 from src.dataset_utils.cmg_dataset_w_history import CMGDatasetWithHistory
-from src.dataset_utils.data_collators import DataCollatorWithHistory, DataCollatorWithoutHistory
+from src.dataset_utils.data_collators import NextTokenPredictionCollator, GenerationCollator
 
 
 class CMGDataModule(pl.LightningDataModule):
@@ -14,7 +14,9 @@ class CMGDataModule(pl.LightningDataModule):
         self,
         dataset_root: str,
         history_max_len: int,
+        actual_generation: bool,
         with_history: bool,
+        context_ratio: float,
         encoder_name_or_path: str,
         decoder_name_or_path: str,
         local_rank: int,
@@ -39,13 +41,20 @@ class CMGDataModule(pl.LightningDataModule):
         # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
         self._trg_tokenizer.pad_token = self._trg_tokenizer.unk_token
 
-        if with_history:
-            self.data_collator = DataCollatorWithHistory(
-                src_tokenizer=self._src_tokenizer, trg_tokenizer=self._trg_tokenizer, max_len=self.history_max_len
+        if actual_generation:
+            self.data_collator = GenerationCollator(
+                src_tokenizer=self._src_tokenizer,
+                trg_tokenizer=self._trg_tokenizer,
+                context_ratio=context_ratio,
+                max_len=self.history_max_len,
+                with_history=with_history,
             )
         else:
-            self.data_collator = DataCollatorWithoutHistory(
-                src_tokenizer=self._src_tokenizer, trg_tokenizer=self._trg_tokenizer, max_len=self.history_max_len
+            self.data_collator = NextTokenPredictionCollator(
+                src_tokenizer=self._src_tokenizer,
+                trg_tokenizer=self._trg_tokenizer,
+                max_len=self.history_max_len,
+                with_history=with_history,
             )
 
         # datasets are initialized later

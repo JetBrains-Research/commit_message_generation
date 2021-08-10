@@ -1,22 +1,24 @@
+actual_generation: true
 dataset:
   dataset_root: raw_data/github_data
   history_max_len: 200
   encoder_name_or_path: microsoft/codebert-base
   decoder_name_or_path: distilgpt2
   with_history: true
+  context_ratio: 0.1
   local_rank: 0
   world_size: 1
   test_dataloader_conf:
-    batch_size: 16
-    num_workers: 1
+    batch_size: 8
+    num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
+  name: test new collators (distilgpt2 with prefix)
   group: new metrics
   project: commit_message_generation
 model:
-  encoder_decoder: true
+  encoder_decoder: false
   decoder_name_or_path: distilgpt2
-  actual_generation: false
 trainer:
   gpus: 1
-ckpt_path: artifacts/full_transformer4_4_best_and_last:v0/epoch=4-step=767653.ckpt
+  limit_test_batches: 10

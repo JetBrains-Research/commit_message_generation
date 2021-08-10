@@ -19,15 +19,13 @@ def main(cfg: DictConfig) -> None:
 
     print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
 
-    dm = CMGDataModule(**cfg.dataset)
+    dm = CMGDataModule(**cfg.dataset, actual_generation=cfg.actual_generation)
 
     if cfg.model.encoder_decoder:
         if "ckpt_path" in cfg:
             PATH = os.path.join(hydra.utils.get_original_cwd(), cfg.ckpt_path)
             print("Checkpoint path\n", PATH, "\n")
-            model = EncoderDecoderModule.load_from_checkpoint(
-                PATH, actual_generation=cfg.model.actual_generation, num_gpus=1
-            )
+            model = EncoderDecoderModule.load_from_checkpoint(PATH, actual_generation=cfg.actual_generation, num_gpus=1)
         else:
             model = EncoderDecoderModule(
                 **cfg.model, num_gpus=1, src_tokenizer=dm._src_tokenizer, trg_tokenizer=dm._trg_tokenizer
@@ -37,11 +35,11 @@ def main(cfg: DictConfig) -> None:
             PATH = os.path.join(hydra.utils.get_original_cwd(), cfg.ckpt_path)
             print("Checkpoint path\n", PATH, "\n")
 
-            model = GPT2LMHeadModule.load_from_checkpoint(PATH, actual_generation=cfg.model.actual_generation)
+            model = GPT2LMHeadModule.load_from_checkpoint(PATH, actual_generation=cfg.actual_generation)
         else:
             model = GPT2LMHeadModule(
                 decoder_name_or_path=cfg.model.decoder_name_or_path,
-                actual_generation=cfg.model.actual_generation,
+                actual_generation=cfg.actual_generation,
                 tokenizer=dm._trg_tokenizer,
             )
 
