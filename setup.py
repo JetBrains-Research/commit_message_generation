@@ -3,7 +3,7 @@ import setuptools
 setuptools.setup(
     name="seq2seq_completion",
     packages=setuptools.find_packages(include="seq2seq_completion.*"),
-    version="0.0.2",
+    version="0.0.3",
     license="MIT",
     description="Pipeline for running sequence-to-sequence model for commit messages completion task",
     author="Alexandra Eliseeva",

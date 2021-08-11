@@ -36,16 +36,15 @@ class ServerCMCApi:
         max_length: int = 5,
         num_beams: int = 4,
         num_return_sequences: int = 4,
-        device=None,
         **generation_kwargs,
     ) -> List[str]:
         # prepare input for generation
-        model_input = ServerCMCApi._processor(decoder_context=decoder_context, prefix=prefix, diff=diff)
+        model_input = ServerCMCApi._processor(decoder_context=decoder_context, diff=diff)
 
         # generate
         results = ServerCMCApi._model.generate(
-            input_ids=model_input["decoder_input_ids"].to(device),
-            encoder_input_ids=model_input["encoder_input_ids"].to(device),
+            input_ids=model_input["decoder_input_ids"].to(ServerCMCApi._model.decoder.device),
+            encoder_input_ids=model_input["encoder_input_ids"].to(ServerCMCApi._model.decoder.device),
             encoder_outputs=encoder_outputs,
             prefix=prefix,
             tokenizer=ServerCMCApi._processor._msg_tokenizer,

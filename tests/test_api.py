@@ -8,7 +8,7 @@ from seq2seq_completion.data_utils import DataProcessor
 @pytest.fixture()
 def default_test_setting():
     cfg = omegaconf.OmegaConf.load("configs/test_config.yaml")
-    model = EncoderDecoder(**cfg.model).to(cfg.device)
+    model = EncoderDecoder(**cfg.model)
     data_processor = DataProcessor(**cfg.data_processor)
     return cfg, model, data_processor
 

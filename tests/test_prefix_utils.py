@@ -69,12 +69,7 @@ def test_no_prefix(default_setting, context, prefix, generated):
 
     tokenized_context = tokenizer(context, return_tensors="pt").input_ids
     tokenized_beam_sentence = tokenizer(beam_sentence, return_tensors="pt").input_ids[0]
-    prefix_fn = PrefixAllowedTokens(
-        prefix=prefix,
-        context_len=tokenized_context.shape[1],
-        tokenizer=tokenizer,
-        num_beams=generation_kwargs["num_beams"],
-    )
+    prefix_fn = PrefixAllowedTokens(prefix=prefix, context_len=tokenized_context.shape[1], tokenizer=tokenizer)
 
     allowed_tokens = tokenizer.batch_decode(prefix_fn(0, sentence=tokenized_beam_sentence))
     for token in allowed_tokens:
@@ -96,12 +91,7 @@ def test_prefix_part(default_setting, context, prefix, generated, remaining):
 
     tokenized_context = tokenizer(context, return_tensors="pt").input_ids
     tokenized_beam_sentence = tokenizer(beam_sentence, return_tensors="pt").input_ids[0]
-    prefix_fn = PrefixAllowedTokens(
-        prefix=prefix,
-        context_len=tokenized_context.shape[1],
-        tokenizer=tokenizer,
-        num_beams=generation_kwargs["num_beams"],
-    )
+    prefix_fn = PrefixAllowedTokens(prefix=prefix, context_len=tokenized_context.shape[1], tokenizer=tokenizer)
 
     allowed_tokens = tokenizer.batch_decode(prefix_fn(0, sentence=tokenized_beam_sentence))
     for token in allowed_tokens:
@@ -123,12 +113,7 @@ def test_whole_prefix(default_setting, context, prefix, generated):
 
     tokenized_context = tokenizer(context, return_tensors="pt").input_ids
     tokenized_beam_sentence = tokenizer(beam_sentence, return_tensors="pt").input_ids[0]
-    prefix_fn = PrefixAllowedTokens(
-        prefix=prefix,
-        context_len=tokenized_context.shape[1],
-        tokenizer=tokenizer,
-        num_beams=generation_kwargs["num_beams"],
-    )
+    prefix_fn = PrefixAllowedTokens(prefix=prefix, context_len=tokenized_context.shape[1], tokenizer=tokenizer)
 
     allowed_tokens = tokenizer.batch_decode(prefix_fn(0, sentence=tokenized_beam_sentence))
     assert len(allowed_tokens) == len(tokenizer.get_vocab().keys())

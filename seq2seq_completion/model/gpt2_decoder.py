@@ -66,7 +66,7 @@ class GPT2Decoder(GPT2LMHeadModel):
             raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`")
 
         prefix_allowed_tokens_fn = (
-            PrefixAllowedTokens(prefix=prefix, context_len=input_ids.shape[1], tokenizer=tokenizer, num_beams=num_beams)
+            PrefixAllowedTokens(prefix=prefix, context_len=input_ids.shape[1], tokenizer=tokenizer)
             if prefix is not None
             else None
         )

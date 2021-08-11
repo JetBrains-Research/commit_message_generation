@@ -4,11 +4,10 @@ from transformers import PreTrainedTokenizerBase
 
 
 class PrefixAllowedTokens:
-    def __init__(self, context_len: int, prefix: str, tokenizer: PreTrainedTokenizerBase, num_beams: int):
+    def __init__(self, context_len: int, prefix: str, tokenizer: PreTrainedTokenizerBase):
         self._context_len = context_len
         self._prefix = prefix
         self._tokenizer = tokenizer
-        self._num_beams = num_beams
 
     def __call__(self, _: int, sentence: torch.Tensor) -> List[int]:
         vocab = self._tokenizer.get_vocab()

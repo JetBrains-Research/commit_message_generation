@@ -44,33 +44,3 @@ def test_preprocess_diff(default_data_processor, test_input, expected_output):
 )
 def test_preprocess_msg(default_data_processor, test_input, expected_output):
     assert default_data_processor.preprocess_msg(test_input) == expected_output
-
-
-@pytest.mark.parametrize(
-    "decoder_context,prefix,expected",
-    [
-        ("GPT-2 is generative la", " la", "GPT - 2 is generative"),
-        ("history <nl> message with pref", " pref", "history \n message with"),
-        ("whatever you want", None, "whatever you want"),
-    ],
-)
-def test_correct_prefixes(default_data_processor, decoder_context, prefix, expected):
-    tokenized_decoder_context = default_data_processor.prepare_decoder_input(
-        decoder_context=decoder_context, prefix=prefix
-    )
-    assert (
-        default_data_processor._msg_tokenizer.batch_decode(tokenized_decoder_context, skip_special_tokens=True)[0]
-        == expected
-    )
-
-
-@pytest.mark.parametrize(
-    "decoder_context,prefix",
-    [
-        ("prefix might appear somewhere but it should be the last word", " appear"),
-        ("prefix might appear in history <nl> but it should be in the last message", " history"),
-    ],
-)
-def test_wrong_prefixes(default_data_processor, decoder_context, prefix):
-    with pytest.raises(ValueError):
-        default_data_processor.prepare_decoder_input(decoder_context=decoder_context, prefix=prefix)
