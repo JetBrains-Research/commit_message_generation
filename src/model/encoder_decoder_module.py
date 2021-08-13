@@ -19,7 +19,6 @@ from datasets import load_metric
 from src.metrics import Accuracy, MRR, EditSimilarity, ExactMatch, ChrF
 from src.model.prefix_utils import PrefixAllowedTokens
 
-
 nltk.download("wordnet")
 
 
@@ -88,11 +87,6 @@ class EncoderDecoderModule(pl.LightningModule):
         # do not tie output embeddings to input embeddings
         self.model.config.tie_word_embeddings = False
 
-        # set decoding params
-        self.model.config.no_repeat_ngram_size = 4
-        self.model.config.early_stopping = True
-        self.model.config.num_beams = 4
-
         print("\n====MODEL CONFIG====\n")
         print(self.model.config)
         print()
@@ -109,9 +103,9 @@ class EncoderDecoderModule(pl.LightningModule):
         self.edit_similarity = EditSimilarity()
         self.exact_match = MetricCollection(
             {
-                "exact_match_top1": ExactMatch(n=1),
-                "exact_match_top2": ExactMatch(n=2),
-                "exact_match_top5": ExactMatch(n=5),
+                "exact_match@1": ExactMatch(n=1),
+                "exact_match@2": ExactMatch(n=2),
+                "exact_match@5": ExactMatch(n=5),
             },
             prefix="test_",
         )
@@ -132,19 +126,25 @@ class EncoderDecoderModule(pl.LightningModule):
         )
 
     def generate(self, batch):
+        self.examples_count += len(batch["msg_input_ids"])
         prefix_fn = PrefixAllowedTokens(
             prefix={i: prefix for i, prefix in enumerate(batch["prefix"])},
             context_len={i: len(msg) for i, msg in enumerate(batch["msg_input_ids"])},
             tokenizer=self._trg_tokenizer,
         )
+
         return self.model.generate(
             input_ids=batch["diff_input_ids"],
             attention_mask=batch["diff_attention_mask"],
             decoder_input_ids=batch["msg_input_ids"],
             decoder_attention_mask=batch["msg_attention_mask"],
             prefix_allowed_tokens_fn=prefix_fn,
-            min_length=batch["msg_input_ids"].shape[1] + 7,
-            max_length=batch["msg_input_ids"].shape[1] + 7,
+            bad_words_ids=[[198], [59, 77]],  # ban \n and \\n
+            early_stopping=True,
+            no_repeat_ngram_size=3,
+            num_beams=5,
+            min_length=0,
+            max_length=batch["msg_input_ids"].shape[1] + 25,
         )
 
     def test_step(self, batch, batch_idx):
@@ -154,33 +154,54 @@ class EncoderDecoderModule(pl.LightningModule):
             return self.next_token_metrics_step(batch)
 
     def actual_generation_step(self, batch):
-        gen_sequence = self.generate(batch)
-        gen_input_len = batch["msg_input_ids"].shape[1]
-        gen_sequence = [i[gen_input_len:] for i in gen_sequence.tolist()]  # leave only generated part
+        # leave only generated part
+        gen_sequences = self.generate(batch)[:, batch["msg_input_ids"].shape[1] :]
+        # trim by # of generated tokens
+        trg_sequences = batch["target"][:, : gen_sequences.shape[1]]
 
+        # decode tokenized sequences
         decoded_source = self.decode_src(batch["diff_input_ids"])[0]
-        decoded_context, decoded_preds = self.decode_trg(batch["msg_input_ids"], gen_sequence)
-        decoded_preds = [pred[len(prefix) :] for pred, prefix in zip(decoded_preds, batch["prefix"])]
+        decoded_context, decoded_preds, decoded_trg = self.decode_trg(
+            batch["msg_input_ids"], gen_sequences, trg_sequences
+        )
+
+        # remove prefix from generated and target to compute metrics without it
+        decoded_preds = [
+            pred[len(prefix) :].replace("\n", "<nl>") for pred, prefix in zip(decoded_preds, batch["prefix"])
+        ]
+        decoded_trg = [trg[len(prefix) :] for trg, prefix in zip(decoded_trg, batch["prefix"])]
 
         # add data to a little table with examples
         self.table_data["Diff"].extend(decoded_source)
         self.table_data["Context"].extend(
             [context.strip() + " " + prefix.strip() for context, prefix in zip(decoded_context, batch["prefix"])]
         )
-        self.table_data["Target"].extend(batch["target"])
+        self.table_data["Target"].extend(decoded_trg)
         self.table_data["Prediction"].extend(decoded_preds)
-        # add batches to metrics
+
+        # add batches to metrics from huggingface datasets
         self.bleu.add_batch(
             predictions=[line.split() for line in decoded_preds],
-            references=[[line.split()] for line in batch["target"]],
+            references=[[line.split()] for line in decoded_trg],
         )
         self.chrf.add_batch(
-            predictions=[line.split() for line in decoded_preds], references=[line.split() for line in batch["target"]]
+            predictions=[line.split() for line in decoded_preds], references=[line.split() for line in decoded_trg]
         )
-        self.rouge.add_batch(predictions=decoded_preds, references=batch["target"])
-        self.meteor.add_batch(predictions=decoded_preds, references=batch["target"])
-        self.edit_similarity(decoded_preds, batch["target"])
-        self.exact_match(decoded_preds, batch["target"])
+        self.rouge.add_batch(predictions=decoded_preds, references=decoded_trg)
+        self.meteor.add_batch(predictions=decoded_preds, references=decoded_trg)
+
+        # add batches to torchmetrics metrics
+        self.edit_similarity(decoded_preds, decoded_trg)
+        self.exact_match(decoded_preds, decoded_trg)
+
+        # compute and log current values of torchmetrics metrics
+        edit_sim_step = self.edit_similarity.compute()
+        exact_match_step = self.exact_match.compute()
+        test_metrics_step = {
+            "test_edit_similarity_step": edit_sim_step,
+        }
+        test_metrics_step.update({key: exact_match_step[key].cpu().item() for key in exact_match_step})
+        self.logger.experiment.log(test_metrics_step, step=self.examples_count)
 
     def next_token_metrics_step(self, batch):
         scores = self(batch).logits
@@ -214,20 +235,14 @@ class EncoderDecoderModule(pl.LightningModule):
         else:
             test_metrics = self.completion_metrics.compute()
             self.logger.experiment.log(
-                {key: test_metrics[key].cpu().item() for key in test_metrics}, step=self.examples_count
+                {key: test_metrics[key].cpu().item() for key in test_metrics}, step=self.examples_count + 2
             )
 
     def decode_src(self, *args):
-        return tuple(
-            self._src_tokenizer.batch_decode(arg, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-            for arg in args
-        )
+        return tuple(self._src_tokenizer.batch_decode(arg, skip_special_tokens=True) for arg in args)
 
     def decode_trg(self, *args):
-        return tuple(
-            self._trg_tokenizer.batch_decode(arg, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-            for arg in args
-        )
+        return tuple(self._trg_tokenizer.batch_decode(arg, skip_special_tokens=True) for arg in args)
 
     @staticmethod
     def remove_layers_from_model(teacher, num_layers, is_gpt):

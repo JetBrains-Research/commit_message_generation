@@ -152,7 +152,7 @@ class GenerationCollator:
 
         all_msg_ids = []  # 'prompt' for generation: history (left-side padding)
         all_msg_masks = []  # 0 on pad tokens and 1 otherwise (left-side padding)
-        all_msg_targets = []  # targets for generation. in this case we actually need strings, not tensors
+        all_msg_targets = []  # targets for generation (right-side padding)
         all_prefixes = []  # make sure to separate last word from context to use for prefix-constrained generation
 
         for message_ids, history_ids in zip(message_inputs, history_inputs):
@@ -161,12 +161,23 @@ class GenerationCollator:
             decoded_message = self.trg_tokenizer.decode(message_ids, skip_special_tokens=True)
             context_len = len(decoded_message) * self.context_ratio
             decoded_input, decoded_target = decoded_message[: int(context_len)], decoded_message[int(context_len) :]
+            try:
+                decoded_input, decoded_prefix = " ".join(decoded_input.split()[:-1]), decoded_input.split()[-1]
+                if len(decoded_input) > 0:
+                    decoded_prefix = " " + decoded_prefix
+                decoded_target = decoded_prefix + decoded_target
 
-            decoded_input, decoded_prefix = " ".join(decoded_input.split()[:-1]), decoded_input.split()[-1]
-            if len(decoded_input) > 0:
-                decoded_prefix = " " + decoded_prefix
+                tokenized_input = self.trg_tokenizer(decoded_input).input_ids
+                tokenized_target = self.trg_tokenizer(decoded_target, return_tensors="pt").input_ids.squeeze()
+            except IndexError:
+                print(
+                    f"Target '{decoded_target}' is too short: {len(decoded_target)} * {self.context_ratio} = {context_len}"
+                )
+                print()
 
-            tokenized_input = self.trg_tokenizer(decoded_input).input_ids
+                tokenized_input = []
+                decoded_prefix = ""
+                tokenized_target = self.trg_tokenizer(decoded_target, return_tensors="pt").input_ids.squeeze()
 
             cur_ids = [[self.trg_tokenizer.bos_token_id], tokenized_input]
             cur_len = len(tokenized_input) + 1
@@ -189,23 +200,19 @@ class GenerationCollator:
             all_msg_ids.append(cur_ids)
             all_msg_masks.append(cur_mask)
             all_prefixes.append(decoded_prefix)
-            all_msg_targets.append(decoded_target)
+            all_msg_targets.append(tokenized_target)
 
         all_diff_ids = [torch.tensor(ids, dtype=torch.int64) for ids in diff_inputs]
         all_diff_masks = [torch.ones_like(ids) for ids in all_diff_ids]
 
         input_max_len = max(len(tensor) for tensor in all_msg_ids)
+        target_max_len = max(len(tensor) for tensor in all_msg_targets)
         diff_max_len = max(len(tensor) for tensor in all_diff_ids)
 
         # pad tensors to max length in batch
         # NOTE: left side padding for generation!! https://github.com/huggingface/transformers/issues/3021
-        for i, (diff_id_tensor, diff_mask_tensor, msg_id_tensor, msg_mask_tensor,) in enumerate(
-            zip(
-                all_diff_ids,
-                all_diff_masks,
-                all_msg_ids,
-                all_msg_masks,
-            )
+        for i, (diff_id_tensor, diff_mask_tensor, msg_id_tensor, msg_mask_tensor, msg_target_tensor) in enumerate(
+            zip(all_diff_ids, all_diff_masks, all_msg_ids, all_msg_masks, all_msg_targets)
         ):
             # pad ids with pad_token_id (which doesn't really matter for GPT-2)
             all_msg_ids[i] = torch.nn.functional.pad(
@@ -220,6 +227,12 @@ class GenerationCollator:
                 mode="constant",
                 value=self.src_tokenizer.pad_token_id,
             )
+            all_msg_targets[i] = torch.nn.functional.pad(
+                msg_target_tensor,
+                pad=[0, target_max_len - msg_target_tensor.numel()],
+                mode="constant",
+                value=self.trg_tokenizer.pad_token_id,
+            )
 
             # pad masks with zeros
             all_msg_masks[i] = torch.nn.functional.pad(
@@ -231,6 +244,7 @@ class GenerationCollator:
 
         all_msg_ids = torch.stack(all_msg_ids)
         all_msg_masks = torch.stack(all_msg_masks)
+        all_msg_targets = torch.stack(all_msg_targets)
         all_diff_ids = torch.stack(all_diff_ids)
         all_diff_masks = torch.stack(all_diff_masks)
 

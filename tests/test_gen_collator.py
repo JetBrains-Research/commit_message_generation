@@ -58,7 +58,8 @@ def test_with_history(msgs, diffs, histories, tokenizers):
             decoded_context = decoder_tok.decode(context[last_nl_idx + 2 :], skip_special_tokens=True)
         else:  # \n might not be present if history is empty
             decoded_context = decoder_tok.decode(context, skip_special_tokens=True)
-        assert decoded_context + prefix + target == msg
+        decoded_target = decoder_tok.decode(target, skip_special_tokens=True)
+        assert decoded_context + decoded_target == msg
 
 
 @pytest.mark.parametrize(
@@ -93,4 +94,5 @@ def test_without_history(msgs, diffs, tokenizers):
 
     for context, prefix, target, msg in zip(res["msg_input_ids"], res["prefix"], res["target"], msgs):
         decoded_context = decoder_tok.decode(context, skip_special_tokens=True)
-        assert decoded_context + prefix + target == msg
+        decoded_target = decoder_tok.decode(target, skip_special_tokens=True)
+        assert decoded_context + decoded_target == msg

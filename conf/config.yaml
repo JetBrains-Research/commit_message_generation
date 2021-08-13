@@ -5,7 +5,7 @@ dataset:
   encoder_name_or_path: microsoft/codebert-base
   decoder_name_or_path: distilgpt2
   with_history: true
-  context_ratio: 0.1
+  context_ratio: 0.5
   local_rank: 0
   world_size: 1
   test_dataloader_conf:
@@ -13,12 +13,12 @@ dataset:
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: test new collators (distilgpt2 with prefix)
-  group: new metrics
+  name: test transformer 4+4 (50% in context, full context)
   project: commit_message_generation
 model:
-  encoder_decoder: false
+  encoder_decoder: true
   decoder_name_or_path: distilgpt2
 trainer:
   gpus: 1
-  limit_test_batches: 10
+  limit_test_batches: 125
+ckpt_path: artifacts/full_transformer4_4_best_and_last:v0/epoch=4-step=767653.ckpt
