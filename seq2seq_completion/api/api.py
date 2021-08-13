@@ -3,6 +3,7 @@ from transformers.file_utils import ModelOutput
 from seq2seq_completion.model import EncoderDecoder
 from seq2seq_completion.data_utils import DataProcessor
 from seq2seq_completion.api.setup_utils import create_model, create_processor
+from seq2seq_completion.api.post_processing_utils import PostProcessor
 
 
 class ServerCMCApi:
@@ -59,4 +60,9 @@ class ServerCMCApi:
         results["sequences"] = results["sequences"][:, model_input["decoder_input_ids"].shape[1] :]
 
         # decode generated sequences
-        return ServerCMCApi._processor._msg_tokenizer.batch_decode(results["sequences"], skip_special_tokens=True)
+        return [
+            PostProcessor.process(seq)
+            for seq in ServerCMCApi._processor._msg_tokenizer.batch_decode(
+                results["sequences"], skip_special_tokens=True
+            )
+        ]
