@@ -5,20 +5,20 @@ dataset:
   encoder_name_or_path: microsoft/codebert-base
   decoder_name_or_path: distilgpt2
   with_history: true
-  context_ratio: 0.5
+  context_ratio: 0.05
   local_rank: 0
   world_size: 1
   test_dataloader_conf:
-    batch_size: 8
+    batch_size: 1
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: test transformer 4+4 (50% in context, full context)
+  name: test fine-tuned distilgpt2 (5% in context, \n as eos)
   project: commit_message_generation
 model:
-  encoder_decoder: true
+  encoder_decoder: false
   decoder_name_or_path: distilgpt2
 trainer:
   gpus: 1
-  limit_test_batches: 125
-ckpt_path: artifacts/full_transformer4_4_best_and_last:v0/epoch=4-step=767653.ckpt
+  limit_test_batches: 1000
+ckpt_path: artifacts/distilgpt2_best:v0/epoch=4-step=23993.ckpt
