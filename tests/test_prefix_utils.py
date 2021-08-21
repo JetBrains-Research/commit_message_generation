@@ -42,6 +42,7 @@ def test_with_and_without_prefix(default_setting, context, prefix, expected):
 
     results_without_prefix = model.generate(
         input_ids=tokenized_context_w_prefix,
+        tokenizer=tokenizer,
         min_length=min_len + tokenized_context_w_prefix.shape[1],
         max_length=max_len + tokenized_context_w_prefix.shape[1],
         **generation_kwargs

@@ -61,7 +61,7 @@ class ServerCMCApi:
 
         # decode generated sequences
         return [
-            PostProcessor.process(seq)
+            " " + PostProcessor.process(seq).strip("\n")
             for seq in ServerCMCApi._processor._msg_tokenizer.batch_decode(
                 results["sequences"], skip_special_tokens=True
             )

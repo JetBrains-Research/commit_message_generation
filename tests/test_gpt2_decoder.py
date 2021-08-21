@@ -48,6 +48,7 @@ def test_decoder_with_and_without_encoder(encoder_input, decoder_input, default_
         attention_mask=decoder_input.attention_mask,
         encoder_outputs=encoder_outputs,
         encoder_attention_mask=encoder_attention_mask,
+        tokenizer=decoder_tokenizer,
         max_length=50,
         min_length=1,
         num_beams=5,
@@ -57,6 +58,7 @@ def test_decoder_with_and_without_encoder(encoder_input, decoder_input, default_
     result_no_encoder = decoder.generate(
         input_ids=decoder_input.input_ids,
         attention_mask=decoder_input.attention_mask,
+        tokenizer=decoder_tokenizer,
         max_length=50,
         min_length=1,
         num_beams=5,

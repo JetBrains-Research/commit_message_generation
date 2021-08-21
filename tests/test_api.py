@@ -14,21 +14,15 @@ def default_test_setting():
 
 
 @pytest.mark.parametrize(
-    "diff,decoder_context",
+    "diff,decoder_context,prefix",
     [
-        (
-            "",
-            "No diff and short message",
-        ),
-        (
-            "- old \n + new",
-            "Diff and short message",
-        ),
-        ("- old \n + new", "Hello" * 200 + " " + "Diff and long message"),
+        ("", "No diff and short", " mes"),
+        ("- old \n + new", "Diff and short", " mes"),
+        ("- old \n + new", "Hello" * 200 + " " + "Diff and long", " mes"),
     ],
 )
-def test_completion(default_test_setting, diff, decoder_context):
+def test_completion(default_test_setting, diff, decoder_context, prefix):
     cfg, model, data_processor = default_test_setting
     ServerCMCApi._model = model
     ServerCMCApi._processor = data_processor
-    ServerCMCApi.complete(diff=diff, decoder_context=decoder_context, **cfg.generation_kwargs)
+    ServerCMCApi.complete(diff=diff, decoder_context=decoder_context, prefix=prefix, **cfg.generation_kwargs)

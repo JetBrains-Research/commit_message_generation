@@ -7,7 +7,8 @@ model:
   encoder_name_or_path: distilbert-base-cased
   decoder_name_or_path: distilgpt2
 generation_kwargs:
+  early_stopping: True
   num_beams: 5
-  num_return_sequences: 5
-min_length: 5
-max_length: 5
+  num_return_sequences: 1
+min_length: 2
+max_length: 10

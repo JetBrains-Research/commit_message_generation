@@ -41,12 +41,12 @@ class EncoderDecoder(torch.nn.Module):
     def generate(
         self,
         input_ids: torch.Tensor,
+        tokenizer: PreTrainedTokenizerBase,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_input_ids: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[ModelOutput] = None,
         prefix: Optional[str] = None,
-        tokenizer: Optional[PreTrainedTokenizerBase] = None,
         **generation_kwargs
     ) -> Dict[str, torch.Tensor]:
         """

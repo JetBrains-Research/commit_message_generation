@@ -5,6 +5,7 @@ from seq2seq_completion.api.post_processing_utils import PostProcessor
 @pytest.mark.parametrize(
     "str_before,expected_str_after",
     [
+        ("no punctuation nothing should change", "no punctuation nothing should change"),
         ("docker - java", "docker-java"),
         ("version 1 . 0 . 0", "version 1.0.0"),
         ("ugly case : some sentence . some other sentence", "ugly case: some sentence.some other sentence"),
