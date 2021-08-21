@@ -59,9 +59,11 @@ class ServerCMCApi:
         # remove prompt from generated tensors
         results["sequences"] = results["sequences"][:, model_input["decoder_input_ids"].shape[1] :]
 
+        prefix_to_add = " " if prefix and prefix[0] == " " else ""
+
         # decode generated sequences
         return [
-            " " + PostProcessor.process(seq).strip("\n")
+            prefix_to_add + PostProcessor.process(seq).strip("\n")
             for seq in ServerCMCApi._processor._msg_tokenizer.batch_decode(
                 results["sequences"], skip_special_tokens=True
             )
