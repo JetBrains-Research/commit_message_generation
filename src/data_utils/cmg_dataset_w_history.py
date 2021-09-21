@@ -4,8 +4,7 @@ from typing import List, Dict, Generator, Iterator
 import torch
 from torch.utils.data import IterableDataset, DataLoader
 from transformers import RobertaTokenizer, GPT2Tokenizer
-
-from src.data_utils import DataCollatorWithHistory
+from .data_collators import DataCollatorWithHistory
 
 
 class CMGDatasetWithHistory(IterableDataset):
@@ -93,28 +92,3 @@ class CMGDatasetWithHistory(IterableDataset):
             history = json.load(infile)
 
         return CMGDatasetWithHistory(dataset_root + ".json", history, rank, world_size)
-
-
-if __name__ == "__main__":
-    diff_tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")
-    msg_tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
-    msg_tokenizer.pad_token = msg_tokenizer.unk_token
-
-    test_dataset = CMGDatasetWithHistory.load_data("../raw_data/github_data/test", rank=0, world_size=1)
-
-    data_collator = DataCollatorWithHistory(src_tokenizer=diff_tokenizer, trg_tokenizer=msg_tokenizer, max_len=512)
-
-    test_dataloader = test_dataset.get_dataloader(num_workers=4, batch_size=4, collate_fn=data_collator)
-
-    print("Test")
-    print()
-
-    for i, input in enumerate(test_dataloader):
-        print("Current generation input ids")
-        print(msg_tokenizer.batch_decode(input["generation_input_ids"]))
-        print("Current message input ids")
-        print(msg_tokenizer.batch_decode(input["msg_input_ids"]))
-        print()
-
-        if i == 5:
-            break

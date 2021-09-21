@@ -7,7 +7,9 @@ from transformers import RobertaTokenizer, GPT2Tokenizer
 import hydra
 from omegaconf import DictConfig
 
-from src.data_utils import CMGDatasetWithHistory, DataCollatorWithHistory, DataCollatorWithoutHistory, DataPreprocessor
+from .cmg_dataset_w_history import CMGDatasetWithHistory
+from .data_collators import DataCollatorWithHistory, DataCollatorWithoutHistory
+from .data_preprocessor import DataPreprocessor
 
 
 class CMGDataModule(pl.LightningDataModule):

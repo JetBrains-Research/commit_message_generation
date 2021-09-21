@@ -10,7 +10,7 @@ from src.model import EncoderDecoderModule, GPT2LMHeadModule
 from src.data_utils import CMGDataModule
 
 
-@hydra.main(config_path="../../conf", config_name="config")
+@hydra.main(config_path="../conf", config_name="config")
 def main(cfg: DictConfig) -> None:
     # -----------------------
     #          init         -

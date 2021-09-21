@@ -1,4 +1,3 @@
-import numpy as np
 from copy import copy
 from typing import Optional
 
@@ -16,9 +15,10 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 
-from src.utils import accuracy_MRR
+from torchmetrics import MetricCollection
+from src.utils import Accuracy
+from src.utils import MRR
 import nltk
-
 nltk.download("wordnet")
 
 
@@ -97,6 +97,10 @@ class EncoderDecoderModule(pl.LightningModule):
         # to make logs for different batch sizes prettier
         self.examples_count = 0
 
+        self.completion_metrics = MetricCollection(
+            {"acc_top1": Accuracy(top_k=1), "acc_top5": Accuracy(top_k=5), "MRR_top5": MRR(top_k=5)}
+        )
+
     def forward(self, batch):
         return self.model(
             input_ids=batch["diff_input_ids"],
@@ -116,47 +120,42 @@ class EncoderDecoderModule(pl.LightningModule):
         train_loss_mean = torch.stack([x["loss"] for x in outputs]).mean()
         self.logger.experiment.log({"train_loss_epoch": train_loss_mean}, step=self.examples_count)
 
-    def metrics_step(self, batch):
-        """
-        Logic for validation & testing steps:
-        1) Calculate accuracy@1, accuracy@5 and MRR@5 from model output and labels
-        """
+    def next_token_metrics_step(self, batch):
         loss, scores = self(batch)[:2]
-        # calculate metrics
-        acc_top1, acc_top5, MRR_top5 = accuracy_MRR(scores, batch["msg_labels"], top_k=5, shift=True)
-        return {"loss": loss, "acc_top1": acc_top1, "acc_top5": acc_top5, "MRR_top5": MRR_top5}
+        self.log("val_loss_step", loss, on_step=True, on_epoch=False, prog_bar=True, logger=True)
+        return {"loss": loss, "scores": scores, "labels": batch["msg_labels"]}
 
-    def metrics_epoch_end(self, outputs, stage):
+    def next_token_metrics_epoch_end(self, outputs, stage):
         """
         Logic for validation & testing epoch end:
-        1) Calculate final accuracy@1, accuracy@5, MRR@5
+        1) Calculate accuracy@1, accuracy@5, MRR@5
         2) (in val stage only) Aggregate loss and log metric(s) for ModelCheckpoint
-        3) Log everything in wandb.
+        3) Log everything to wandb
         """
-        acc_top1 = np.mean([x["acc_top1"] for x in outputs])
-        acc_top5 = np.mean([x["acc_top5"] for x in outputs])
-        MRR_top5 = np.mean([x["MRR_top5"] for x in outputs])
-
-        results = {f"{stage}_acc_top1": acc_top1, f"{stage}_acc_top5": acc_top5, f"{stage}_MRR_top5": MRR_top5}
+        for x in outputs:
+            self.completion_metrics(scores=x["scores"],
+                                    labels=x["labels"])
+        metrics = self.completion_metrics.compute()
 
         if stage == "val":
             loss = torch.stack([x["loss"] for x in outputs]).mean()
-            results["val_loss"] = loss
+            metrics["loss"] = loss
             # needed for ModelCheckpoint
-            self.log("val_MRR_top5", MRR_top5, on_step=False, on_epoch=True, prog_bar=True, logger=False)
-        self.logger.experiment.log(results, step=self.examples_count)
+            self.log("val_MRR_top5", metrics["MRR_top5"], on_step=False, on_epoch=True, prog_bar=True, logger=False)
+        metrics = {f"{stage}_{key}": val for key, val in metrics.items()}
+        self.logger.experiment.log(metrics, step=self.examples_count)
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        return self.metrics_step(batch)
+        return self.next_token_metrics_step(batch)
 
     def validation_epoch_end(self, outputs):
-        self.metrics_epoch_end(outputs, stage="val")
+        self.next_token_metrics_epoch_end(outputs, stage="val")
 
     def test_step(self, batch, batch_idx):
-        return self.metrics_step(batch)
+        return self.next_token_metrics_step(batch)
 
     def test_epoch_end(self, outputs):
-        self.metrics_epoch_end(outputs, stage="test")
+        self.next_token_metrics_epoch_end(outputs, stage="test")
 
     def configure_optimizers(self):
         optimizer = AdamW(self.parameters(), lr=self.learning_rate)
