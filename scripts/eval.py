@@ -6,12 +6,11 @@ import hydra
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
-from model.encoder_decoder_module import EncoderDecoderModule
-from model.gpt2_lm_head_module import GPT2LMHeadModule
-from dataset_utils.cmg_data_module import CMGDataModule
+from src.model import EncoderDecoderModule, GPT2LMHeadModule
+from src.data_utils import CMGDataModule
 
 
-@hydra.main(config_path="conf", config_name="config")
+@hydra.main(config_path="../conf", config_name="config")
 def main(cfg: DictConfig) -> None:
     # -----------------------
     #          init         -
@@ -21,22 +20,21 @@ def main(cfg: DictConfig) -> None:
     cfg.dataset.local_rank = int(os.environ.get("LOCAL_RANK", 0))
     cfg.dataset.world_size = cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1
 
-    print('Local rank', cfg.dataset.local_rank)
-    print('World size', cfg.dataset.world_size)
+    print("Local rank", cfg.dataset.local_rank)
+    print("World size", cfg.dataset.world_size)
 
     print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
 
     dm = CMGDataModule(**cfg.dataset)
     dm.setup()
-    print(dm.train._len)
 
-    if 'ckpt_path' in cfg:
+    if "ckpt_path" in cfg:
         # initialize from already fine-tuned checkpoint
         PATH = os.path.join(hydra.utils.get_original_cwd(), cfg.ckpt_path)
-        print("Checkpoint path\n", PATH, '\n')
+        print("Checkpoint path\n", PATH, "\n")
         if cfg.model.encoder_decoder:
             # seq2seq model
-            model = EncoderDecoderModule.load_from_checkpoint(PATH)
+            model = EncoderDecoderModule.load_from_checkpoint(PATH, num_gpus=1)
         else:
             # single decoder
             model = GPT2LMHeadModule.load_from_checkpoint(PATH)
@@ -50,13 +48,14 @@ def main(cfg: DictConfig) -> None:
         # initialize from pretrained weights or smth
         if cfg.model.encoder_decoder:
             # seq2seq model
-            model = EncoderDecoderModule(**cfg.model,
-                                         src_tokenizer=dm._src_tokenizer,
-                                         trg_tokenizer=dm._trg_tokenizer,
-                                         num_epochs=cfg.trainer.max_epochs,
-                                         num_batches=dm.train._len // (
-                                                 cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.gpus),
-                                         num_gpus=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1)
+            model = EncoderDecoderModule(
+                **cfg.model,
+                src_tokenizer=dm._src_tokenizer,
+                trg_tokenizer=dm._trg_tokenizer,
+                num_epochs=cfg.trainer.max_epochs,
+                num_batches=dm.train._len // (cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.gpus),
+                num_gpus=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1,
+            )
         else:
             # single decoder
             model = GPT2LMHeadModule(**cfg.model, tokenizer=dm._trg_tokenizer)
@@ -69,5 +68,5 @@ def main(cfg: DictConfig) -> None:
         trainer.test(datamodule=dm, model=model)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

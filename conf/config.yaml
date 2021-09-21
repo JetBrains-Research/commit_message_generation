@@ -1,5 +1,5 @@
 dataset:
-  dataset_root: raw_data/github_data
+  dataset_root: raw_data/python
   with_history: true
   history_max_len: 200
   encoder_name_or_path: microsoft/codebert-base
@@ -7,29 +7,28 @@ dataset:
   local_rank: 0
   world_size: 0
   train_dataloader_conf:
-    batch_size: 32
+    batch_size: 8
     num_workers: 1
   val_dataloader_conf:
-    batch_size: 32
-    num_workers: 1
+    batch_size: 8
+    num_workers: 4
   test_dataloader_conf:
-    batch_size: 32
-    num_workers: 1
+    batch_size: 8
+    num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: distilgpt2 with history
+  name: transformer 4+4 python
   project: commit_message_generation
 model:
-  encoder_decoder: false
+  encoder_decoder: true
   learning_rate: 1e-4
-  encoder_name_or_path: microsoft/codebert-base
-  decoder_name_or_path: distilgpt2
+  num_layers_encoder: 4
+  num_layers_decoder: 4
 trainer:
-  gpus: 8
-  accelerator: ddp
+  gpus: 1
   max_epochs: 5
   precision: 16
   amp_level: O1
   auto_select_gpus: true
-  num_sanity_val_steps: 100
+  num_sanity_val_steps: 2
   accumulate_grad_batches: 1
