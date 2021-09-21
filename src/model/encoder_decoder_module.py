@@ -19,6 +19,7 @@ from torchmetrics import MetricCollection
 from src.utils import Accuracy
 from src.utils import MRR
 import nltk
+
 nltk.download("wordnet")
 
 
@@ -133,8 +134,7 @@ class EncoderDecoderModule(pl.LightningModule):
         3) Log everything to wandb
         """
         for x in outputs:
-            self.completion_metrics(scores=x["scores"],
-                                    labels=x["labels"])
+            self.completion_metrics(scores=x["scores"], labels=x["labels"])
         metrics = self.completion_metrics.compute()
 
         if stage == "val":

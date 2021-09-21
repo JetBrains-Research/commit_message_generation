@@ -68,8 +68,7 @@ class GPT2LMHeadModule(pl.LightningModule):
         3) Log everything to wandb
         """
         for x in outputs:
-            self.completion_metrics(scores=x["scores"],
-                                    labels=x["labels"])
+            self.completion_metrics(scores=x["scores"], labels=x["labels"])
         metrics = self.completion_metrics.compute()
 
         if stage == "val":
