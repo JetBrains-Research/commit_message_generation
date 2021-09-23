@@ -11,7 +11,7 @@ from src.model import EncoderDecoderModule, GPT2LMHeadModule
 from src.data_utils import CMGDataModule
 
 
-@hydra.main(config_path="../conf", config_name="config")
+@hydra.main(config_path="conf", config_name="config")
 def main(cfg: DictConfig) -> None:
     # -----------------------
     # -        init         -
@@ -58,7 +58,7 @@ def main(cfg: DictConfig) -> None:
     lr_logger = LearningRateLogger()
 
     checkpoint_callback = ModelCheckpoint(
-        dirpath="checkpoint", save_top_k=1, save_last=True, verbose=True, monitor="val_MRR_top5", mode="max"
+        dirpath="checkpoint", save_top_k=1, save_last=True, verbose=True, monitor="val_loss_epoch", mode="min"
     )
 
     # trainer
@@ -68,10 +68,6 @@ def main(cfg: DictConfig) -> None:
     #         train         -
     # -----------------------
     trainer.fit(model, dm)
-    # -----------------------
-    #          test         -
-    # -----------------------
-    trainer.test(model=model, datamodule=dm)
 
 
 if __name__ == "__main__":

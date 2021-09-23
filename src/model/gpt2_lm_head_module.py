@@ -3,8 +3,6 @@ import pytorch_lightning as pl
 import torch
 from transformers import GPT2LMHeadModel, GPT2Tokenizer, AdamW, get_linear_schedule_with_warmup
 
-from torchmetrics import MetricCollection
-from src.utils import Accuracy, MRR
 import nltk
 
 nltk.download("wordnet")
@@ -36,10 +34,6 @@ class GPT2LMHeadModule(pl.LightningModule):
         # to make logs for different batch sizes prettier
         self.examples_count = 0
 
-        self.completion_metrics = MetricCollection(
-            {"acc_top1": Accuracy(top_k=1), "acc_top5": Accuracy(top_k=5), "MRR_top5": MRR(top_k=5)}
-        )
-
     def forward(self, batch):
         self.examples_count += len(batch["msg_input_ids"])
         return self.model(
@@ -58,7 +52,7 @@ class GPT2LMHeadModule(pl.LightningModule):
 
     def next_token_metrics_step(self, batch):
         loss, scores = self(batch)[:2]
-        return {"loss": loss, "scores": scores, "labels": batch["msg_labels"]}
+        return {"loss": loss}
 
     def next_token_metrics_epoch_end(self, outputs, stage):
         """
@@ -67,16 +61,11 @@ class GPT2LMHeadModule(pl.LightningModule):
         2) (in val stage only) Aggregate loss and log metric(s) for ModelCheckpoint
         3) Log everything to wandb
         """
-        for x in outputs:
-            self.completion_metrics(scores=x["scores"], labels=x["labels"])
-        metrics = self.completion_metrics.compute()
-
+        loss = torch.stack([x["loss"] for x in outputs]).mean()
+        metrics = {f"{stage}_loss_epoch": loss}
         if stage == "val":
-            loss = torch.stack([x["loss"] for x in outputs]).mean()
-            metrics["loss"] = loss
-            # needed for ModelCheckpoint
-            self.log("val_MRR_top5", metrics["MRR_top5"], on_step=False, on_epoch=True, prog_bar=True, logger=False)
-        metrics = {f"{stage}_{key}": val for key, val in metrics.items()}
+            self.log("val_loss_epoch", metrics["val_loss_epoch"], on_step=False, on_epoch=True, prog_bar=True,
+                     logger=False)
         self.logger.experiment.log(metrics, step=self.examples_count)
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):

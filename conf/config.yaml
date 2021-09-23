@@ -11,10 +11,10 @@ dataset:
     num_workers: 1
   val_dataloader_conf:
     batch_size: 8
-    num_workers: 4
+    num_workers: 1
   test_dataloader_conf:
     batch_size: 8
-    num_workers: 4
+    num_workers: 1
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
   name: transformer 4+4 python
@@ -25,10 +25,10 @@ model:
   num_layers_encoder: 4
   num_layers_decoder: 4
 trainer:
-  gpus: 1
+  gpus: 8
+  accelerator: ddp
   max_epochs: 5
   precision: 16
   amp_level: O1
   auto_select_gpus: true
-  num_sanity_val_steps: 2
   accumulate_grad_batches: 1
