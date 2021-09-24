@@ -1,8 +1,6 @@
 import re
-import itertools
 import torch
 from typing import List, Union, Optional, Dict
-from string import punctuation
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 
@@ -17,12 +15,10 @@ class DataProcessor:
         diff_tokenizer_name_or_path: str,
         msg_tokenizer_name_or_path: str,
         preprocessing: bool = False,
-        nl_token: str = "\n",
     ):
         self._prompt_max_len = prompt_max_len
         self._diff_tokenizer = AutoTokenizer.from_pretrained(diff_tokenizer_name_or_path, use_fast=True)
         self._msg_tokenizer = AutoTokenizer.from_pretrained(msg_tokenizer_name_or_path, use_fast=True)
-        self._nl_token = nl_token  # this might not be needed? (newline char in input is most likely \n by default)
         self._preprocessing = preprocessing
 
     def __call__(self, decoder_context: str, diff: Optional[str] = None) -> Dict[str, torch.Tensor]:
@@ -48,13 +44,9 @@ class DataProcessor:
     def prepare_decoder_input(self, decoder_context: str) -> torch.Tensor:
         """
         This method prepares decoder input (consisting of history & message prefix):
-        1) (optional) Preprocesses input
-        2) Tokenizes input
-        3) Adds <bos> token at the beginning
+        1) Tokenizes input
+        2) Adds <bos> token at the beginning
         """
-        if self._preprocessing:
-            decoder_context = self.preprocess_msg(decoder_context)
-
         tokenized_decoder_context = self.tokenize(decoder_context, self._msg_tokenizer)[:, -self._prompt_max_len :]
         tokenized_decoder_context = torch.cat(
             (
@@ -69,14 +61,10 @@ class DataProcessor:
         """
         This method preprocessed single diff string.
         Currently _preprocessing for diffs includes the following:
-            - padding punctuation with spaces
             - removing some unnecessary special info
             - removing non-changed lines
         """
-        diff = re.sub("([" + punctuation + "\n\t\r])", r" \1 ", diff)
-        diff = re.sub("< FILE >", "<FILE>", diff)
-        diff = re.sub("< nl >", "<nl>", diff)
-        diff_lines = [line.split() for line in diff.split(self._nl_token)]
+        diff_lines = diff.split("\n")
         processed_lines = []
 
         for line in diff_lines:
@@ -84,76 +72,46 @@ class DataProcessor:
                 # remove empty lines
                 continue
 
-            elif line[0] == "<FILE>":
-                # name of changed file
-                # example: <FILE> telecomm / java / android / telecomm / Connection . java
-                processed_lines.append(line[1:])
-
-            elif line[:2] == ["new", "file"]:
-                # line in git diff when new file is created
-                # example: new file
-                processed_lines.append(["new", "file"])
-
-            elif line[:2] == ["deleted", "file"]:
-                # line in git diff when file is deleted
-                # example: deleted file
-                processed_lines.append(["deleted", "file"])
-
-            elif line[:2] == ["rename", "from"]:
-                # line in git diff when file was renamed (old name)
-                # example: rename from src / forge / resources / worldedit . properties
+            elif line.startswith("new") or line.startswith("deleted"):
+                # line in git diff when file was created or deleted
+                # example: new file mode <mode> <filename> / deleted file mode <mode> <filename>
                 processed_lines.append(line)
 
-            elif line[:2] == ["rename", "to"]:
-                # line in git diff when file was renamed (new name)
-                # example: rename to src / forge / resources / defaults / worldedit . properties
+            elif line.startswith("rename") or line.startswith("copy"):
+                # lines in git diff when file was renamed or copied
+                # example 1: rename from <old_filename>, rename to <new_filename>
+                # example 2: copy from <old_filename>, copy to <new_filename>
                 processed_lines.append(line)
 
-            elif line[0] == "-":
-                # lines that were removed
-                # example: - version = ' 2 . 0 . 2 '
-                processed_lines.append(line)
-
-            elif line[0] == "+":
-                # lines that were added
-                # example: + version = ' 2 . 0 . 3 '
+            elif (line.startswith("-") or line.startswith("+")) and len(line.split()) > 1:
+                # lines that were removed/added
+                # example: - version='2.0.2', -version='2.0.2'
+                # example: + version='2.0.2', +version='2.0.2
                 processed_lines.append(line)
 
             elif (
-                line[0] == "index"
-                or line[:2] == ["similarity", "index"]
-                or (line[:2] == ["@", "@"] and line[-2:] == ["@", "@"])
+                line.startswith("index")
+                or line.startswith("similarity index")
+                or (line.startswith("@@") and line.endswith("@@"))
             ):
                 # some special info that we are not interested in
-                # example 1: index 0000000 . . 3f26e45
-                # example 2: similarity index 100 %
-                # example 3: @ @ - 0 , 0 + 1 , 192 @ @
+                # example 1: index 0000000..3f26e45
+                # example 2: similarity index 100%
+                # example 3: @@ -0,0 +1,192 @@
                 continue
 
-            else:
-                # all other cases
-                # case 1: line that was not changed (drop them)
-                # case 2: Binary files a / dependencies / windows / sumatra / SumatraPDF . exe and / dev / null differ
-                if line[:2] == ["Binary", "files"]:
-                    processed_lines.append(line)
+            elif line.startswith("Binary files") and line.endswith("differ"):
+                # example: Binary files <file1> and <file2> differ
+                processed_lines.append(line)
 
-        processed_diff = " ".join(itertools.chain(*[line + ["\n"] for line in processed_lines]))
+            elif len(line.split()) == 1:
+                # filename header in case of file modification and maybe other rare cases that won't hurt too much
+                # example: <filename>
+                processed_lines.append(line)
+
+        processed_diff = "\n".join(processed_lines)
+        processed_diff = re.sub(r" +", " ", processed_diff)
         return processed_diff
-
-    def preprocess_msg(self, msg: str) -> str:
-        """
-        This method preprocessed single message string.
-        Currently _preprocessing for messages includes the following:
-            - padding punctuation with spaces
-            - making sure that newline character is \n
-
-        (not very useful but we might want to add more sophisticated _preprocessing later?)
-        """
-        msg = re.sub("([" + punctuation + "\n\t\r])", r" \1 ", msg)
-        msg = re.sub("< nl >", "<nl>", msg)
-        msg = re.sub(r" +", " ", msg)
-        msg = msg.strip(" ")
-        return msg.replace(self._nl_token, "\n")
 
     def tokenize(
         self, inputs: Union[str, List[str]], tokenizer: PreTrainedTokenizerBase, **tokenizer_kwargs

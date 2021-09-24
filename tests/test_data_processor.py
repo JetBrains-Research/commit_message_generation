@@ -9,7 +9,6 @@ def default_data_processor():
         "diff_tokenizer_name_or_path": "microsoft/codebert-base",
         "msg_tokenizer_name_or_path": "distilgpt2",
         "preprocessing": True,
-        "nl_token": "<nl>",
     }
     return DataProcessor(**default_config)
 
@@ -18,29 +17,15 @@ def default_data_processor():
     "test_input,expected_output",
     [
         (
-            "<FILE> some/path <nl> - smth.old{} <nl> + smth.new() <nl> unchanged line",
-            "some / path \n - smth . old { } \n + smth . new ( ) \n",
+            "some/path\n-smth.old{}\n+smth.new()\nunchanged line",
+            "some/path\n-smth.old{}\n+smth.new()",
         ),
         (
-            "Binary files some/path/a and some/path/b differ <nl>",
-            "Binary files some / path / a and some / path / b differ \n",
+            "Binary files some/path/a and some/path/b differ\n",
+            "Binary files some/path/a and some/path/b differ",
         ),
         ("", ""),
     ],
 )
 def test_preprocess_diff(default_data_processor, test_input, expected_output):
     assert default_data_processor.preprocess_diff(test_input) == expected_output
-
-
-@pytest.mark.parametrize(
-    "test_input,expected_output",
-    [
-        (
-            "docs: update.all-contributorsrc [skip ci] <nl> Authored-by: someone <user@mail.com> <nl>",
-            "docs : update . all - contributorsrc [ skip ci ] \n Authored - by : someone < user @ mail " ". com > \n",
-        ),
-        ("", ""),
-    ],
-)
-def test_preprocess_msg(default_data_processor, test_input, expected_output):
-    assert default_data_processor.preprocess_msg(test_input) == expected_output

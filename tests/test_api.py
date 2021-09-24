@@ -17,8 +17,8 @@ def default_test_setting():
     "diff,decoder_context,prefix",
     [
         ("", "No diff and short", " mes"),
-        ("- old \n + new", "Diff and short", " mes"),
-        ("- old \n + new", "Hello" * 200 + " " + "Diff and long", " mes"),
+        ("-old\n+new", "Diff and short", " mes"),
+        ("-old\n+new", "Hello" * 200 + " " + "Diff and long", " mes"),
     ],
 )
 def test_completion(default_test_setting, diff, decoder_context, prefix):
