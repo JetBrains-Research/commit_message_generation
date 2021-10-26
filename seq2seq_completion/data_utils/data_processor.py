@@ -67,47 +67,59 @@ class DataProcessor:
         diff_lines = diff.split("\n")
         processed_lines = []
 
-        for line in diff_lines:
-            if len(line) == 0:
-                # remove empty lines
-                continue
+        i = 0
+        while i < len(diff_lines):
+            line = diff_lines[i]
 
-            elif line.startswith("new") or line.startswith("deleted"):
+            if line.startswith("diff --git"):
+                # header line in git diff
+                # example: diff --git a/.gitignore b/.gitignore
+                if not (
+                    diff_lines[i + 1].startswith("new file")
+                    or diff_lines[i + 1].startswith("deleted file")
+                    or diff_lines[i + 2].startswith("rename")
+                ):
+                    i += 2
+                    processed_lines.append(line.split()[2][2:])
+
+            elif line.startswith("new file"):
+                # line in git diff when file was created
+                # example: new file mode <mode>
+                # --- /dev/null (date <smth>)
+                # +++ b/<filename> (date <smth>)
+                filename = diff_lines[i + 2].split()[1][2:]
+                i += 2
+                processed_lines.append(f"new file {filename}")
+
+            elif line.startswith("deleted file"):
                 # line in git diff when file was created or deleted
-                # example: new file mode <mode> <filename> / deleted file mode <mode> <filename>
+                # example: deleted file mode <mode>
+                # --- a/<filename> (date <smth>)
+                # +++ /dev/null (date <smth>)
+                filename = diff_lines[i + 1].split()[1][2:]
+                i += 2
+                processed_lines.append(f"deleted file {filename}")
+
+            elif line.startswith("rename"):
+                # lines in git diff when file was renamed
+                # example: rename from <old_filename>, rename to <new_filename>
                 processed_lines.append(line)
 
-            elif line.startswith("rename") or line.startswith("copy"):
-                # lines in git diff when file was renamed or copied
-                # example 1: rename from <old_filename>, rename to <new_filename>
-                # example 2: copy from <old_filename>, copy to <new_filename>
-                processed_lines.append(line)
-
-            elif (line.startswith("-") or line.startswith("+")) and len(line.split()) > 1:
-                # lines that were removed/added
+            elif line.startswith("-") and len(line.strip()) > 1:
+                # lines that were removed
                 # example: - version='2.0.2', -version='2.0.2'
+                processed_lines.append(line)
+
+            elif line.startswith("+") and len(line.strip()) > 1:
+                # lines that were added
                 # example: + version='2.0.2', +version='2.0.2
                 processed_lines.append(line)
-
-            elif (
-                line.startswith("index")
-                or line.startswith("similarity index")
-                or (line.startswith("@@") and line.endswith("@@"))
-            ):
-                # some special info that we are not interested in
-                # example 1: index 0000000..3f26e45
-                # example 2: similarity index 100%
-                # example 3: @@ -0,0 +1,192 @@
-                continue
 
             elif line.startswith("Binary files") and line.endswith("differ"):
                 # example: Binary files <file1> and <file2> differ
                 processed_lines.append(line)
 
-            elif len(line.split()) == 1:
-                # filename header in case of file modification and maybe other rare cases that won't hurt too much
-                # example: <filename>
-                processed_lines.append(line)
+            i += 1
 
         processed_diff = "\n".join(processed_lines)
         processed_diff = re.sub(r" +", " ", processed_diff)
