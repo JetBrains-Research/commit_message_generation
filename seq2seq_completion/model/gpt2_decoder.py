@@ -122,7 +122,7 @@ class GPT2Decoder(GPT2LMHeadModel):
             beam_scorer=beam_search_scorer,
             logits_processor=logits_processors_list,
             max_length=max_length,
-            pad_token_id=self.config.pad_token_id,
+            pad_token_id=tokenizer.eos_token_id,
             eos_token_id=tokenizer("\n").input_ids[0],
             output_scores=True,
             return_dict_in_generate=True,
