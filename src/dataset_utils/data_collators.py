@@ -33,7 +33,7 @@ class NextTokenPredictionCollator:
         all_msg_labels = []  # -100 on history & padding to avoid computing loss (right-side padding)
 
         # concatenate history examples with current input ids (checking that resulting length is <= max_len)
-        for message_ids, history_ids in zip(message_inputs, history_inputs):
+        for i, message_ids in enumerate(message_inputs):
             cur_ids = [
                 [self.trg_tokenizer.bos_token_id],
                 message_ids[: self.max_len - 2],
@@ -43,7 +43,7 @@ class NextTokenPredictionCollator:
             cur_len = len(message_ids[: self.max_len - 2]) + 2
 
             if self.with_history:
-                for history_input_ids in history_ids[::-1]:
+                for history_input_ids in history_inputs[i][::-1]:
                     # insert prev messages from history until we reach max_len
                     if cur_len + len(history_input_ids) + len(self.trg_tokenizer(r" \n ").input_ids) > self.max_len:
                         break
@@ -155,7 +155,7 @@ class GenerationCollator:
         all_msg_targets = []  # targets for generation (right-side padding)
         all_prefixes = []  # make sure to separate last word from context to use for prefix-constrained generation
 
-        for message_ids, history_ids in zip(message_inputs, history_inputs):
+        for i, message_ids in enumerate(message_inputs):
             message_ids = message_ids[: self.max_len - 1]
 
             decoded_message = self.trg_tokenizer.decode(message_ids, skip_special_tokens=True)
@@ -183,7 +183,7 @@ class GenerationCollator:
             cur_len = len(tokenized_input) + 1
 
             if self.with_history:
-                for history_input_ids in history_ids[::-1]:
+                for history_input_ids in history_inputs[i][::-1]:
                     # insert prev messages from history until we reach max_len
                     if cur_len + len(history_input_ids) + len(self.trg_tokenizer(r" \n ").input_ids) > self.max_len:
                         break
