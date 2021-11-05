@@ -92,7 +92,7 @@ class GPT2LMHeadModule(pl.LightningModule):
 
     def actual_generation_step(self, batch):
         # leave only generated part
-        gen_sequences = self.generate(batch)[:, batch["msg_input_ids"].shape[1]:]
+        gen_sequences = self.generate(batch)[:, batch["msg_input_ids"].shape[1] :]
         # trim by # of generated tokens
         trg_sequences = batch["target"][:, : gen_sequences.shape[1]]
 
@@ -102,10 +102,8 @@ class GPT2LMHeadModule(pl.LightningModule):
         )
 
         # remove prefix from generated and target to compute metrics without it
-        decoded_preds = [
-            pred[len(prefix):].strip("\n") for pred, prefix in zip(decoded_preds, batch["prefix"])
-        ]
-        decoded_trg = [trg[len(prefix):] for trg, prefix in zip(decoded_trg, batch["prefix"])]
+        decoded_preds = [pred[len(prefix) :].strip("\n") for pred, prefix in zip(decoded_preds, batch["prefix"])]
+        decoded_trg = [trg[len(prefix) :] for trg, prefix in zip(decoded_trg, batch["prefix"])]
 
         # add data to a little table with examples
         self.table_data["Context"].extend(

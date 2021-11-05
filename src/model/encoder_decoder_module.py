@@ -140,7 +140,7 @@ class EncoderDecoderModule(pl.LightningModule):
             decoder_attention_mask=batch["msg_attention_mask"],
             prefix_allowed_tokens_fn=prefix_fn,
             pad_token_id=self._trg_tokenizer.eos_token_id,
-            eos_token_id=198,        # consider \n <EOS> token
+            eos_token_id=198,  # consider \n <EOS> token
             early_stopping=True,
             no_repeat_ngram_size=4,
             num_beams=5,
@@ -167,9 +167,7 @@ class EncoderDecoderModule(pl.LightningModule):
         )
 
         # remove prefix from generated and target to compute metrics without it
-        decoded_preds = [
-            pred[len(prefix) :].strip("\n") for pred, prefix in zip(decoded_preds, batch["prefix"])
-        ]
+        decoded_preds = [pred[len(prefix) :].strip("\n") for pred, prefix in zip(decoded_preds, batch["prefix"])]
         decoded_trg = [trg[len(prefix) :] for trg, prefix in zip(decoded_trg, batch["prefix"])]
 
         # add data to a little table with examples
