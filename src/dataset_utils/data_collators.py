@@ -185,11 +185,11 @@ class GenerationCollator:
             if self.with_history:
                 for history_input_ids in history_inputs[i][::-1]:
                     # insert prev messages from history until we reach max_len
-                    if cur_len + len(history_input_ids) + len(self.trg_tokenizer(r" \n ").input_ids) > self.max_len:
+                    if cur_len + len(history_input_ids) + len(self.trg_tokenizer._sep) > self.max_len:
                         break
 
-                    cur_len += len(history_input_ids) + len(self.trg_tokenizer(r" \n ").input_ids)
-                    cur_ids.insert(1, history_input_ids + self.trg_tokenizer(r" \n ").input_ids)
+                    cur_len += len(history_input_ids) + len(self.trg_tokenizer._sep)
+                    cur_ids.insert(1, history_input_ids + self.trg_tokenizer._sep)
 
             # flatten everything into one sequence and convert to tensor of torch.int64
             cur_ids = torch.tensor([ex for sublist in cur_ids for ex in sublist], dtype=torch.int64)
