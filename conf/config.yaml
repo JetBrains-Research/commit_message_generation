@@ -1,24 +1,24 @@
 actual_generation: true
 dataset:
-  dataset_root: raw_data/github_data
+  dataset_root: test_data/python
   history_max_len: 200
   encoder_name_or_path: microsoft/codebert-base
   decoder_name_or_path: distilgpt2
   with_history: true
-  context_ratio: 0.05
+  context_ratio: 0.25
   local_rank: 0
   world_size: 1
+  history_sep: "\n"
   test_dataloader_conf:
     batch_size: 1
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: test fine-tuned distilgpt2 (5% in context, \n as eos)
+  name: python 25% in context ('\n' as separator)
   project: commit_message_generation
 model:
-  encoder_decoder: false
+  encoder_decoder: true
   decoder_name_or_path: distilgpt2
 trainer:
   gpus: 1
-  limit_test_batches: 1000
-ckpt_path: artifacts/distilgpt2_best:v0/epoch=4-step=23993.ckpt
+ckpt_path: artifacts/transformer_with_history_python:v0/epoch=4-step=81318.ckpt
