@@ -14,16 +14,16 @@ dataset:
     num_workers: 4
   val_dataloader_conf:
     batch_size: 16
-    num_workers: 1
+    num_workers: 4
   marker_tests_dataloader_conf:
     batch_size: 1
     num_workers: 4
   test_dataloader_conf:
     batch_size: 16
-    num_workers: 1
+    num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: test
+  name: transformer 4+4 python v2 (no spaces)
   project: commit_message_generation
 model:
   encoder_decoder: true
@@ -32,7 +32,7 @@ model:
   num_layers_decoder: 4
 trainer:
   gpus: 1
-  max_epochs: 2
+  max_epochs: 5
   precision: 16
   amp_level: O1
   auto_select_gpus: true

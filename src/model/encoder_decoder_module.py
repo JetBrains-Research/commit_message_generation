@@ -147,8 +147,10 @@ class EncoderDecoderModule(pl.LightningModule):
         self.logger.experiment.log(metrics, step=self.examples_count)
 
     def generation_step(self, batch):
-        gen_sequences = self.generate(batch)
+        # leave only generated part (without history)
+        gen_sequences = self.generate(batch)[:, batch["generation_input_ids"].shape[1] :]
 
+        # remove history from targets
         batch["msg_labels"][batch["msg_labels"] == -100] = self._trg_tokenizer.pad_token_id
 
         # decode tokenized sequences
@@ -174,8 +176,8 @@ class EncoderDecoderModule(pl.LightningModule):
             return self.generation_step(batch)
 
     def validation_epoch_end(self, outputs):
-        self.next_token_metrics_epoch_end(outputs, stage="val")
-        # self.generation_epoch_end()
+        self.next_token_metrics_epoch_end(outputs[0], stage="val")
+        self.generation_epoch_end()
 
     def test_step(self, batch, batch_idx):
         return self.next_token_metrics_step(batch)
