@@ -1,5 +1,6 @@
 from copy import copy
 from typing import Optional
+from collections import defaultdict
 
 import torch
 import pytorch_lightning as pl
@@ -16,6 +17,8 @@ from transformers import (
 )
 
 import nltk
+import pandas as pd
+import wandb
 
 nltk.download("wordnet")
 
@@ -92,6 +95,8 @@ class EncoderDecoderModule(pl.LightningModule):
         # do not tie output embeddings to input embeddings
         self.model.config.tie_word_embeddings = False
 
+        self.table_data = defaultdict(list)
+
         # to make logs for different batch sizes prettier
         self.examples_count = 0
 
@@ -102,6 +107,20 @@ class EncoderDecoderModule(pl.LightningModule):
             decoder_input_ids=batch["msg_input_ids"],
             decoder_attention_mask=batch["msg_attention_mask"],
             labels=batch["msg_labels"],
+        )
+
+    def generate(self, batch):
+        return self.model.generate(
+            input_ids=batch["diff_input_ids"],
+            attention_mask=batch["diff_attention_mask"],
+            decoder_input_ids=batch["generation_input_ids"],
+            decoder_attention_mask=batch["generation_attention_mask"],
+            pad_token_id=self._trg_tokenizer.eos_token_id,
+            eos_token_id=198,  # consider \n <EOS> token
+            early_stopping=True,
+            no_repeat_ngram_size=4,
+            num_beams=5,
+            max_length=batch["msg_input_ids"].shape[1],
         )
 
     def training_step(self, batch, batch_idx):
@@ -119,23 +138,44 @@ class EncoderDecoderModule(pl.LightningModule):
         return {"loss": loss}
 
     def next_token_metrics_epoch_end(self, outputs, stage):
-        """
-        Logic for validation & testing epoch end:
-        1) Calculate accuracy@1, accuracy@5, MRR@5
-        2) (in val stage only) Aggregate loss and log metric(s) for ModelCheckpoint
-        3) Log everything to wandb
-        """
         loss = torch.stack([x["loss"] for x in outputs]).mean()
         metrics = {f"{stage}_loss_epoch": loss}
         if stage == "val":
-            self.log("val_loss_epoch", metrics["val_loss_epoch"], on_step=False, on_epoch=True, prog_bar=True, logger=False)
+            self.log(
+                "val_loss_epoch", metrics["val_loss_epoch"], on_step=False, on_epoch=True, prog_bar=True, logger=False
+            )
         self.logger.experiment.log(metrics, step=self.examples_count)
 
-    def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        return self.next_token_metrics_step(batch)
+    def generation_step(self, batch):
+        gen_sequences = self.generate(batch)
+
+        batch["msg_labels"][batch["msg_labels"] == -100] = self._trg_tokenizer.pad_token_id
+
+        # decode tokenized sequences
+        decoded_source = self.decode_src(batch["diff_input_ids"])[0]
+        decoded_preds, decoded_trg = self.decode_trg(gen_sequences, batch["msg_labels"])
+
+        # add data to a little table with examples
+        self.table_data["Diff"].extend(decoded_source)
+        self.table_data["Target"].extend(decoded_trg)
+        self.table_data["Prediction"].extend(decoded_preds)
+
+    def generation_epoch_end(self, *args, **kwargs):
+        table = wandb.Table(dataframe=pd.DataFrame.from_dict(self.table_data))
+        self.table_data.clear()
+        self.logger.experiment.log({"marker_tests": table}, step=self.examples_count)
+
+    def validation_step(self, batch, batch_idx, dataloader_idx):
+        # usual validation, without generation
+        if dataloader_idx == 0:
+            return self.next_token_metrics_step(batch)
+        # validation on marker tests
+        if dataloader_idx == 1:
+            return self.generation_step(batch)
 
     def validation_epoch_end(self, outputs):
         self.next_token_metrics_epoch_end(outputs, stage="val")
+        # self.generation_epoch_end()
 
     def test_step(self, batch, batch_idx):
         return self.next_token_metrics_step(batch)
@@ -153,6 +193,12 @@ class EncoderDecoderModule(pl.LightningModule):
             "frequency": 1,
         }
         return [optimizer], [scheduler]
+
+    def decode_src(self, *args):
+        return tuple(self._src_tokenizer.batch_decode(arg, skip_special_tokens=True) for arg in args)
+
+    def decode_trg(self, *args):
+        return tuple(self._trg_tokenizer.batch_decode(arg, skip_special_tokens=True) for arg in args)
 
     @staticmethod
     def remove_layers_from_model(teacher, num_layers, is_gpt):

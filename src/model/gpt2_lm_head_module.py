@@ -64,8 +64,9 @@ class GPT2LMHeadModule(pl.LightningModule):
         loss = torch.stack([x["loss"] for x in outputs]).mean()
         metrics = {f"{stage}_loss_epoch": loss}
         if stage == "val":
-            self.log("val_loss_epoch", metrics["val_loss_epoch"], on_step=False, on_epoch=True, prog_bar=True,
-                     logger=False)
+            self.log(
+                "val_loss_epoch", metrics["val_loss_epoch"], on_step=False, on_epoch=True, prog_bar=True, logger=False
+            )
         self.logger.experiment.log(metrics, step=self.examples_count)
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
