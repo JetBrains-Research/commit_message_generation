@@ -15,6 +15,8 @@ from transformers import (
     AdamW,
     get_linear_schedule_with_warmup,
 )
+from torchmetrics import MetricCollection
+from src.utils import Accuracy, MRR
 
 import nltk
 import pandas as pd
@@ -97,6 +99,10 @@ class EncoderDecoderModule(pl.LightningModule):
 
         self.table_data = defaultdict(list)
 
+        self.completion_metrics = MetricCollection(
+            {"acc_top1": Accuracy(top_k=1), "acc_top5": Accuracy(top_k=5), "MRR_top5": MRR(top_k=5)}
+        )
+
         # to make logs for different batch sizes prettier
         self.examples_count = 0
 
@@ -135,15 +141,21 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def next_token_metrics_step(self, batch):
         loss, scores = self(batch)[:2]
+
+        self.completion_metrics(scores=scores, labels=batch["msg_labels"])
         return {"loss": loss}
 
     def next_token_metrics_epoch_end(self, outputs, stage):
         loss = torch.stack([x["loss"] for x in outputs]).mean()
-        metrics = {f"{stage}_loss_epoch": loss}
+
+        metrics = self.completion_metrics.compute()
+        metrics["loss"] = loss
+        metrics = {f"{stage}_{key}": val for key, val in metrics.items()}
+
         if stage == "val":
-            self.log(
-                "val_loss_epoch", metrics["val_loss_epoch"], on_step=False, on_epoch=True, prog_bar=True, logger=False
-            )
+            # needed for ModelCheckpoint
+            self.log("val_MRR_top5", metrics["val_MRR_top5"], on_step=False, on_epoch=True, prog_bar=True, logger=False)
+
         self.logger.experiment.log(metrics, step=self.examples_count)
 
     def generation_step(self, batch):

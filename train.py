@@ -58,7 +58,7 @@ def main(cfg: DictConfig) -> None:
     lr_logger = LearningRateLogger()
 
     checkpoint_callback = ModelCheckpoint(
-        dirpath="checkpoint", save_top_k=1, save_last=True, verbose=True, monitor="val_loss_epoch", mode="min"
+        dirpath="checkpoint", save_top_k=1, save_last=True, verbose=True, monitor="val_MRR_top5", mode="max"
     )
 
     # trainer
