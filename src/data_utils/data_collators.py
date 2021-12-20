@@ -40,7 +40,7 @@ class DataCollatorWithHistory:
                     message_ids[: self.max_len - 1 - len(self.sep_tokens)],
                     self.sep_tokens,
                 ]
-                cur_labels = [message_ids[: self.max_len - 1 - len(self.sep_tokens)]]
+                cur_labels = [[-100], message_ids[: self.max_len - 1 - len(self.sep_tokens)], self.sep_tokens]
                 cur_len = len(message_ids[: self.max_len - 1 - len(self.sep_tokens)]) + 1 + len(self.sep_tokens)
 
                 for history_input_ids in history_ids[::-1]:
@@ -167,7 +167,7 @@ class DataCollatorWithHistoryGeneration:
                 self.sep_tokens,
             ]
             cur_generation_ids = [[self.trg_tokenizer.bos_token_id]]
-            cur_labels = [message_ids[: self.max_len - 1 - len(self.sep_tokens)]]
+            cur_labels = [[-100], message_ids[: self.max_len - 1 - len(self.sep_tokens)], self.sep_tokens]
             cur_len = len(message_ids[: self.max_len - 1 - len(self.sep_tokens)]) + 1 + len(self.sep_tokens)
 
             for history_input_ids in history_ids[::-1]:
@@ -314,7 +314,7 @@ class DataCollatorWithoutHistory:
                     message_ids[: self.max_len - 1 - len(self.sep_tokens)],
                     self.sep_tokens,
                 ]
-                cur_labels = [message_ids[: self.max_len - 1 - len(self.sep_tokens)]]
+                cur_labels = [[-100], message_ids[: self.max_len - 1 - len(self.sep_tokens)], self.sep_tokens]
 
                 # flatten everything into one sequence and convert to tensor of torch.int64
                 cur_ids = torch.tensor([ex for sublist in cur_ids for ex in sublist], dtype=torch.int64)
