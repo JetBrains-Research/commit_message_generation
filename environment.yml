@@ -16,3 +16,6 @@ dependencies:
     - rouge-score==0.0.4
     - wandb==0.10.14
     - hydra-core==1.0.5
+    - torchmetrics==0.4.1
+    - black
+    - pytest
