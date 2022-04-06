@@ -17,15 +17,13 @@ def main(cfg: DictConfig) -> None:
     # -----------------------
     pl.seed_everything(42)
 
-    cfg.dataset.local_rank = int(os.environ.get("LOCAL_RANK", 0))
-    cfg.dataset.world_size = cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1
-
-    print("Local rank", cfg.dataset.local_rank)
-    print("World size", cfg.dataset.world_size)
-
     print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
 
-    dm = CMGDataModule(**cfg.dataset)
+    dm = CMGDataModule(
+        **cfg.dataset,
+        local_rank=int(os.environ.get("LOCAL_RANK", 0)),
+        world_size=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1,
+    )
     dm.setup()
 
     if "ckpt_path" in cfg:
@@ -50,15 +48,15 @@ def main(cfg: DictConfig) -> None:
             # seq2seq model
             model = EncoderDecoderModule(
                 **cfg.model,
-                src_tokenizer=dm._src_tokenizer,
-                trg_tokenizer=dm._trg_tokenizer,
+                diff_tokenizer=dm._diff_tokenizer,
+                msg_tokenizer=dm._msg_tokenizer,
                 num_epochs=cfg.trainer.max_epochs,
                 num_batches=dm.train._len // (cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.gpus),
                 num_gpus=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1,
             )
         else:
             # single decoder
-            model = GPT2LMHeadModule(**cfg.model, tokenizer=dm._trg_tokenizer)
+            model = GPT2LMHeadModule(**cfg.model, tokenizer=dm._msg_tokenizer)
 
         trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
         trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger)

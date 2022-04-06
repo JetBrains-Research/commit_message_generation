@@ -3,8 +3,7 @@ import json
 from typing import List, Dict, Generator, Iterator
 import torch
 from torch.utils.data import IterableDataset, DataLoader
-from transformers import RobertaTokenizer, GPT2Tokenizer
-from .data_collators import DataCollatorWithHistory
+from .data_collators import DataCollator
 
 
 class CMGDatasetWithHistory(IterableDataset):
@@ -28,6 +27,9 @@ class CMGDatasetWithHistory(IterableDataset):
         self._gpu_rank = rank
         self._gpu_world_size = world_size
         self._num_workers = None
+
+        self.world_size = None
+        self.process_rank = None
 
     @staticmethod
     def _init_worker_fn(worker_id: int) -> None:
@@ -61,7 +63,7 @@ class CMGDatasetWithHistory(IterableDataset):
         assert self._num_workers is not None, f"You must access __iter__ through DataLoader"
         return iter(self._get_examples_generator())
 
-    def get_dataloader(self, batch_size: int, num_workers: int, collate_fn: DataCollatorWithHistory) -> DataLoader:
+    def get_dataloader(self, batch_size: int, num_workers: int, collate_fn: DataCollator) -> DataLoader:
         """Creates DataLoader in a proper way."""
         assert num_workers >= 0, "num_workers must be at least 0"
         if num_workers == 0:

@@ -29,8 +29,8 @@ class EncoderDecoderModule(pl.LightningModule):
     def __init__(
         self,
         learning_rate: float,
-        src_tokenizer: RobertaTokenizer,
-        trg_tokenizer: GPT2Tokenizer,
+        diff_tokenizer: RobertaTokenizer,
+        msg_tokenizer: GPT2Tokenizer,
         num_epochs: int,
         num_batches: int,
         num_gpus: int,
@@ -42,8 +42,8 @@ class EncoderDecoderModule(pl.LightningModule):
     ):
         super().__init__()
 
-        self._src_tokenizer = src_tokenizer
-        self._trg_tokenizer = trg_tokenizer
+        self._diff_tokenizer = diff_tokenizer
+        self._msg_tokenizer = msg_tokenizer
         self._num_epochs = num_epochs
         self._num_batches = num_batches
         self._num_gpus = num_gpus
@@ -51,15 +51,28 @@ class EncoderDecoderModule(pl.LightningModule):
 
         self.save_hyperparameters()
 
-        if encoder_name_or_path is not None and decoder_name_or_path is not None:
+        if encoder_name_or_path:
             # use pretrained RoBERTa as encoder
             encoder = RobertaModel.from_pretrained(encoder_name_or_path)
             # resize embeddings to match vocabulary size
-            encoder.resize_token_embeddings(len(self._src_tokenizer))
+            encoder.resize_token_embeddings(len(self._diff_tokenizer))
             # remove layers if necessary
             if num_layers_encoder is not None and num_layers_encoder < encoder.config.num_hidden_layers:
                 encoder = EncoderDecoderModule.remove_layers_from_model(encoder, num_layers_encoder, is_gpt=False)
+        elif num_layers_encoder:
+            # use randomly initialized RoBERTa as encoder
+            encoder_config = RobertaConfig()
+            encoder_config.num_hidden_layers = num_layers_encoder
+            encoder = RobertaModel(config=encoder_config)
+            # resize embeddings to match vocabulary size
+            encoder.resize_token_embeddings(len(self._diff_tokenizer))
+        else:
+            raise ValueError(
+                "You have to specify either num_layers for training from scratch \
+                                          or paths for loading pretrained models"
+            )
 
+        if decoder_name_or_path:
             # use pretrained GPT-2 as decoder
             config = GPT2Config.from_pretrained(decoder_name_or_path)
             config.is_decoder = True
@@ -68,15 +81,7 @@ class EncoderDecoderModule(pl.LightningModule):
             # remove layers if necessary
             if num_layers_decoder is not None and num_layers_decoder < decoder.config.n_layer:
                 decoder = EncoderDecoderModule.remove_layers_from_model(decoder, num_layers_decoder, is_gpt=True)
-
-        elif num_layers_decoder is not None and num_layers_encoder is not None:
-            # use randomly initialized RoBERTa as encoder
-            encoder_config = RobertaConfig()
-            encoder_config.num_hidden_layers = num_layers_encoder
-            encoder = RobertaModel(config=encoder_config)
-            # resize embeddings to match vocabulary size
-            encoder.resize_token_embeddings(len(self._src_tokenizer))
-
+        elif num_layers_decoder:
             # use randomly initialized GPT-2 as decoder
             decoder_config = GPT2Config()
             decoder_config.n_layer = num_layers_decoder
@@ -121,7 +126,7 @@ class EncoderDecoderModule(pl.LightningModule):
             attention_mask=batch["diff_attention_mask"],
             decoder_input_ids=batch["generation_input_ids"],
             decoder_attention_mask=batch["generation_attention_mask"],
-            pad_token_id=self._trg_tokenizer.eos_token_id,
+            pad_token_id=self._msg_tokenizer.eos_token_id,
             eos_token_id=198,  # consider \n <EOS> token
             early_stopping=True,
             no_repeat_ngram_size=4,
@@ -141,7 +146,6 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def next_token_metrics_step(self, batch):
         loss, scores = self(batch)[:2]
-
         self.completion_metrics(scores=scores, labels=batch["msg_labels"])
         return {"loss": loss}
 
@@ -163,7 +167,7 @@ class EncoderDecoderModule(pl.LightningModule):
         gen_sequences = self.generate(batch)[:, batch["generation_input_ids"].shape[1] :]
 
         # remove history from targets
-        batch["msg_labels"][batch["msg_labels"] == -100] = self._trg_tokenizer.pad_token_id
+        batch["msg_labels"][batch["msg_labels"] == -100] = self._msg_tokenizer.pad_token_id
 
         # decode tokenized sequences
         decoded_source = self.decode_src(batch["diff_input_ids"])[0]
@@ -180,10 +184,10 @@ class EncoderDecoderModule(pl.LightningModule):
         self.logger.experiment.log({"marker_tests": table}, step=self.examples_count)
 
     def validation_step(self, batch, batch_idx, dataloader_idx):
-        # usual validation, without generation
+        # main validation, calculating next token prediction metrics
         if dataloader_idx == 0:
             return self.next_token_metrics_step(batch)
-        # validation on marker tests
+        # validation on marker tests, generating examples
         if dataloader_idx == 1:
             return self.generation_step(batch)
 
@@ -209,10 +213,10 @@ class EncoderDecoderModule(pl.LightningModule):
         return [optimizer], [scheduler]
 
     def decode_src(self, *args):
-        return tuple(self._src_tokenizer.batch_decode(arg, skip_special_tokens=True) for arg in args)
+        return tuple(self._diff_tokenizer.batch_decode(arg, skip_special_tokens=True) for arg in args)
 
     def decode_trg(self, *args):
-        return tuple(self._trg_tokenizer.batch_decode(arg, skip_special_tokens=True) for arg in args)
+        return tuple(self._msg_tokenizer.batch_decode(arg, skip_special_tokens=True) for arg in args)
 
     @staticmethod
     def remove_layers_from_model(teacher, num_layers, is_gpt):
