@@ -1,9 +1,10 @@
 import pytorch_lightning as pl
-from transformers import RobertaTokenizer, GPT2Tokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizerFast
 
 import hydra
 from omegaconf import DictConfig
 
+from hydra.utils import to_absolute_path
 from src.dataset_utils.cmg_dataset_w_history import CMGDatasetWithHistory
 from src.dataset_utils.data_collators import NextTokenPredictionCollator, GenerationCollator
 
@@ -34,16 +35,26 @@ class CMGDataModule(pl.LightningDataModule):
 
         self.test_dataloader_conf = test_dataloader_conf
 
-        self._src_tokenizer = RobertaTokenizer.from_pretrained(encoder_name_or_path, use_fast=True)
-        self._trg_tokenizer = GPT2Tokenizer.from_pretrained(decoder_name_or_path, use_fast=True)
-
-        # set pad_token_id to unk_token_id -> be careful here as unk_token_id == eos_token_id == bos_token_id
-        # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
-        self._trg_tokenizer.pad_token = self._trg_tokenizer.unk_token
-        if history_sep == "\n":
-            self._trg_tokenizer._sep = [self._trg_tokenizer.convert_tokens_to_ids("Ċ")]
+        if encoder_name_or_path.endswith(".json"):
+            self._src_tokenizer = PreTrainedTokenizerFast(tokenizer_file=to_absolute_path(encoder_name_or_path))
+            if self._src_tokenizer.pad_token is None:
+                self._src_tokenizer.add_special_tokens({"pad_token": "[PAD]"})
         else:
-            self._trg_tokenizer._sep = self._trg_tokenizer(history_sep).input_ids
+            self._src_tokenizer = AutoTokenizer.from_pretrained(encoder_name_or_path, use_fast=True)
+
+        if decoder_name_or_path.endswith(".json"):
+            self._trg_tokenizer = PreTrainedTokenizerFast(tokenizer_file=to_absolute_path(decoder_name_or_path))
+        else:
+            self._trg_tokenizer = AutoTokenizer.from_pretrained(decoder_name_or_path, use_fast=True)
+            # set pad_token_id to unk_token_id -> be careful here as unk_token_id == eos_token_id == bos_token_id
+            # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
+            if "gpt2" in decoder_name_or_path:
+                self._trg_tokenizer.pad_token = self._trg_tokenizer.unk_token
+
+            if history_sep == "\n":
+                self._trg_tokenizer._sep = [self._trg_tokenizer.convert_tokens_to_ids("Ċ")]
+            else:
+                self._trg_tokenizer._sep = self._trg_tokenizer(history_sep).input_ids
 
         if actual_generation:
             self.data_collator = GenerationCollator(

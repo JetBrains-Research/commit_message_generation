@@ -2,6 +2,7 @@ import torch
 import re
 from typing import List
 from string import punctuation
+from nltk import word_tokenize
 from torchmetrics import Metric
 
 
@@ -17,8 +18,8 @@ class ExactMatch(Metric):
     def update(self, pred: List[str], target: List[str]):
         for pred_example, target_example in zip(pred, target):
             for pred_word, target_word in zip(
-                re.split("[ \n\t\r" + punctuation + "]+", pred_example)[: self.n],
-                re.split("[ \n\t\r" + punctuation + "]+", target_example)[: self.n],
+                word_tokenize(pred_example)[: self.n],
+                word_tokenize(target_example)[: self.n],
             ):
                 if pred_word == target_word:
                     self.correct += 1

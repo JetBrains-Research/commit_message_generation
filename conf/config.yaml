@@ -1,8 +1,8 @@
 actual_generation: true
 dataset:
-  dataset_root: test_data/python
+  dataset_root: raw_data/multilang
   history_max_len: 200
-  encoder_name_or_path: microsoft/codebert-base
+  encoder_name_or_path: raw_data/multilang/diff_tokenizer.json
   decoder_name_or_path: distilgpt2
   with_history: true
   context_ratio: 0.25
@@ -14,11 +14,12 @@ dataset:
     num_workers: 4
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: python 25% in context ('\n' as separator)
+  id: 28g0hm3j
   project: commit_message_generation
 model:
   encoder_decoder: true
   decoder_name_or_path: distilgpt2
 trainer:
   gpus: 1
-ckpt_path: artifacts/transformer_with_history_python:v0/epoch=4-step=81318.ckpt
+  limit_test_batches: 200
+ckpt_path: outputs/2022-04-01/11-53-47/checkpoint/last.ckpt

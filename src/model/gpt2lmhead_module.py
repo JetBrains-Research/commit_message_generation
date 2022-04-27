@@ -1,5 +1,6 @@
 import wandb
 import pandas as pd
+import numpy as np
 import nltk
 import pytorch_lightning as pl
 
@@ -15,7 +16,9 @@ nltk.download("wordnet")
 
 
 class GPT2LMHeadModule(pl.LightningModule):
-    def __init__(self, decoder_name_or_path: str, actual_generation: bool, tokenizer: GPT2Tokenizer, **kwargs):
+    def __init__(
+        self, decoder_name_or_path: str, actual_generation: bool, context_ratio: int, tokenizer: GPT2Tokenizer, **kwargs
+    ):
         super().__init__()
         self.actual_generation = actual_generation
         self._tokenizer = tokenizer
@@ -23,6 +26,8 @@ class GPT2LMHeadModule(pl.LightningModule):
 
         # use pretrained GPT-2 as decoder
         self.model = GPT2LMHeadModel.from_pretrained(decoder_name_or_path)
+
+        self.context_ratio = context_ratio
 
         # generating params
         self.model.config.no_repeat_ngram_size = 4
@@ -37,7 +42,8 @@ class GPT2LMHeadModule(pl.LightningModule):
         self.bleu = load_metric("bleu")
         self.rouge = load_metric("rouge")
         self.meteor = load_metric("meteor")
-        self.chrf = ChrF()
+        self.chrf = load_metric("chrf")
+        self.bertscore = load_metric("bertscore")
 
         self.completion_metrics = MetricCollection(
             {"acc_top1": Accuracy(top_k=1), "acc_top5": Accuracy(top_k=5), "MRR_top5": MRR(top_k=5)}, prefix="test_"
@@ -80,7 +86,7 @@ class GPT2LMHeadModule(pl.LightningModule):
             early_stopping=True,
             no_repeat_ngram_size=4,
             num_beams=5,
-            min_length=0,
+            min_length=min(5, batch["msg_input_ids"].shape[1]),
             max_length=batch["msg_input_ids"].shape[1] + 25,
         )
 
@@ -93,48 +99,42 @@ class GPT2LMHeadModule(pl.LightningModule):
     def actual_generation_step(self, batch):
         # leave only generated part
         gen_sequences = self.generate(batch)[:, batch["msg_input_ids"].shape[1] :]
-        # trim by # of generated tokens
-        trg_sequences = batch["target"][:, : gen_sequences.shape[1]]
 
         # decode tokenized sequences
         decoded_context, decoded_preds, decoded_trg = self.decode_trg(
-            batch["msg_input_ids"], gen_sequences, trg_sequences
+            batch["msg_input_ids"], gen_sequences, batch["target"]
         )
 
         # remove prefix from generated and target to compute metrics without it
         decoded_preds = [pred[len(prefix) :].strip("\n") for pred, prefix in zip(decoded_preds, batch["prefix"])]
         decoded_trg = [trg[len(prefix) :] for trg, prefix in zip(decoded_trg, batch["prefix"])]
 
+        # trim by # of generated tokens
+        decoded_trg_metrics = []
+        for pred, trg in zip(decoded_preds, decoded_trg):
+            decoded_trg_metrics.append(" ".join(trg.split()[: max(1, len(pred.split()))]))
+
         # add data to a little table with examples
         self.table_data["Context"].extend(
-            [context.strip() + " " + prefix.strip() for context, prefix in zip(decoded_context, batch["prefix"])]
+            [context + prefix for prefix, context in zip(batch["prefix"], decoded_context)]
         )
-        self.table_data["Target"].extend(decoded_trg)
+        self.table_data["Target (trimmed by # generated tokens)"].extend(decoded_trg_metrics)
         self.table_data["Prediction"].extend(decoded_preds)
+        self.table_data["Target (full)"].extend(decoded_trg)
 
         # add batches to metrics from huggingface datasets
         self.bleu.add_batch(
-            predictions=[line.split() for line in decoded_preds],
-            references=[[line.split()] for line in decoded_trg],
+            predictions=[[token.lower() for token in line.split()] for line in decoded_preds],
+            references=[[[token.lower() for token in line.split()]] for line in decoded_trg_metrics],
         )
-        self.chrf.add_batch(
-            predictions=[line.split() for line in decoded_preds], references=[line.split() for line in decoded_trg]
-        )
-        self.rouge.add_batch(predictions=decoded_preds, references=decoded_trg)
-        self.meteor.add_batch(predictions=decoded_preds, references=decoded_trg)
+        self.chrf.add_batch(predictions=decoded_preds, references=[[line] for line in decoded_trg_metrics])
+        self.rouge.add_batch(predictions=decoded_preds, references=decoded_trg_metrics)
+        self.meteor.add_batch(predictions=decoded_preds, references=decoded_trg_metrics)
+        self.bertscore.add_batch(predictions=decoded_preds, references=decoded_trg_metrics)
 
         # add batches to torchmetrics metrics
-        self.edit_similarity(decoded_preds, decoded_trg)
-        self.exact_match(decoded_preds, decoded_trg)
-
-        # compute and log current values of torchmetrics metrics
-        edit_sim_step = self.edit_similarity.compute()
-        exact_match_step = self.exact_match.compute()
-        test_metrics_step = {
-            "test_edit_similarity_step": edit_sim_step,
-        }
-        test_metrics_step.update({key: exact_match_step[key].cpu().item() for key in exact_match_step})
-        self.logger.experiment.log(test_metrics_step, step=self.examples_count)
+        self.edit_similarity(decoded_preds, decoded_trg_metrics)
+        self.exact_match(decoded_preds, decoded_trg_metrics)
 
     def next_token_metrics_step(self, batch):
         scores = self(batch).logits
@@ -143,9 +143,10 @@ class GPT2LMHeadModule(pl.LightningModule):
     def test_epoch_end(self, outputs):
         if self.actual_generation:
             chrf = self.chrf.compute()
-            bleu = self.bleu.compute()
+            bleu = self.bleu.compute(smooth=True)
             rouge = self.rouge.compute()
             meteor = self.meteor.compute()
+            bertscore = self.bertscore.compute(lang="en")
             edit_sim = self.edit_similarity.compute().item()
             exact_match = self.exact_match.compute()
 
@@ -160,15 +161,17 @@ class GPT2LMHeadModule(pl.LightningModule):
                 "test_rougeL": rouge["rougeL"].mid.fmeasure,
                 "test_meteor": meteor["meteor"],
                 "test_edit_similarity": edit_sim,
-                "test_chrf": chrf["chrf"],
+                "test_chrf": chrf["score"] / 100,
+                "test_bertscore": np.mean(bertscore["f1"]),
             }
             test_metrics.update({key: exact_match[key].cpu().item() for key in exact_match})
+            test_metrics = {f"{key}_{self.context_ratio}": test_metrics[key] for key in test_metrics}
 
             self.logger.experiment.log(test_metrics, step=self.examples_count)
         else:
             test_metrics = self.completion_metrics.compute()
             self.logger.experiment.log(
-                {key: test_metrics[key].cpu().item() for key in test_metrics}, step=self.examples_count
+                {key: test_metrics[key].cpu().item() for key in test_metrics}, step=self.examples_count + 2
             )
 
     def decode_trg(self, *args):

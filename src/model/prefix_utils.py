@@ -13,6 +13,10 @@ class PrefixAllowedTokens:
         vocab = self._tokenizer.get_vocab()
         decoded_sentence = self._tokenizer.decode(sentence[self._context_len[batch_id] :])
 
+        # when given prefix is empty, we can generate any token
+        if not self._prefix:
+            return list(vocab.values())
+
         # if we haven't generated prefix or its part yet, we can:
         # 1) generate tokens starting with the prefix
         # 2) generate tokens which are prefixes for the prefix

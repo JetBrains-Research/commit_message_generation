@@ -143,6 +143,22 @@ class GenerationCollator:
     with_history: bool = True
     context_ratio: float = 1.0
 
+    def _get_prefix(self, message: str):
+        context_len = len(message) * self.context_ratio
+        input, target = message[: int(context_len)], message[int(context_len) :]
+
+        if not input:
+            return {"input": input, "target": target, "prefix": ""}
+
+        input, prefix = " ".join(input.split()[:-1]), input.split()[-1]
+
+        if len(input) > 0:
+            prefix = " " + prefix
+
+        target = prefix + target
+
+        return {"input": input, "target": target, "prefix": prefix}
+
     def __call__(
         self, examples: List[Dict[str, Union[List[List[int]], List[List[List[int]]]]]]
     ) -> Dict[str, Union[torch.Tensor, List[str]]]:
@@ -159,27 +175,12 @@ class GenerationCollator:
             message_ids = message_ids[: self.max_len - 1]
 
             decoded_message = self.trg_tokenizer.decode(message_ids, skip_special_tokens=True)
-            context_len = len(decoded_message) * self.context_ratio
-            decoded_input, decoded_target = decoded_message[: int(context_len)], decoded_message[int(context_len) :]
-            try:
-                decoded_input, decoded_prefix = " ".join(decoded_input.split()[:-1]), decoded_input.split()[-1]
-                if len(decoded_input) > 0:
-                    decoded_prefix = " " + decoded_prefix
-                decoded_target = decoded_prefix + decoded_target
 
-                tokenized_input = self.trg_tokenizer(decoded_input).input_ids
-                tokenized_target = self.trg_tokenizer(decoded_target, return_tensors="pt").input_ids.squeeze()
-            except IndexError:
-                print(
-                    f"Target '{decoded_target}' is too short: {len(decoded_target)} * {self.context_ratio} = {context_len}"
-                )
-                print()
+            context_results = self._get_prefix(decoded_message)
+            tokenized_input = self.trg_tokenizer(context_results["input"]).input_ids
+            tokenized_target = self.trg_tokenizer(context_results["target"], return_tensors="pt").input_ids.squeeze(0)
 
-                tokenized_input = []
-                decoded_prefix = ""
-                tokenized_target = self.trg_tokenizer(decoded_target, return_tensors="pt").input_ids.squeeze()
-
-            cur_ids = [[self.trg_tokenizer.bos_token_id], tokenized_input]
+            cur_ids = [tokenized_input]
             cur_len = len(tokenized_input) + 1
 
             if self.with_history:
@@ -189,17 +190,19 @@ class GenerationCollator:
                         break
 
                     cur_len += len(history_input_ids) + len(self.trg_tokenizer._sep)
-                    cur_ids.insert(1, history_input_ids + self.trg_tokenizer._sep)
+                    cur_ids.append(history_input_ids + self.trg_tokenizer._sep)
 
             # flatten everything into one sequence and convert to tensor of torch.int64
-            cur_ids = torch.tensor([ex for sublist in cur_ids for ex in sublist], dtype=torch.int64)
+            cur_ids = torch.tensor(
+                [self.trg_tokenizer.bos_token_id] + [ex for sublist in cur_ids for ex in sublist], dtype=torch.int64
+            )
 
             # create ones for attention mask
             cur_mask = torch.ones_like(cur_ids)
 
             all_msg_ids.append(cur_ids)
             all_msg_masks.append(cur_mask)
-            all_prefixes.append(decoded_prefix)
+            all_prefixes.append(context_results["prefix"])
             all_msg_targets.append(tokenized_target)
 
         all_diff_ids = [torch.tensor(ids, dtype=torch.int64) for ids in diff_inputs]
