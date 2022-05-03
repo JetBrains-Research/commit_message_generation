@@ -2,6 +2,7 @@ from copy import copy
 from typing import Optional
 from collections import defaultdict
 
+import logging
 import torch
 import pytorch_lightning as pl
 from transformers import (
@@ -10,13 +11,12 @@ from transformers import (
     RobertaConfig,
     GPT2LMHeadModel,
     GPT2Config,
-    RobertaTokenizer,
-    GPT2Tokenizer,
+    PreTrainedTokenizerFast,
     AdamW,
     get_linear_schedule_with_warmup,
 )
-from torchmetrics import MetricCollection
-from src.utils import Accuracy, MRR
+
+from src.utils import EvaluationMetrics, PrefixAllowedTokens
 
 import nltk
 import pandas as pd
@@ -26,14 +26,37 @@ nltk.download("wordnet")
 
 
 class EncoderDecoderModule(pl.LightningModule):
+    """This class is used for training and evaluation of Transformer model for
+    commit message completion task.
+
+    More specifically, RoBERTa is used as an encoder and GPT-2 is used as a decoder.
+    It is possible to either use pretrained models or initialize from scratch.
+
+    Args:
+        diff_tokenizer: tokenizer for source sequences (diffs)
+        msg_tokenizer: tokenizer for target sequences (messages)
+        learning_rate: maximum learning rate
+        num_epochs: total number of epochs (used to calculate total number of steps for LR scheduler)
+        num_batches: total number of batches in one epoch (used to calculate total number of steps for LR scheduler)
+        num_gpus: total number of GPUs (used to calculate total number of steps for LR scheduler)
+        num_layers_encoder: if `encoder_name_or_path` is None, encoder will be initialized
+            from scratch with given number of layers; else, if given number of layers is less than number of layers in
+            pretrained checkpoint, it will be uniformly picked
+        num_layers_decoder: if `decoder_name_or_path` is None, decoder will be initialized
+            from scratch with given number of layers; else, if given number of layers is less than number of layers in
+            pretrained checkpoint, it will be uniformly picked
+        encoder_name_or_path: use to initialize encoder with pretrained checkpoint
+        decoder_name_or_path: use to initialize decoder with pretrained checkpoint
+    """
+
     def __init__(
         self,
-        learning_rate: float,
-        diff_tokenizer: RobertaTokenizer,
-        msg_tokenizer: GPT2Tokenizer,
-        num_epochs: int,
-        num_batches: int,
-        num_gpus: int,
+        diff_tokenizer: PreTrainedTokenizerFast,
+        msg_tokenizer: PreTrainedTokenizerFast,
+        learning_rate: Optional[float] = None,
+        num_epochs: Optional[int] = None,
+        num_batches: Optional[int] = None,
+        num_gpus: Optional[int] = None,
         num_layers_encoder: Optional[int] = None,
         num_layers_decoder: Optional[int] = None,
         encoder_name_or_path: Optional[str] = None,
@@ -44,6 +67,7 @@ class EncoderDecoderModule(pl.LightningModule):
 
         self._diff_tokenizer = diff_tokenizer
         self._msg_tokenizer = msg_tokenizer
+
         self._num_epochs = num_epochs
         self._num_batches = num_batches
         self._num_gpus = num_gpus
@@ -68,8 +92,8 @@ class EncoderDecoderModule(pl.LightningModule):
             encoder.resize_token_embeddings(len(self._diff_tokenizer))
         else:
             raise ValueError(
-                "You have to specify either num_layers for training from scratch \
-                                          or paths for loading pretrained models"
+                "You have to specify either `encoder_num_layers` for training from scratch \
+                                          or `encoder_name_or_path` for loading pretrained model"
             )
 
         if decoder_name_or_path:
@@ -90,8 +114,8 @@ class EncoderDecoderModule(pl.LightningModule):
             decoder = GPT2LMHeadModel(config=decoder_config)
         else:
             raise ValueError(
-                "You have to specify either num_layers for training from scratch \
-                                          or paths for loading pretrained models"
+                "You have to specify either `decoder_num_layers` for training from scratch \
+                                          or `decoder_name_or_path` for loading pretrained model"
             )
 
         self.model = EncoderDecoderModel(encoder=encoder, decoder=decoder)
@@ -102,11 +126,10 @@ class EncoderDecoderModule(pl.LightningModule):
         # do not tie output embeddings to input embeddings
         self.model.config.tie_word_embeddings = False
 
+        # will be logged to W&B
         self.table_data = defaultdict(list)
-
-        self.completion_metrics = MetricCollection(
-            {"acc_top1": Accuracy(top_k=1), "acc_top5": Accuracy(top_k=5), "MRR_top5": MRR(top_k=5)}
-        )
+        self.val_metrics = EvaluationMetrics(do_strings=False, do_tensors=True, prefix="val")
+        self.test_metrics = EvaluationMetrics(do_strings=True, do_tensors=False, prefix="test")
 
         # to make logs for different batch sizes prettier
         self.examples_count = 0
@@ -120,18 +143,19 @@ class EncoderDecoderModule(pl.LightningModule):
             labels=batch["msg_labels"],
         )
 
-    def generate(self, batch):
-        return self.model.generate(
+    def generate(self, batch, **generate_kwargs):
+        prefix_fn = PrefixAllowedTokens(
+            prefix={i: prefix for i, prefix in enumerate(batch["prefix"])},
+            context_len={i: len(msg) for i, msg in enumerate(batch["msg_input_ids"])},
+            tokenizer=self._trg_tokenizer,
+        )
+        return self.generate(
             input_ids=batch["diff_input_ids"],
             attention_mask=batch["diff_attention_mask"],
-            decoder_input_ids=batch["generation_input_ids"],
-            decoder_attention_mask=batch["generation_attention_mask"],
-            pad_token_id=self._msg_tokenizer.eos_token_id,
-            eos_token_id=198,  # consider \n <EOS> token
-            early_stopping=True,
-            no_repeat_ngram_size=4,
-            num_beams=5,
-            max_length=batch["msg_input_ids"].shape[1],
+            decoder_input_ids=batch["msg_input_ids"],
+            decoder_attention_mask=batch["msg_attention_mask"],
+            prefix_allowed_tokens_fn=prefix_fn,
+            **generate_kwargs,
         )
 
     def training_step(self, batch, batch_idx):
@@ -144,65 +168,85 @@ class EncoderDecoderModule(pl.LightningModule):
         train_loss_mean = torch.stack([x["loss"] for x in outputs]).mean()
         self.logger.experiment.log({"train_loss_epoch": train_loss_mean}, step=self.examples_count)
 
-    def next_token_metrics_step(self, batch):
-        loss, scores = self(batch)[:2]
-        self.completion_metrics(scores=scores, labels=batch["msg_labels"])
-        return {"loss": loss}
+    def validation_step(self, batch, batch_idx, dataloader_idx):
+        # validation on github data: calculating next token prediction metrics
+        if dataloader_idx == 0:
+            loss, logits = self(batch)[:2]
+            self.val_metrics.add_batch(predictions_tensor=logits, references_tensor=batch["msg_labels"])
+            return {"loss": loss}
+        # validation on marker tests: generating examples
+        if dataloader_idx == 1:
+            # leave only generated part (without history)
+            gen_sequences = self.generate(batch)[:, batch["msg_input_ids"].shape[1] :]
 
-    def next_token_metrics_epoch_end(self, outputs, stage):
-        loss = torch.stack([x["loss"] for x in outputs]).mean()
+            # decode tokenized sequences
+            decoded_source = self.decode_src(batch["diff_input_ids"])[0]
+            decoded_preds = self.decode_trg(gen_sequences)[0]
 
-        metrics = self.completion_metrics.compute()
-        metrics["loss"] = loss
-        metrics = {f"{stage}_{key}": val for key, val in metrics.items()}
+            # add data to a little table with examples
+            self.table_data["Diff"].extend(decoded_source)
+            self.table_data["Prediction"].extend(decoded_preds)
 
-        if stage == "val":
-            # needed for ModelCheckpoint
-            self.log("val_MRR_top5", metrics["val_MRR_top5"], on_step=False, on_epoch=True, prog_bar=True, logger=False)
+    def validation_epoch_end(self, outputs):
+        # next token prediction metrics
+        metrics = self.val_metrics.compute()
+        metrics["val_loss"] = torch.stack([x["loss"] for x in outputs[0]]).mean()
+        # needed for ModelCheckpoint
+        self.log("val_MRR_top5", metrics["val_MRR_top5"], on_step=False, on_epoch=True, prog_bar=True, logger=False)
+
+        # generation examples on marker tests
+        table = wandb.Table(dataframe=pd.DataFrame.from_dict(self.table_data))
+        self.table_data.clear()
+        metrics.update({"marker_tests": table})
 
         self.logger.experiment.log(metrics, step=self.examples_count)
 
-    def generation_step(self, batch):
+    def test_step(self, batch, batch_idx):
         # leave only generated part (without history)
-        gen_sequences = self.generate(batch)[:, batch["generation_input_ids"].shape[1] :]
-
-        # remove history from targets
-        batch["msg_labels"][batch["msg_labels"] == -100] = self._msg_tokenizer.pad_token_id
+        gen_sequences = self.generate(batch)[:, batch["msg_input_ids"].shape[1] :]
 
         # decode tokenized sequences
         decoded_source = self.decode_src(batch["diff_input_ids"])[0]
-        decoded_preds, decoded_trg = self.decode_trg(gen_sequences, batch["msg_labels"])
+        decoded_context, decoded_preds = self.decode_trg(
+            batch["msg_input_ids"], gen_sequences
+        )
+
+        # remove prefix from predicted and generated to compute metrics without it
+        decoded_preds = [pred[len(prefix) :] for pred, prefix in zip(decoded_preds, batch["prefix"])]
+        decoded_trg = [trg[len(prefix) :] for trg, prefix in zip(batch["target"], batch["prefix"])]
+
+        # add data to metrics
+        self.test_metrics.add_batch(predictions=decoded_preds, references=decoded_trg)
 
         # add data to a little table with examples
         self.table_data["Diff"].extend(decoded_source)
-        self.table_data["Target"].extend(decoded_trg)
+        self.table_data["History"].extend()
+        self.table_data["Context"].extend(decoded_context)
+        self.table_data["Prefix"].extend(batch["prefix"])
         self.table_data["Prediction"].extend(decoded_preds)
-
-    def generation_epoch_end(self, *args, **kwargs):
-        table = wandb.Table(dataframe=pd.DataFrame.from_dict(self.table_data))
-        self.table_data.clear()
-        self.logger.experiment.log({"marker_tests": table}, step=self.examples_count)
-
-    def validation_step(self, batch, batch_idx, dataloader_idx):
-        # main validation, calculating next token prediction metrics
-        if dataloader_idx == 0:
-            return self.next_token_metrics_step(batch)
-        # validation on marker tests, generating examples
-        if dataloader_idx == 1:
-            return self.generation_step(batch)
-
-    def validation_epoch_end(self, outputs):
-        self.next_token_metrics_epoch_end(outputs[0], stage="val")
-        self.generation_epoch_end()
-
-    def test_step(self, batch, batch_idx):
-        return self.next_token_metrics_step(batch)
+        self.table_data["Target"].extend(decoded_trg)
 
     def test_epoch_end(self, outputs):
-        self.next_token_metrics_epoch_end(outputs, stage="test")
+        metrics = self.test_metrics.compute()
+
+        table = wandb.Table(dataframe=pd.DataFrame.from_dict(self.table_data))
+        self.table_data.clear()
+        metrics.update({"test_examples": table})
+
+        self.logger.experiment.log(metrics, step=self.examples_count)
 
     def configure_optimizers(self):
+
+        if not self.learning_rate:
+            logging.warning("Learning rate is not set, proceeding with default value 1e-3")
+            self.learning_rate = 1e-3
+
         optimizer = AdamW(self.parameters(), lr=self.learning_rate)
+
+        if not (self._num_epochs and self._num_batches and self._num_gpus):
+            logging.warning("Number of batches is not set, proceeding without warmup scheduler")
+            return optimizer
+
         scheduler = {
             "scheduler": get_linear_schedule_with_warmup(
                 optimizer, 4000 // self._num_gpus, self._num_epochs * self._num_batches
