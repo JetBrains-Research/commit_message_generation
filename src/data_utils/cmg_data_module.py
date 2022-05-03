@@ -73,13 +73,14 @@ class CMGDataModule(pl.LightningDataModule):
             sep_tokens=sep_tokens_ids,
             testing=testing,
         )
-        self.data_collator_gen = DataCollator(
+        self.data_collator_mt = DataCollator(
             diff_tokenizer=self._diff_tokenizer,
             msg_tokenizer=self._msg_tokenizer,
             max_len=decoder_context_max_len,
-            with_history=generation_with_history,
+            with_history=False,
             sep_tokens=sep_tokens_ids,
             generation=True,
+            context_ratio=0.0,
         )
 
         # datasets are initialized later
@@ -111,7 +112,7 @@ class CMGDataModule(pl.LightningDataModule):
     def val_dataloader(self):
         return [
             self.val.get_dataloader(**self.val_dataloader_conf, collate_fn=self.data_collator),
-            self.marker_tests.get_dataloader(**self.marker_tests_dataloader_conf, collate_fn=self.data_collator_gen),
+            self.marker_tests.get_dataloader(**self.marker_tests_dataloader_conf, collate_fn=self.data_collator_mt),
         ]
 
     def test_dataloader(self):

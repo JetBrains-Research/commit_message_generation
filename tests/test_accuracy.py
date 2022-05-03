@@ -2,7 +2,7 @@ import pytest
 import torch
 import numpy as np
 from torchmetrics import MetricCollection
-from src.utils.accuracy import Accuracy
+from src.metrics import Accuracy
 
 
 @pytest.fixture

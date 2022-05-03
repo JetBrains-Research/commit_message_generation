@@ -2,7 +2,7 @@ import pytest
 import torch
 import numpy as np
 from torchmetrics import MetricCollection
-from src.utils.mrr import MRR
+from src.metrics.mrr import MRR
 
 
 @pytest.fixture
