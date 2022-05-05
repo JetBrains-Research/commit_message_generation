@@ -42,8 +42,12 @@ class MRR(Metric):
             true_pos_for_mrr.max(dim=-1)[0].sum(dim=-1) / (references != self.ignore_index).sum(dim=1).float()
         )
 
-        self.mrr += mrr_top_k_list.sum()
-        self.total += references.shape[0]
+        try:
+            self.mrr += mrr_top_k_list.sum()
+            self.total += references.shape[0]
+        except RuntimeError:
+            self.mrr = self.mrr.to(mrr_top_k_list.device)
+            self.total = self.total.to(self.mrr.device)
 
     def compute(self):
         return self.mrr.float() / self.total

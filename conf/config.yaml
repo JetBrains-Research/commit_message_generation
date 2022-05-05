@@ -6,6 +6,8 @@ dataset:
   training_with_history: true
   generation_with_history: true
 
+
+  context_ratio: 0.1
   decoder_context_max_len: 200
 
   diff_tokenizer_name_or_path: raw_data/multilang/diff_tokenizer.json
@@ -26,23 +28,25 @@ dataset:
     num_workers: 4
 
   test_dataloader_conf:
-    batch_size: 16
+    batch_size: 1
     num_workers: 4
 
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: transformer 4+4 multilang
+  name: test_gpt2
   project: commit_message_generation
 
 model:
-  encoder_decoder: true
+  encoder_decoder: false
   learning_rate: 1e-4
-  num_layers_encoder: 4
-  num_layers_decoder: 4
+  decoder_name_or_path: distilgpt2
 
 trainer:
   gpus: 1
   max_epochs: 5
+  limit_train_batches: 5
+  limit_val_batches: 5
+  limit_test_batches: 5
   precision: 16
   amp_level: O1
   auto_select_gpus: true

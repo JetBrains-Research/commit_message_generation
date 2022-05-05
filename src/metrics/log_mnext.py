@@ -1,6 +1,8 @@
-import torch
 from typing import List, Optional
+
+import torch
 from torchmetrics import Metric
+
 from src.metrics.reused_implementations import log_mnext_score
 
 

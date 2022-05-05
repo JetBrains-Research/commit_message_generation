@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import List, Dict, Union
+from typing import Dict, List, Optional, Union
+
 import torch
 from transformers import PreTrainedTokenizerBase
 
@@ -34,8 +35,8 @@ class DataCollator:
          if they are present, and at the end of message).
         with_history: True to add history to decoder context and False otherwise.
         generation: True to construct batches for generation and False otherwise.
-        context_ratio: (context_ratio)% of characters of each message will be added to decoder context (should be a
-         float between 0.0 and 1.0).
+        context_ratio: Useful only when generation == True. (context_ratio)% of characters of each message will
+         be added to decoder context (should be a float between 0.0 and 1.0).
         testing: True to generate tensors of maximum possible shape with random numbers instead of actually processing
          input data  (used to quickly test whether current batch size fits in GPU memory).
     """
@@ -46,12 +47,16 @@ class DataCollator:
     sep_tokens: List[int]
     with_history: bool
     generation: bool
-    context_ratio: float
+    context_ratio: Optional[float] = None
     testing: bool = False
 
-    def _get_prefix(self, message_ids: List[int]) -> Dict[str, Union[List[int], str]]:
+    def _get_prefix(
+        self, message_ids: List[int], context_len: Optional[int] = None
+    ) -> Dict[str, Union[List[int], str]]:
         message = self.msg_tokenizer.decode(message_ids, skip_special_tokens=True)
-        context_len = len(message) * self.context_ratio
+
+        if not context_len:
+            context_len = len(message) * self.context_ratio
         input, target = message[: int(context_len)], message[int(context_len) :]
 
         # if context is empty, use the whole message as target
@@ -59,14 +64,18 @@ class DataCollator:
         if not input:
             return {"msg_input_ids": [], "msg_target": target, "msg_prefix": ""}
 
-        input, prefix = " ".join(input.split()[:-1]), input.split()[-1]
+        # if context ends with whitespace character,
+        if input[-1].isspace():
+            context = input
+            prefix = ""
+        else:
 
-        if len(input) > 0:
-            prefix = " " + prefix
+            context, prefix = " ".join(input.split()[:-1]), input.split()[-1]
 
-        target = prefix + target
+            if len(context) > 0:
+                prefix = " " + prefix
 
-        return {"msg_input_ids": self.msg_tokenizer(input).input_ids, "msg_target": target, "msg_prefix": prefix}
+        return {"msg_input_ids": self.msg_tokenizer(context).input_ids, "msg_target": target, "msg_prefix": prefix}
 
     def _process_msg_gen(self, message_ids: List[int]) -> Dict[str, Union[List[int], str]]:
         # context_ratio = 0.0 => do not include anything in context
@@ -79,7 +88,7 @@ class DataCollator:
 
         # context_ratio = 1.0 => include the whole message in context
         if self.context_ratio == 1.0:
-            return {"msg_input_ids": message_ids, "msg_target": [], "msg_prefix": ""}
+            return {"msg_input_ids": message_ids, "msg_target": "", "msg_prefix": ""}
 
         # 0.0 < context_ratio < 1.0 => include X% characters in context and deal with prefix
         return self._get_prefix(message_ids)
@@ -105,6 +114,8 @@ class DataCollator:
                 message_ids = message_ids[: self.max_len - 1 - (0 if self.generation else len(self.sep_tokens))]
 
                 if self.generation:
+                    assert self.context_ratio is not None
+
                     results = self._process_msg_gen(message_ids)
                     message_ids = results["msg_input_ids"]
                     target = results["msg_target"]

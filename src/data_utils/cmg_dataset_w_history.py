@@ -1,9 +1,10 @@
 import json
+from typing import Dict, Generator, Iterator, List
 
-from typing import List, Dict, Generator, Iterator
 import torch
-from torch.utils.data import IterableDataset, DataLoader
-from .data_collators import DataCollator
+from torch.utils.data import DataLoader, IterableDataset
+
+from .data_collator import DataCollator
 
 
 class CMGDatasetWithHistory(IterableDataset):
@@ -12,10 +13,11 @@ class CMGDatasetWithHistory(IterableDataset):
         Defines an iterable-style dataset for commit message generation task.
         This version provides history from the same author for each commit.
 
-        :param filename: file to read diff, author ids and positions in history from
-        :param history: dictionary with full message history for each author
-        :param rank: rank of the process in DDP (must be 0 if you have single process)
-        :param world_size: amount of processes in DDP (must be 1 if you have single process)
+        Args:
+            filename: File to read diff, author ids and positions in history from.
+            history: Dictionary with full message history for each author.
+            rank: Rank of the process in DDP (must be 0 if you have single process).
+            world_size: AAmount of processes in DDP (must be 1 if you have single process).
         """
 
         self.filename = filename
@@ -85,9 +87,10 @@ class CMGDatasetWithHistory(IterableDataset):
         """
         Load dataset from files on disk.
 
-        :param dataset_root: path to dataset, including part (train/val/test)
-        :param rank: current GPU
-        :param world_size: number of GPUs
+        Args:
+            dataset_root: Path to dataset, including part (train/val/test).
+            rank: Rank of the process in DDP (must be 0 if you have single process).
+            world_size: AAmount of processes in DDP (must be 1 if you have single process).
         """
 
         with open(dataset_root + "_history.json", "r") as infile:

@@ -1,13 +1,12 @@
 import os
 
-import pytorch_lightning as pl
-
 import hydra
+import pytorch_lightning as pl
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
-from src.model import EncoderDecoderModule, GPT2LMHeadModule
 from src.data_utils import CMGDataModule
+from src.model import EncoderDecoderModule, GPT2LMHeadModule
 
 
 @hydra.main(config_path="conf", config_name="config")
@@ -56,7 +55,13 @@ def main(cfg: DictConfig) -> None:
             )
         else:
             # single decoder
-            model = GPT2LMHeadModule(**cfg.model, tokenizer=dm._msg_tokenizer)
+            model = GPT2LMHeadModule(
+                **cfg.model,
+                tokenizer=dm._msg_tokenizer,
+                num_epochs=cfg.trainer.max_epochs,
+                num_batches=dm.train._len // (cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.gpus),
+                num_gpus=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1,
+            )
 
         trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
         trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger)

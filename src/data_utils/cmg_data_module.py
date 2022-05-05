@@ -1,14 +1,14 @@
-import pytorch_lightning as pl
+import os
+from typing import Optional
 
+import hydra
+import pytorch_lightning as pl
+from hydra.utils import to_absolute_path
+from omegaconf import DictConfig
 from transformers import AutoTokenizer, PreTrainedTokenizerFast
 
-import os
-import hydra
-from omegaconf import DictConfig
-from hydra.utils import to_absolute_path
-
 from .cmg_dataset_w_history import CMGDatasetWithHistory
-from .data_collators import DataCollator
+from .data_collator import DataCollator
 
 
 class CMGDataModule(pl.LightningDataModule):
@@ -29,6 +29,7 @@ class CMGDataModule(pl.LightningDataModule):
         marker_tests_dataloader_conf: DictConfig,
         local_rank: int,
         world_size: int,
+        context_ratio: Optional[float] = None,
         testing: bool = False,
     ):
         super().__init__()
@@ -65,12 +66,13 @@ class CMGDataModule(pl.LightningDataModule):
         else:
             sep_tokens_ids = self._msg_tokenizer(sep_tokens).input_ids
 
-        self.data_collator = DataCollator(
+        self.data_collator_train = DataCollator(
             diff_tokenizer=self._diff_tokenizer,
             msg_tokenizer=self._msg_tokenizer,
             max_len=decoder_context_max_len,
             with_history=training_with_history,
             sep_tokens=sep_tokens_ids,
+            generation=False,
             testing=testing,
         )
         self.data_collator_mt = DataCollator(
@@ -81,6 +83,15 @@ class CMGDataModule(pl.LightningDataModule):
             sep_tokens=sep_tokens_ids,
             generation=True,
             context_ratio=0.0,
+        )
+        self.data_collator_test = DataCollator(
+            diff_tokenizer=self._diff_tokenizer,
+            msg_tokenizer=self._msg_tokenizer,
+            max_len=decoder_context_max_len,
+            with_history=generation_with_history,
+            sep_tokens=sep_tokens_ids,
+            context_ratio=context_ratio,
+            generation=True,
         )
 
         # datasets are initialized later
@@ -107,13 +118,13 @@ class CMGDataModule(pl.LightningDataModule):
             )
 
     def train_dataloader(self):
-        return self.train.get_dataloader(**self.train_dataloader_conf, collate_fn=self.data_collator)
+        return self.train.get_dataloader(**self.train_dataloader_conf, collate_fn=self.data_collator_train)
 
     def val_dataloader(self):
         return [
-            self.val.get_dataloader(**self.val_dataloader_conf, collate_fn=self.data_collator),
+            self.val.get_dataloader(**self.val_dataloader_conf, collate_fn=self.data_collator_train),
             self.marker_tests.get_dataloader(**self.marker_tests_dataloader_conf, collate_fn=self.data_collator_mt),
         ]
 
     def test_dataloader(self):
-        return self.test.get_dataloader(**self.test_dataloader_conf, collate_fn=self.data_collator)
+        return self.test.get_dataloader(**self.test_dataloader_conf, collate_fn=self.data_collator_test)

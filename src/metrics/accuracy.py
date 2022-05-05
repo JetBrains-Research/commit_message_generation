@@ -39,8 +39,12 @@ class Accuracy(Metric):
             true_pos.sum(dim=-1).float() / (references != self.ignore_index).sum(dim=1).unsqueeze(1).float()
         ).sum(dim=1)
 
-        self.accuracy += acc_top_k_list.sum()
-        self.total += references.shape[0]
+        try:
+            self.accuracy += acc_top_k_list.sum()
+            self.total += references.shape[0]
+        except RuntimeError:
+            self.accuracy = self.accuracy.to(acc_top_k_list.device)
+            self.total = self.total.to(self.accuracy.device)
 
     def compute(self):
         return self.accuracy.float() / self.total
