@@ -1,5 +1,6 @@
+from typing import Dict, List
+
 import torch
-from typing import List, Dict
 from transformers import PreTrainedTokenizerBase
 
 

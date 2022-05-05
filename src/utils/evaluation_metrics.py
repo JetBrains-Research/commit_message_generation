@@ -1,11 +1,10 @@
-import numpy as np
+from typing import Dict, List, Optional
 
-from typing import Optional, Dict, List
-
-from torchmetrics import Metric, MetricCollection
 from datasets import load_metric
 from torch import Tensor
-from src.metrics import EditSimilarity, ExactMatch, BLEUNorm, LogMNEXT, Accuracy, MRR
+from torchmetrics import MetricCollection
+
+from src.metrics import MRR, Accuracy, BLEUNorm, EditSimilarity, ExactMatch, LogMNEXT
 
 
 class EvaluationMetrics:
@@ -13,7 +12,7 @@ class EvaluationMetrics:
 
     Currently, it includes the following:
 
-    * string similarity metrics: BLEU, B-NORM, ROUGE, METEOR, LogM-Next, ChrF, BERTScore
+    * string similarity metrics: BLEU, B-NORM, ROUGE, METEOR, LogM-Next, ChrF
     * completion metrics: Accuracy@k, MRR@k, Exact Match@k, Edit Similarity
 
     Accuracy@k and MRR@k are calculated on raw model output (tensors), all other metrics are calculated on
@@ -39,7 +38,6 @@ class EvaluationMetrics:
                 "rouge": load_metric("rouge"),
                 "meteor": load_metric("meteor"),
                 "chrf": load_metric("chrf"),
-                "bertscore": load_metric("bertscore"),
             }
             self.strings_metrics = MetricCollection(
                 {
@@ -98,8 +96,6 @@ class EvaluationMetrics:
                     results["rougeL"] = rouge["rougeL"].mid.fmeasure
                 elif key == "meteor":
                     results[key] = self.datasets_metrics[key].compute()["meteor"]
-                elif key == "bertscore":
-                    results[key] = np.mean(self.datasets_metrics[key].compute(lang="en")["f1"])
                 elif key == "b_norm":
                     results[key] = self.datasets_metrics[key].compute()["b_norm"]
                 elif key == "chrf":
@@ -107,7 +103,8 @@ class EvaluationMetrics:
 
         for metrics in (self.tensors_metrics, self.strings_metrics):
             if metrics:
-                results.update({key: metric.item() for key, metric in self.strings_metrics.compute().values()})
+                metrics = metrics.compute()
+                results.update({key: metrics[key] for key in metrics})
 
         if self.prefix:
             results = {f"{self.prefix}_{key}": results[key] for key in results}

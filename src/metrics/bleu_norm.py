@@ -1,7 +1,8 @@
-import datasets
-from typing import List, Dict
-from src.metrics.reused_implementations import bleuFromMaps, splitPuncts
+from typing import Dict, List
 
+import datasets
+
+from src.metrics.reused_implementations import bleuFromMaps, splitPuncts
 
 _CITATION = """\
 @inproceedings{tao2021evaluation,
@@ -60,4 +61,4 @@ class BLEUNorm(datasets.Metric):
         prediction_map = {i: [splitPuncts(pred.strip().lower())] for i, pred in enumerate(predictions)}
         gold_map = {i: [splitPuncts(ref.strip().lower())] for i, ref in enumerate(references)}
 
-        return {"b_norm": bleuFromMaps(gold_map, prediction_map)[0]}
+        return {"b_norm": bleuFromMaps(gold_map, prediction_map)[0] / 100.0}

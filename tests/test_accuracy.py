@@ -1,7 +1,8 @@
+import numpy as np
 import pytest
 import torch
-import numpy as np
 from torchmetrics import MetricCollection
+
 from src.metrics import Accuracy
 
 

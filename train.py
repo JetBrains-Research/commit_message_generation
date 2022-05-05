@@ -1,14 +1,14 @@
-import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
-from src.utils import LearningRateLogger
-
 import os
+
 import hydra
+import pytorch_lightning as pl
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
+from pytorch_lightning.callbacks import ModelCheckpoint
 
-from src.model import EncoderDecoderModule, GPT2LMHeadModule
 from src.data_utils import CMGDataModule
+from src.model import EncoderDecoderModule, GPT2LMHeadModule
+from src.utils import LearningRateLogger
 
 
 @hydra.main(config_path="conf", config_name="config")
@@ -66,11 +66,6 @@ def main(cfg: DictConfig) -> None:
     #         train         -
     # -----------------------
     trainer.fit(model, dm)
-
-    # -----------------------
-    #          test         -
-    # -----------------------
-    trainer.test(model=model, datamodule=dm)
 
 
 if __name__ == "__main__":

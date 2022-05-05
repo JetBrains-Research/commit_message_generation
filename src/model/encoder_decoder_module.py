@@ -1,26 +1,25 @@
+import logging
+from collections import defaultdict
 from copy import copy
 from typing import Optional
-from collections import defaultdict
 
-import logging
-import torch
+import nltk
+import pandas as pd
 import pytorch_lightning as pl
+import torch
+import wandb
 from transformers import (
-    EncoderDecoderModel,
-    RobertaModel,
-    RobertaConfig,
-    GPT2LMHeadModel,
-    GPT2Config,
-    PreTrainedTokenizerFast,
     AdamW,
+    EncoderDecoderModel,
+    GPT2Config,
+    GPT2LMHeadModel,
+    PreTrainedTokenizerFast,
+    RobertaConfig,
+    RobertaModel,
     get_linear_schedule_with_warmup,
 )
 
 from src.utils import EvaluationMetrics, PrefixAllowedTokens
-
-import nltk
-import pandas as pd
-import wandb
 
 nltk.download("wordnet")
 
@@ -145,16 +144,17 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def generate(self, batch, **generate_kwargs):
         prefix_fn = PrefixAllowedTokens(
-            prefix={i: prefix for i, prefix in enumerate(batch["prefix"])},
+            prefix={i: prefix for i, prefix in enumerate(batch["msg_prefix"])},
             context_len={i: len(msg) for i, msg in enumerate(batch["msg_input_ids"])},
-            tokenizer=self._trg_tokenizer,
+            tokenizer=self._msg_tokenizer,
         )
-        return self.generate(
+        return self.model.generate(
             input_ids=batch["diff_input_ids"],
             attention_mask=batch["diff_attention_mask"],
             decoder_input_ids=batch["msg_input_ids"],
             decoder_attention_mask=batch["msg_attention_mask"],
             prefix_allowed_tokens_fn=prefix_fn,
+            eos_token_id=198,
             **generate_kwargs,
         )
 
@@ -177,7 +177,15 @@ class EncoderDecoderModule(pl.LightningModule):
         # validation on marker tests: generating examples
         if dataloader_idx == 1:
             # leave only generated part (without history)
-            gen_sequences = self.generate(batch)[:, batch["msg_input_ids"].shape[1] :]
+            gen_sequences = self.generate(
+                batch,
+                pad_token_id=self._msg_tokenizer.eos_token_id,
+                early_stopping=True,
+                no_repeat_ngram_size=4,
+                num_beams=5,
+                min_length=batch["msg_input_ids"].shape[1] + 5,
+                max_length=batch["msg_input_ids"].shape[1] + 15,
+            )[:, batch["msg_input_ids"].shape[1] :]
 
             # decode tokenized sequences
             decoded_source = self.decode_src(batch["diff_input_ids"])[0]
@@ -203,28 +211,41 @@ class EncoderDecoderModule(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         # leave only generated part (without history)
-        gen_sequences = self.generate(batch)[:, batch["msg_input_ids"].shape[1] :]
+        gen_sequences = self.generate(
+            batch,
+            pad_token_id=self._msg_tokenizer.eos_token_id,
+            early_stopping=True,
+            no_repeat_ngram_size=4,
+            num_beams=5,
+            min_length=batch["msg_input_ids"].shape[1] + 5,
+            max_length=batch["msg_input_ids"].shape[1] + 15,
+        )[:, batch["msg_input_ids"].shape[1] :]
 
         # decode tokenized sequences
         decoded_source = self.decode_src(batch["diff_input_ids"])[0]
-        decoded_context, decoded_preds = self.decode_trg(
-            batch["msg_input_ids"], gen_sequences
-        )
+        decoded_context, decoded_preds = self.decode_trg(batch["msg_input_ids"], gen_sequences)
 
-        # remove prefix from predicted and generated to compute metrics without it
-        decoded_preds = [pred[len(prefix) :] for pred, prefix in zip(decoded_preds, batch["prefix"])]
-        decoded_trg = [trg[len(prefix) :] for trg, prefix in zip(batch["target"], batch["prefix"])]
+        # remove prefix from predicted to compute metrics without it
+        decoded_preds = [pred[len(prefix) :] for pred, prefix in zip(decoded_preds, batch["msg_prefix"])]
 
         # add data to metrics
-        self.test_metrics.add_batch(predictions=decoded_preds, references=decoded_trg)
+        self.test_metrics.add_batch(predictions=decoded_preds, references=batch["msg_target"])
+
+        history = []
+        for i in range(len(decoded_context)):
+            if "\n" in decoded_context[i]:
+                decoded_context[i] = decoded_context[i].split("\n")[-1]
+                history.append("\n".join(decoded_context[i].split("\n")[:-1]))
+            else:
+                history.append("")
 
         # add data to a little table with examples
         self.table_data["Diff"].extend(decoded_source)
-        self.table_data["History"].extend()
+        self.table_data["History"].extend(history)
         self.table_data["Context"].extend(decoded_context)
-        self.table_data["Prefix"].extend(batch["prefix"])
+        self.table_data["Prefix"].extend(batch["msg_prefix"])
         self.table_data["Prediction"].extend(decoded_preds)
-        self.table_data["Target"].extend(decoded_trg)
+        self.table_data["Target"].extend(batch["msg_target"])
 
     def test_epoch_end(self, outputs):
         metrics = self.test_metrics.compute()

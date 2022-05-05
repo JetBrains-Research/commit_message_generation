@@ -1,14 +1,13 @@
 from collections import defaultdict
 
-import pytorch_lightning as pl
-import torch
-from transformers import GPT2LMHeadModel, GPT2Tokenizer, AdamW, get_linear_schedule_with_warmup
-
-from src.utils import EvaluationMetrics, PrefixAllowedTokens
-
-import wandb
 import nltk
 import pandas as pd
+import pytorch_lightning as pl
+import torch
+import wandb
+from transformers import AdamW, GPT2LMHeadModel, GPT2Tokenizer, get_linear_schedule_with_warmup
+
+from src.utils import EvaluationMetrics, PrefixAllowedTokens
 
 nltk.download("wordnet")
 
@@ -62,9 +61,9 @@ class GPT2LMHeadModule(pl.LightningModule):
             input_ids=batch["msg_input_ids"], attention_mask=batch["msg_attention_mask"], labels=batch["msg_labels"]
         )
 
-    def generate_with_prefix(self, batch, **generation_kwargs):
+    def generate(self, batch, **generation_kwargs):
         prefix_fn = PrefixAllowedTokens(
-            prefix={i: prefix for i, prefix in enumerate(batch["prefix"])},
+            prefix={i: prefix for i, prefix in enumerate(batch["msg_prefix"])},
             context_len={i: len(msg) for i, msg in enumerate(batch["msg_input_ids"])},
             tokenizer=self._tokenizer,
         )
@@ -72,12 +71,8 @@ class GPT2LMHeadModule(pl.LightningModule):
             input_ids=batch["msg_input_ids"],
             attention_mask=batch["msg_attention_mask"],
             prefix_allowed_tokens_fn=prefix_fn,
+            eos_token_id=198,
             **generation_kwargs,
-        )
-
-    def generate(self, batch, **generation_kwargs):
-        return self.model.generate(
-            input_ids=batch["msg_input_ids"], attention_mask=batch["msg_attention_mask"], **generation_kwargs
         )
 
     def training_step(self, batch, batch_idx):
@@ -90,44 +85,12 @@ class GPT2LMHeadModule(pl.LightningModule):
         train_loss_mean = torch.stack([x["loss"] for x in outputs]).mean()
         self.logger.experiment.log({"train_loss_epoch": train_loss_mean}, step=self.examples_count)
 
-    def next_token_metrics_step(self, batch):
-        loss, scores = self(batch)[:2]
-        return {"loss": loss}
-
-    def next_token_metrics_epoch_end(self, outputs, stage):
-        """
-        Logic for validation & testing epoch end:
-        1) Calculate accuracy@1, accuracy@5, MRR@5
-        2) (in val stage only) Aggregate loss and log metric(s) for ModelCheckpoint
-        3) Log everything to wandb
-        """
-        loss = torch.stack([x["loss"] for x in outputs]).mean()
-        metrics = {f"{stage}_loss_epoch": loss}
-        if stage == "val":
-            self.log(
-                "val_loss_epoch", metrics["val_loss_epoch"], on_step=False, on_epoch=True, prog_bar=True, logger=False
-            )
-        self.logger.experiment.log(metrics, step=self.examples_count)
-
-    def validation_step(self, batch, batch_idx, dataloader_idx=0):
+    def validation_step(self, batch, batch_idx, dataloader_idx):
         # validation on github data: calculating next token prediction metrics
         if dataloader_idx == 0:
             loss, logits = self(batch)[:2]
             self.val_metrics.add_batch(predictions_tensor=logits, references_tensor=batch["msg_labels"])
             return {"loss": loss}
-        # validation on marker tests: generating examples
-        if dataloader_idx == 1:
-            # leave only generated part (without history)
-            gen_sequences = self.generate(batch)[:, batch["generation_input_ids"].shape[1] :]
-
-            # remove history from targets
-            batch["msg_labels"][batch["msg_labels"] == -100] = self._msg_tokenizer.pad_token_id
-
-            # decode tokenized sequences
-            decoded_preds, decoded_trg = self.decode_trg(gen_sequences, batch["msg_labels"])
-
-            # add data to a little table with examples
-            self.table_data["Prediction"].extend(decoded_preds)
 
     def validation_epoch_end(self, outputs):
         # next token prediction metrics
@@ -135,35 +98,44 @@ class GPT2LMHeadModule(pl.LightningModule):
         metrics["val_loss"] = torch.stack([x["loss"] for x in outputs[0]]).mean()
         # needed for ModelCheckpoint
         self.log("val_MRR_top5", metrics["val_MRR_top5"], on_step=False, on_epoch=True, prog_bar=True, logger=False)
-
-        # generation examples on marker tests
-        table = wandb.Table(dataframe=pd.DataFrame.from_dict(self.table_data))
-        self.table_data.clear()
-        metrics.update({"marker_tests": table})
-
         self.logger.experiment.log(metrics, step=self.examples_count)
 
     def test_step(self, batch, batch_idx):
         # leave only generated part (without history)
-        gen_sequences = self.generate(batch)[:, batch["msg_input_ids"].shape[1] :]
+        gen_sequences = self.generate(
+            batch,
+            pad_token_id=self._tokenizer.eos_token_id,
+            early_stopping=True,
+            no_repeat_ngram_size=4,
+            num_beams=5,
+            min_length=batch["msg_input_ids"].shape[1] + 5,
+            max_length=batch["msg_input_ids"].shape[1] + 15,
+        )[:, batch["msg_input_ids"].shape[1] :]
 
         # decode tokenized sequences
-        decoded_context, decoded_preds, decoded_trg = self.decode_trg(
-            batch["msg_input_ids"], gen_sequences, batch["target"]
-        )
+        decoded_context, decoded_preds = self.decode_trg(batch["msg_input_ids"], gen_sequences)
 
-        # remove prefix from generated to compute metrics without it
-        decoded_preds = [pred[len(prefix) :] for pred, prefix in zip(decoded_preds, batch["prefix"])]
-        decoded_trg = [trg[len(prefix) :] for trg, prefix in zip(decoded_trg, batch["prefix"])]
+        # remove prefix from predicted to compute metrics without it
+        decoded_preds = [pred[len(prefix) :] for pred, prefix in zip(decoded_preds, batch["msg_prefix"])]
 
         # add data to metrics
-        self.test_metrics.add_batch(predictions=decoded_preds, references=decoded_trg)
+        self.test_metrics.add_batch(predictions=decoded_preds, references=batch["msg_target"])
+
+        history = []
+        for i in range(len(decoded_context)):
+            if "\n" in decoded_context[i]:
+
+                decoded_context[i] = decoded_context[i].split("\n")[-1]
+                history.append("\n".join(decoded_context[i].split("\n")[:-1]))
+            else:
+                history.append("")
 
         # add data to a little table with examples
+        self.table_data["History"].extend(history)
         self.table_data["Context"].extend(decoded_context)
-        self.table_data["Prefix"].extend(batch["prefix"])
+        self.table_data["Prefix"].extend(batch["msg_prefix"])
         self.table_data["Prediction"].extend(decoded_preds)
-        self.table_data["Target"].extend(decoded_trg)
+        self.table_data["Target"].extend(batch["msg_target"])
 
     def test_epoch_end(self, outputs):
         metrics = self.test_metrics.compute()
@@ -173,6 +145,9 @@ class GPT2LMHeadModule(pl.LightningModule):
         metrics.update({"test_examples": table})
 
         self.logger.experiment.log(metrics, step=self.examples_count)
+
+    def decode_trg(self, *args):
+        return tuple(self._tokenizer.batch_decode(arg, skip_special_tokens=True) for arg in args)
 
     def configure_optimizers(self):
         optimizer = AdamW(self.parameters(), lr=self.learning_rate)

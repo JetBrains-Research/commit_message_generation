@@ -1,7 +1,8 @@
-import torch
 from typing import List, Optional
-from torchmetrics import Metric
+
+import torch
 from rapidfuzz.distance.Levenshtein import normalized_similarity
+from torchmetrics import Metric
 
 
 class EditSimilarity(Metric):
@@ -32,7 +33,11 @@ class EditSimilarity(Metric):
                 ref,
                 weights=self.weights,
             )
-            self.scores += torch.tensor(e_sim / 100.0)  # normalizing 1 - 100 score to 0.0 - 1.0 range
+
+            if not ref:
+                self.scores = torch.tensor(float("nan"))
+            else:
+                self.scores += torch.tensor(e_sim)
             self.total += 1
 
     def compute(self) -> float:

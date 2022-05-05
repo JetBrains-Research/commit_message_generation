@@ -1,5 +1,6 @@
-import torch
 from typing import List
+
+import torch
 from torchmetrics import Metric
 
 
@@ -35,4 +36,7 @@ class ExactMatch(Metric):
                 self.total += 1
 
     def compute(self):
+        if not self.total.item():
+            return self.total
+
         return self.correct.float() / self.total
