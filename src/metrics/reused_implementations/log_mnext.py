@@ -321,7 +321,7 @@ def single_meteor_score(
     if tot_alligned_count == translation_length and tot_alligned_count == reference_length:
         penalty = 0
     else:
-        penalty = gamma * frag_frac ** beta
+        penalty = gamma * frag_frac**beta
     return (1 - penalty) * fmean
 
 

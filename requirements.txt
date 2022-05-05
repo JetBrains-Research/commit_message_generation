@@ -9,5 +9,5 @@ nltk==3.6.6
 sacrebleu==2.0.0
 rouge_score==0.0.4
 torchmetrics==0.4.1
-black
-pytest
+black==22.3.0
+pytest==7.1.2
