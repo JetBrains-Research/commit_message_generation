@@ -1,4 +1,3 @@
-import os
 from typing import Optional
 
 import hydra
@@ -15,27 +14,30 @@ class CMGDataModule(pl.LightningDataModule):
     def __init__(
         self,
         dataset_root: str,
-        training_data_root: str,
-        marker_tests_root: str,
+        encoder_context_max_len: int,
         decoder_context_max_len: int,
         diff_tokenizer_name_or_path: str,
         msg_tokenizer_name_or_path: str,
-        training_with_history: bool,
-        generation_with_history: bool,
-        sep_tokens: str,
-        train_dataloader_conf: DictConfig,
-        val_dataloader_conf: DictConfig,
-        test_dataloader_conf: DictConfig,
-        marker_tests_dataloader_conf: DictConfig,
         local_rank: int,
         world_size: int,
+        training_with_history: Optional[bool] = True,
+        generation_with_history: Optional[bool] = True,
+        use_mtests: Optional[bool] = False,
+        marker_tests_root: Optional[str] = None,
+        train_dataloader_conf: Optional[DictConfig] = None,
+        val_dataloader_conf: Optional[DictConfig] = None,
+        test_dataloader_conf: Optional[DictConfig] = None,
+        marker_tests_dataloader_conf: Optional[DictConfig] = None,
+        decoder_sep_tokens: Optional[str] = None,
         context_ratio: Optional[float] = None,
         testing: bool = False,
     ):
         super().__init__()
 
-        self.training_data_root = os.path.join(hydra.utils.to_absolute_path(dataset_root), training_data_root)
-        self.marker_tests_root = os.path.join(hydra.utils.to_absolute_path(dataset_root), marker_tests_root)
+        self.dataset_root = hydra.utils.to_absolute_path(dataset_root)
+        self.marker_tests_root = None
+        if use_mtests:
+            self.marker_tests_root = hydra.utils.to_absolute_path(marker_tests_root)
 
         self.local_rank = local_rank
         self.world_size = world_size
@@ -48,7 +50,9 @@ class CMGDataModule(pl.LightningDataModule):
         if diff_tokenizer_name_or_path.endswith(".json"):
             self._diff_tokenizer = PreTrainedTokenizerFast(tokenizer_file=to_absolute_path(diff_tokenizer_name_or_path))
             if self._diff_tokenizer.pad_token is None:
-                self._diff_tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+                self._diff_tokenizer.add_special_tokens(
+                    {"pad_token": "[PAD]", "eos_token": "[SEP]", "bos_token": "[CLS]"}
+                )
         else:
             self._diff_tokenizer = AutoTokenizer.from_pretrained(diff_tokenizer_name_or_path, use_fast=True)
 
@@ -61,35 +65,42 @@ class CMGDataModule(pl.LightningDataModule):
             if "gpt2" in msg_tokenizer_name_or_path:
                 self._msg_tokenizer.pad_token = self._msg_tokenizer.unk_token
 
-        if "gpt2" in msg_tokenizer_name_or_path and sep_tokens == "\n":
+        if "gpt2" in msg_tokenizer_name_or_path and decoder_sep_tokens == "\n":
             sep_tokens_ids = [self._msg_tokenizer.convert_tokens_to_ids("Ċ")]
+        elif decoder_sep_tokens:
+            sep_tokens_ids = self._msg_tokenizer(decoder_sep_tokens).input_ids
+        elif self._msg_tokenizer.sep_token_id:
+            sep_tokens_ids = [self._msg_tokenizer.sep_token_id]
         else:
-            sep_tokens_ids = self._msg_tokenizer(sep_tokens).input_ids
+            sep_tokens_ids = [self._msg_tokenizer.eos_token_id]
 
         self.data_collator_train = DataCollator(
             diff_tokenizer=self._diff_tokenizer,
             msg_tokenizer=self._msg_tokenizer,
-            max_len=decoder_context_max_len,
+            encoder_context_max_len=encoder_context_max_len,
+            decoder_context_max_len=decoder_context_max_len,
             with_history=training_with_history,
-            sep_tokens=sep_tokens_ids,
+            decoder_sep_tokens=sep_tokens_ids,
             generation=False,
             testing=testing,
         )
         self.data_collator_mt = DataCollator(
             diff_tokenizer=self._diff_tokenizer,
             msg_tokenizer=self._msg_tokenizer,
-            max_len=decoder_context_max_len,
+            encoder_context_max_len=encoder_context_max_len,
+            decoder_context_max_len=decoder_context_max_len,
             with_history=False,
-            sep_tokens=sep_tokens_ids,
+            decoder_sep_tokens=sep_tokens_ids,
             generation=True,
             context_ratio=0.0,
         )
         self.data_collator_test = DataCollator(
             diff_tokenizer=self._diff_tokenizer,
             msg_tokenizer=self._msg_tokenizer,
-            max_len=decoder_context_max_len,
+            encoder_context_max_len=encoder_context_max_len,
+            decoder_context_max_len=decoder_context_max_len,
             with_history=generation_with_history,
-            sep_tokens=sep_tokens_ids,
+            decoder_sep_tokens=sep_tokens_ids,
             context_ratio=context_ratio,
             generation=True,
         )
@@ -104,27 +115,33 @@ class CMGDataModule(pl.LightningDataModule):
         # called on every GPU
         if stage == "fit" or stage is None:
             self.train = CMGDatasetWithHistory.load_data(
-                self.training_data_root + "/train", rank=self.local_rank, world_size=self.world_size
+                self.dataset_root + "/train", rank=self.local_rank, world_size=self.world_size
             )
             self.val = CMGDatasetWithHistory.load_data(
-                self.training_data_root + "/val", rank=self.local_rank, world_size=self.world_size
+                self.dataset_root + "/val", rank=self.local_rank, world_size=self.world_size
             )
-            self.marker_tests = CMGDatasetWithHistory.load_data(
-                self.marker_tests_root + "/test", rank=self.local_rank, world_size=self.world_size
-            )
+
+            self.marker_tests = None
+            if self.marker_tests_root:
+                self.marker_tests = CMGDatasetWithHistory.load_data(
+                    self.marker_tests_root + "/mtests", rank=self.local_rank, world_size=self.world_size
+                )
         if stage == "test" or stage is None:
             self.test = CMGDatasetWithHistory.load_data(
-                self.training_data_root + "/test", rank=self.local_rank, world_size=self.world_size
+                self.dataset_root + "/test", rank=self.local_rank, world_size=self.world_size
             )
 
     def train_dataloader(self):
         return self.train.get_dataloader(**self.train_dataloader_conf, collate_fn=self.data_collator_train)
 
     def val_dataloader(self):
-        return [
-            self.val.get_dataloader(**self.val_dataloader_conf, collate_fn=self.data_collator_train),
-            self.marker_tests.get_dataloader(**self.marker_tests_dataloader_conf, collate_fn=self.data_collator_mt),
-        ]
+        if self.marker_tests:
+            return [
+                self.val.get_dataloader(**self.val_dataloader_conf, collate_fn=self.data_collator_train),
+                self.marker_tests.get_dataloader(**self.marker_tests_dataloader_conf, collate_fn=self.data_collator_mt),
+            ]
+
+        return self.val.get_dataloader(**self.val_dataloader_conf, collate_fn=self.data_collator_train)
 
     def test_dataloader(self):
         return self.test.get_dataloader(**self.test_dataloader_conf, collate_fn=self.data_collator_test)

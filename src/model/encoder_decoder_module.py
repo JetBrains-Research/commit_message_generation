@@ -168,9 +168,9 @@ class EncoderDecoderModule(pl.LightningModule):
         train_loss_mean = torch.stack([x["loss"] for x in outputs]).mean()
         self.logger.experiment.log({"train_loss_epoch": train_loss_mean}, step=self.examples_count)
 
-    def validation_step(self, batch, batch_idx, dataloader_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx=None):
         # validation on github data: calculating next token prediction metrics
-        if dataloader_idx == 0:
+        if not dataloader_idx:
             loss, logits = self(batch)[:2]
             self.val_metrics.add_batch(predictions_tensor=logits, references_tensor=batch["msg_labels"])
             return {"loss": loss}
@@ -198,7 +198,12 @@ class EncoderDecoderModule(pl.LightningModule):
     def validation_epoch_end(self, outputs):
         # next token prediction metrics
         metrics = self.val_metrics.compute()
-        metrics["val_loss"] = torch.stack([x["loss"] for x in outputs[0]]).mean()
+
+        # for case with two dataloaders: usual validation & marker test
+        if len(outputs) == 2 and not outputs[1]:
+            outputs = outputs[0]
+
+        metrics["val_loss"] = torch.stack([x["loss"] for x in outputs]).mean()
         # needed for ModelCheckpoint
         self.log("val_MRR_top5", metrics["val_MRR_top5"], on_step=False, on_epoch=True, prog_bar=True, logger=False)
 

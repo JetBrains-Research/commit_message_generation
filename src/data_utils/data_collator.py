@@ -30,8 +30,9 @@ class DataCollator:
     Args:
         diff_tokenizer: Tokenizer used to tokenize diff.
         msg_tokenizer: Tokenizer used to tokenize messages.
-        max_len: Maximum allowed number of tokens in decoder context.
-        sep_tokens: A list of tokens used as [SEP] in decoder context (added between history examples,
+        encoder_context_max_len: Maximum allowed number of tokens in encoder context.
+        decoder_context_max_len: Maximum allowed number of tokens in decoder context.
+        decoder_sep_tokens: A list of tokens used as [SEP] in decoder context (added between history examples,
          if they are present, and at the end of message).
         with_history: True to add history to decoder context and False otherwise.
         generation: True to construct batches for generation and False otherwise.
@@ -43,8 +44,9 @@ class DataCollator:
 
     diff_tokenizer: PreTrainedTokenizerBase
     msg_tokenizer: PreTrainedTokenizerBase
-    max_len: int
-    sep_tokens: List[int]
+    encoder_context_max_len: int
+    decoder_context_max_len: int
+    decoder_sep_tokens: List[int]
     with_history: bool
     generation: bool
     context_ratio: Optional[float] = None
@@ -104,6 +106,13 @@ class DataCollator:
             message_inputs: List[List[int]] = [e["msg_input_ids"] for e in examples]
             history_inputs: List[List[List[int]]] = [e["history_input_ids"] for e in examples]
 
+            all_diff_ids = []
+
+            for diff in diff_inputs:
+                if diff[-1] == self.diff_tokenizer.eos_token_id:
+                    diff = diff[:-1]
+                all_diff_ids.append(diff[: self.decoder_context_max_len - 1] + [self.diff_tokenizer.eos_token_id])
+
             all_msg_ids = []  # input for training or NTP metrics: history + cur_msg (right-side padding)
             all_msg_masks = []  # 0 on pad tokens and 1 otherwise (right-side padding)
             all_msg_labels = []  # -100 on history & padding to avoid computing loss (right-side padding)
@@ -111,7 +120,9 @@ class DataCollator:
             all_msg_prefixes = []
 
             for message_ids, history_ids in zip(message_inputs, history_inputs):
-                message_ids = message_ids[: self.max_len - 1 - (0 if self.generation else len(self.sep_tokens))]
+                message_ids = message_ids[
+                    : self.decoder_context_max_len - 1 - (0 if self.generation else len(self.decoder_sep_tokens))
+                ]
 
                 if self.generation:
                     assert self.context_ratio is not None
@@ -129,14 +140,17 @@ class DataCollator:
 
                 # insert previous messages from history until we reach max_len
                 if self.with_history:
-                    cur_len = len(message_ids) + 1 + (0 if self.generation else len(self.sep_tokens))
+                    cur_len = len(message_ids) + 1 + (0 if self.generation else len(self.decoder_sep_tokens))
                     for history_input_ids in history_ids[::-1]:
-                        if cur_len + len(history_input_ids) + len(self.sep_tokens) > self.max_len:
+                        if (
+                            cur_len + len(history_input_ids) + len(self.decoder_sep_tokens)
+                            > self.decoder_context_max_len
+                        ):
                             break
 
-                        cur_len += len(history_input_ids) + len(self.sep_tokens)
-                        cur_history_ids.append(history_input_ids + self.sep_tokens)
-                        cur_history_labels.append([-100 for _ in history_input_ids + self.sep_tokens])
+                        cur_len += len(history_input_ids) + len(self.decoder_sep_tokens)
+                        cur_history_ids.append(history_input_ids + self.decoder_sep_tokens)
+                        cur_history_labels.append([-100 for _ in history_input_ids + self.decoder_sep_tokens])
 
                 cur_ids = [[self.msg_tokenizer.bos_token_id]]
                 cur_ids.extend(cur_history_ids)
@@ -148,8 +162,8 @@ class DataCollator:
 
                 # do not add [SEP] tokens at the end for generation prompt
                 if not self.generation:
-                    cur_ids.append(self.sep_tokens)
-                    cur_labels.append(self.sep_tokens)
+                    cur_ids.append(self.decoder_sep_tokens)
+                    cur_labels.append(self.decoder_sep_tokens)
 
                 cur_ids = torch.tensor([ex for sublist in cur_ids for ex in sublist], dtype=torch.int64)
                 cur_labels = torch.tensor([ex for sublist in cur_labels for ex in sublist], dtype=torch.int64)
@@ -161,7 +175,7 @@ class DataCollator:
                 all_msg_targets.append(target)
                 all_msg_prefixes.append(prefix)
 
-            all_diff_ids = [torch.tensor(ids, dtype=torch.int64) for ids in diff_inputs]
+            all_diff_ids = [torch.tensor(ids, dtype=torch.int64) for ids in all_diff_ids]
             all_diff_masks = [torch.ones_like(ids) for ids in all_diff_ids]
 
             msg_max_len = max(len(tensor) for tensor in all_msg_ids)
@@ -220,9 +234,15 @@ class DataCollator:
         else:
             batch_size = len(examples)
             return {
-                "diff_input_ids": torch.randint(50000, (batch_size, 500), dtype=torch.int64),
-                "diff_attention_mask": torch.ones(batch_size, 500, dtype=torch.int64),
-                "msg_input_ids": torch.randint(50000, (batch_size, self.max_len), dtype=torch.int64),
-                "msg_attention_mask": torch.ones(batch_size, self.max_len, dtype=torch.int64),
-                "msg_labels": torch.randint(50000, (batch_size, self.max_len), dtype=torch.int64),
+                "diff_input_ids": torch.randint(
+                    self.diff_tokenizer.vocab_size, (batch_size, self.encoder_context_max_len), dtype=torch.int64
+                ),
+                "diff_attention_mask": torch.ones(batch_size, self.encoder_context_max_len, dtype=torch.int64),
+                "msg_input_ids": torch.randint(
+                    self.msg_tokenizer.vocab_size, (batch_size, self.decoder_context_max_len), dtype=torch.int64
+                ),
+                "msg_attention_mask": torch.ones(batch_size, self.decoder_context_max_len, dtype=torch.int64),
+                "msg_labels": torch.randint(
+                    self.msg_tokenizer.vocab_size, (batch_size, self.decoder_context_max_len), dtype=torch.int64
+                ),
             }

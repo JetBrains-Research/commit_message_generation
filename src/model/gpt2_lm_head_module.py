@@ -5,7 +5,12 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 import wandb
-from transformers import AdamW, GPT2LMHeadModel, GPT2Tokenizer, get_linear_schedule_with_warmup
+from transformers import (
+    AdamW,
+    GPT2LMHeadModel,
+    GPT2Tokenizer,
+    get_linear_schedule_with_warmup,
+)
 
 from src.utils import EvaluationMetrics, PrefixAllowedTokens
 
