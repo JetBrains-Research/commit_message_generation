@@ -9,7 +9,7 @@ from src.data_utils import CMGDataModule
 from src.model import EncoderDecoderModule, GPT2LMHeadModule
 
 
-@hydra.main(config_path="conf", config_name="config")
+@hydra.main(config_path="conf", config_name="eval_config")
 def main(cfg: DictConfig) -> None:
     # -----------------------
     #          init         -
@@ -23,10 +23,10 @@ def main(cfg: DictConfig) -> None:
         local_rank=int(os.environ.get("LOCAL_RANK", 0)),
         world_size=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1,
     )
-    dm.setup()
+    dm.setup(stage="test")
 
     if "ckpt_path" in cfg:
-        # initialize from already fine-tuned checkpoint
+        # initialize from already fine-tuned checkpo1int
         PATH = os.path.join(hydra.utils.get_original_cwd(), cfg.ckpt_path)
         print("Checkpoint path\n", PATH, "\n")
         if cfg.model.encoder_decoder:
@@ -37,12 +37,13 @@ def main(cfg: DictConfig) -> None:
             model = GPT2LMHeadModule.load_from_checkpoint(PATH)
         trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
         trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger)
+
         # -----------------------
         #          test         -
         # -----------------------
         trainer.test(ckpt_path=PATH, datamodule=dm, model=model)
     else:
-        # initialize from pretrained weights or smth
+        # use zero-shot pretrained model or even random model
         if cfg.model.encoder_decoder:
             # seq2seq model
             model = EncoderDecoderModule(
@@ -65,6 +66,7 @@ def main(cfg: DictConfig) -> None:
 
         trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
         trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger)
+
         # -----------------------
         #          test         -
         # -----------------------

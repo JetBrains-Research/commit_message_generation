@@ -31,9 +31,10 @@ def test_get_prefix(default_tokenizers, input, target, expected_context, expecte
     data_collator = DataCollator(
         diff_tokenizer=encoder_tok,
         msg_tokenizer=decoder_tok,
-        max_len=200,
+        encoder_context_max_len=500,
+        decoder_context_max_len=200,
         with_history=True,
-        sep_tokens=[sep_tokens_id],
+        decoder_sep_tokens=[sep_tokens_id],
         context_ratio=0.1,
         generation=True,
     )
@@ -82,9 +83,10 @@ def test_generation_collator_with_history(msgs, diffs, histories, default_tokeni
         data_collator = DataCollator(
             diff_tokenizer=encoder_tok,
             msg_tokenizer=decoder_tok,
-            max_len=200,
+            encoder_context_max_len=500,
+            decoder_context_max_len=200,
             with_history=True,
-            sep_tokens=[sep_tokens_id],
+            decoder_sep_tokens=[sep_tokens_id],
             context_ratio=context_ratio,
             generation=True,
         )
@@ -131,9 +133,10 @@ def test_generation_collator_without_history(msgs, diffs, default_tokenizers):
         data_collator = DataCollator(
             diff_tokenizer=encoder_tok,
             msg_tokenizer=decoder_tok,
-            max_len=200,
+            encoder_context_max_len=500,
+            decoder_context_max_len=200,
             with_history=False,
-            sep_tokens=[sep_tokens_id],
+            decoder_sep_tokens=[sep_tokens_id],
             context_ratio=context_ratio,
             generation=True,
         )
@@ -174,9 +177,10 @@ def test_training_collator_without_history(msgs, diffs, default_tokenizers):
     data_collator = DataCollator(
         diff_tokenizer=encoder_tok,
         msg_tokenizer=decoder_tok,
-        max_len=200,
+        encoder_context_max_len=500,
+        decoder_context_max_len=200,
         with_history=False,
-        sep_tokens=[sep_token_id],
+        decoder_sep_tokens=[sep_token_id],
         generation=False,
     )
     res = data_collator(inputs)

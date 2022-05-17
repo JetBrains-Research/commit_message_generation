@@ -1,0 +1,31 @@
+dataset:
+  dataset_root: raw_data/multilang_v1
+
+  generation_with_history: true
+
+  encoder_context_max_len: 500
+  decoder_context_max_len: 200
+
+  context_ratio: 0.25
+
+  diff_tokenizer_name_or_path: raw_data/multilang_v1/diff_tokenizer.json
+  msg_tokenizer_name_or_path: distilgpt2
+
+  decoder_sep_tokens: "\n"
+
+  test_dataloader_conf:
+    batch_size: 1
+    num_workers: 4
+
+logger:
+  _target_: pytorch_lightning.loggers.WandbLogger
+  name: test
+  project: commit_message_generation
+
+model:
+  encoder_decoder: true
+
+trainer:
+  gpus: 1
+
+ckpt_path: path/to/checkpoint

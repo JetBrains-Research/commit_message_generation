@@ -1,19 +1,18 @@
 dataset:
-  dataset_root: raw_data
-  training_data_root: multilang
-  marker_tests_root: marker_tests_custom_tok
+  dataset_root: raw_data/multilang_v1
+
+  use_mtests: true
+  marker_tests_root: raw_data/marker_tests
 
   training_with_history: true
-  generation_with_history: true
 
-
-  context_ratio: 0.1
+  encoder_context_max_len: 500
   decoder_context_max_len: 200
 
-  diff_tokenizer_name_or_path: raw_data/multilang/diff_tokenizer.json
+  diff_tokenizer_name_or_path: raw_data/multilang_v1/diff_tokenizer.json
   msg_tokenizer_name_or_path: distilgpt2
 
-  sep_tokens: "\n"
+  decoder_sep_tokens: "\n"
 
   train_dataloader_conf:
     batch_size: 16
@@ -27,26 +26,20 @@ dataset:
     batch_size: 1
     num_workers: 4
 
-  test_dataloader_conf:
-    batch_size: 1
-    num_workers: 4
-
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: test_gpt2
+  name: test
   project: commit_message_generation
 
 model:
-  encoder_decoder: false
+  encoder_decoder: true
   learning_rate: 1e-4
-  decoder_name_or_path: distilgpt2
+  num_layers_encoder: 4
+  num_layers_decoder: 4
 
 trainer:
   gpus: 1
   max_epochs: 5
-  limit_train_batches: 5
-  limit_val_batches: 5
-  limit_test_batches: 5
   precision: 16
   amp_level: O1
   auto_select_gpus: true

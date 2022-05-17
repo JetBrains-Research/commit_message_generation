@@ -11,7 +11,7 @@ from src.model import EncoderDecoderModule, GPT2LMHeadModule
 from src.utils import LearningRateLogger
 
 
-@hydra.main(config_path="conf", config_name="config")
+@hydra.main(config_path="conf", config_name="train_config")
 def main(cfg: DictConfig) -> None:
     # -----------------------
     # -        init         -
@@ -25,7 +25,7 @@ def main(cfg: DictConfig) -> None:
         local_rank=int(os.environ.get("LOCAL_RANK", 0)),
         world_size=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1,
     )
-    dm.setup()
+    dm.setup(stage="fit")
 
     # main module with model logic
     if cfg.model.encoder_decoder:
@@ -39,7 +39,7 @@ def main(cfg: DictConfig) -> None:
             num_gpus=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1,
         )
     else:
-        # single decoder
+        # decoder
         model = GPT2LMHeadModule(
             **cfg.model,
             tokenizer=dm._msg_tokenizer,
