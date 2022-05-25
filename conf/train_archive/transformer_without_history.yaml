@@ -21,7 +21,7 @@ dataset:
 
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
-  name: test
+  name: transformer_multilang_v1_no_history
   project: commit_message_generation
 
 model:

@@ -8,6 +8,7 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 import wandb
+from omegaconf import DictConfig
 from transformers import (
     AdamW,
     EncoderDecoderModel,
@@ -20,8 +21,6 @@ from transformers import (
 )
 
 from src.utils import EvaluationMetrics, PrefixAllowedTokens
-
-nltk.download("wordnet")
 
 
 class EncoderDecoderModule(pl.LightningModule):
@@ -60,6 +59,7 @@ class EncoderDecoderModule(pl.LightningModule):
         num_layers_decoder: Optional[int] = None,
         encoder_name_or_path: Optional[str] = None,
         decoder_name_or_path: Optional[str] = None,
+        generation_kwargs: Optional[DictConfig] = None,
         **kwargs,
     ):
         super().__init__()
@@ -71,6 +71,7 @@ class EncoderDecoderModule(pl.LightningModule):
         self._num_batches = num_batches
         self._num_gpus = num_gpus
         self.learning_rate = learning_rate
+        self.generation_kwargs = generation_kwargs
 
         self.save_hyperparameters()
 
@@ -85,6 +86,7 @@ class EncoderDecoderModule(pl.LightningModule):
         elif num_layers_encoder:
             # use randomly initialized RoBERTa as encoder
             encoder_config = RobertaConfig()
+            encoder_config.vocab_size = self._diff_tokenizer.vocab_size
             encoder_config.num_hidden_layers = num_layers_encoder
             encoder = RobertaModel(config=encoder_config)
             # resize embeddings to match vocabulary size
@@ -142,20 +144,26 @@ class EncoderDecoderModule(pl.LightningModule):
             labels=batch["msg_labels"],
         )
 
-    def generate(self, batch, **generate_kwargs):
+    def generate(self, batch, **generation_kwargs):
         prefix_fn = PrefixAllowedTokens(
             prefix={i: prefix for i, prefix in enumerate(batch["msg_prefix"])},
             context_len={i: len(msg) for i, msg in enumerate(batch["msg_input_ids"])},
             tokenizer=self._msg_tokenizer,
         )
+
+        if "min_length" in generation_kwargs:
+            generation_kwargs["min_length"] += batch["msg_input_ids"].shape[1]
+
+        if "max_length" in generation_kwargs:
+            generation_kwargs["max_length"] += batch["msg_input_ids"].shape[1]
+
         return self.model.generate(
             input_ids=batch["diff_input_ids"],
             attention_mask=batch["diff_attention_mask"],
             decoder_input_ids=batch["msg_input_ids"],
             decoder_attention_mask=batch["msg_attention_mask"],
             prefix_allowed_tokens_fn=prefix_fn,
-            eos_token_id=198,
-            **generate_kwargs,
+            **generation_kwargs,
         )
 
     def training_step(self, batch, batch_idx):
@@ -184,7 +192,7 @@ class EncoderDecoderModule(pl.LightningModule):
                 no_repeat_ngram_size=4,
                 num_beams=5,
                 min_length=batch["msg_input_ids"].shape[1] + 5,
-                max_length=batch["msg_input_ids"].shape[1] + 15,
+                max_length=batch["msg_input_ids"].shape[1] + 10,
             )[:, batch["msg_input_ids"].shape[1] :]
 
             # decode tokenized sequences
@@ -218,16 +226,15 @@ class EncoderDecoderModule(pl.LightningModule):
         # leave only generated part (without history)
         gen_sequences = self.generate(
             batch,
-            pad_token_id=self._msg_tokenizer.eos_token_id,
             early_stopping=True,
-            no_repeat_ngram_size=4,
-            num_beams=5,
-            min_length=batch["msg_input_ids"].shape[1] + 5,
-            max_length=batch["msg_input_ids"].shape[1] + 15,
+            eos_token_id=198,
+            pad_token_id=self._msg_tokenizer.eos_token_id,
+            **self.generation_kwargs,
         )[:, batch["msg_input_ids"].shape[1] :]
 
         # decode tokenized sequences
         decoded_source = self.decode_src(batch["diff_input_ids"])[0]
+
         decoded_context, decoded_preds = self.decode_trg(batch["msg_input_ids"], gen_sequences)
 
         # remove prefix from predicted to compute metrics without it
@@ -239,8 +246,8 @@ class EncoderDecoderModule(pl.LightningModule):
         history = []
         for i in range(len(decoded_context)):
             if "\n" in decoded_context[i]:
-                decoded_context[i] = decoded_context[i].split("\n")[-1]
                 history.append("\n".join(decoded_context[i].split("\n")[:-1]))
+                decoded_context[i] = decoded_context[i].split("\n")[-1]
             else:
                 history.append("")
 

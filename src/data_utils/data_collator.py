@@ -66,12 +66,11 @@ class DataCollator:
         if not input:
             return {"msg_input_ids": [], "msg_target": target, "msg_prefix": ""}
 
-        # if context ends with whitespace character,
-        if input[-1].isspace():
+        # if the last word in context is full, do not use prefix
+        if input[-1].isspace() or target[0].isspace():
             context = input
             prefix = ""
         else:
-
             context, prefix = " ".join(input.split()[:-1]), input.split()[-1]
 
             if len(context) > 0:

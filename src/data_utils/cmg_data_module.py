@@ -130,6 +130,10 @@ class CMGDataModule(pl.LightningDataModule):
             self.test = CMGDatasetWithHistory.load_data(
                 self.dataset_root + "/test", rank=self.local_rank, world_size=self.world_size
             )
+        if stage == "sweep":
+            self.test = CMGDatasetWithHistory.load_data(
+                self.dataset_root + "/val", rank=self.local_rank, world_size=self.world_size
+            )
 
     def train_dataloader(self):
         return self.train.get_dataloader(**self.train_dataloader_conf, collate_fn=self.data_collator_train)

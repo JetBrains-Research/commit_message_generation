@@ -1,12 +1,16 @@
 import os
 
 import hydra
+import nltk
 import pytorch_lightning as pl
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from src.data_utils import CMGDataModule
 from src.model import EncoderDecoderModule, GPT2LMHeadModule
+
+nltk.download("omw-1.4")
+nltk.download("wordnet")
 
 
 @hydra.main(config_path="conf", config_name="eval_config")
@@ -21,9 +25,9 @@ def main(cfg: DictConfig) -> None:
     dm = CMGDataModule(
         **cfg.dataset,
         local_rank=int(os.environ.get("LOCAL_RANK", 0)),
-        world_size=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1,
+        world_size=1,
     )
-    dm.setup(stage="test")
+    dm.setup(stage=cfg.stage)
 
     if "ckpt_path" in cfg:
         # initialize from already fine-tuned checkpo1int
@@ -31,10 +35,19 @@ def main(cfg: DictConfig) -> None:
         print("Checkpoint path\n", PATH, "\n")
         if cfg.model.encoder_decoder:
             # seq2seq model
-            model = EncoderDecoderModule.load_from_checkpoint(PATH, num_gpus=1)
+            model = EncoderDecoderModule.load_from_checkpoint(
+                PATH,
+                diff_tokenizer=dm._diff_tokenizer,
+                msg_tokenizer=dm._msg_tokenizer,
+                generation_kwargs=cfg.generation_kwargs,
+            )
         else:
             # single decoder
-            model = GPT2LMHeadModule.load_from_checkpoint(PATH)
+            model = GPT2LMHeadModule.load_from_checkpoint(
+                PATH,
+                tokenizer=dm._msg_tokenizer,
+                generation_kwargs=cfg.generation_kwargs,
+            )
         trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
         trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger)
 
@@ -50,18 +63,14 @@ def main(cfg: DictConfig) -> None:
                 **cfg.model,
                 diff_tokenizer=dm._diff_tokenizer,
                 msg_tokenizer=dm._msg_tokenizer,
-                num_epochs=cfg.trainer.max_epochs,
-                num_batches=dm.train._len // (cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.gpus),
-                num_gpus=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1,
+                generation_kwargs=cfg.generation_kwargs,
             )
         else:
             # single decoder
             model = GPT2LMHeadModule(
                 **cfg.model,
                 tokenizer=dm._msg_tokenizer,
-                num_epochs=cfg.trainer.max_epochs,
-                num_batches=dm.train._len // (cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.gpus),
-                num_gpus=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1,
+                generation_kwargs=cfg.generation_kwargs,
             )
 
         trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True

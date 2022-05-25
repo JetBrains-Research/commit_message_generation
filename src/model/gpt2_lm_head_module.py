@@ -1,10 +1,11 @@
 from collections import defaultdict
+from typing import Optional
 
-import nltk
 import pandas as pd
 import pytorch_lightning as pl
 import torch
 import wandb
+from omegaconf import DictConfig
 from transformers import (
     AdamW,
     GPT2LMHeadModel,
@@ -13,8 +14,6 @@ from transformers import (
 )
 
 from src.utils import EvaluationMetrics, PrefixAllowedTokens
-
-nltk.download("wordnet")
 
 
 class GPT2LMHeadModule(pl.LightningModule):
@@ -32,22 +31,25 @@ class GPT2LMHeadModule(pl.LightningModule):
 
     def __init__(
         self,
-        learning_rate: float,
         decoder_name_or_path: str,
         tokenizer: GPT2Tokenizer,
-        num_epochs: int,
-        num_batches: int,
-        num_gpus: int,
+        learning_rate: Optional[float] = None,
+        num_epochs: Optional[int] = None,
+        num_batches: Optional[int] = None,
+        num_gpus: Optional[int] = None,
+        generation_kwargs: Optional[DictConfig] = None,
         **kwargs,
     ):
         super().__init__()
-        self.learning_rate = learning_rate
         self._tokenizer = tokenizer
-        self.save_hyperparameters()
 
         self._num_epochs = num_epochs
         self._num_batches = num_batches
         self._num_gpus = num_gpus
+        self.learning_rate = learning_rate
+
+        self.generation_kwargs = generation_kwargs
+        self.save_hyperparameters()
 
         # use pretrained GPT-2 as decoder
         self.model = GPT2LMHeadModel.from_pretrained(decoder_name_or_path)
@@ -61,7 +63,6 @@ class GPT2LMHeadModule(pl.LightningModule):
         self.examples_count = 0
 
     def forward(self, batch):
-        self.examples_count += len(batch["msg_input_ids"])
         return self.model(
             input_ids=batch["msg_input_ids"], attention_mask=batch["msg_attention_mask"], labels=batch["msg_labels"]
         )
@@ -72,11 +73,17 @@ class GPT2LMHeadModule(pl.LightningModule):
             context_len={i: len(msg) for i, msg in enumerate(batch["msg_input_ids"])},
             tokenizer=self._tokenizer,
         )
+
+        if "min_length" in generation_kwargs:
+            generation_kwargs["min_length"] += batch["msg_input_ids"].shape[1]
+
+        if "max_length" in generation_kwargs:
+            generation_kwargs["max_length"] += batch["msg_input_ids"].shape[1]
+
         return self.model.generate(
             input_ids=batch["msg_input_ids"],
             attention_mask=batch["msg_attention_mask"],
             prefix_allowed_tokens_fn=prefix_fn,
-            eos_token_id=198,
             **generation_kwargs,
         )
 
@@ -90,17 +97,15 @@ class GPT2LMHeadModule(pl.LightningModule):
         train_loss_mean = torch.stack([x["loss"] for x in outputs]).mean()
         self.logger.experiment.log({"train_loss_epoch": train_loss_mean}, step=self.examples_count)
 
-    def validation_step(self, batch, batch_idx, dataloader_idx):
-        # validation on github data: calculating next token prediction metrics
-        if dataloader_idx == 0:
-            loss, logits = self(batch)[:2]
-            self.val_metrics.add_batch(predictions_tensor=logits, references_tensor=batch["msg_labels"])
-            return {"loss": loss}
+    def validation_step(self, batch, batch_idx, dataloader_idx=None):
+        loss, logits = self(batch)[:2]
+        self.val_metrics.add_batch(predictions_tensor=logits, references_tensor=batch["msg_labels"])
+        return {"loss": loss}
 
     def validation_epoch_end(self, outputs):
         # next token prediction metrics
         metrics = self.val_metrics.compute()
-        metrics["val_loss"] = torch.stack([x["loss"] for x in outputs[0]]).mean()
+        metrics["val_loss"] = torch.stack([x["loss"] for x in outputs]).mean()
         # needed for ModelCheckpoint
         self.log("val_MRR_top5", metrics["val_MRR_top5"], on_step=False, on_epoch=True, prog_bar=True, logger=False)
         self.logger.experiment.log(metrics, step=self.examples_count)
@@ -109,12 +114,10 @@ class GPT2LMHeadModule(pl.LightningModule):
         # leave only generated part (without history)
         gen_sequences = self.generate(
             batch,
-            pad_token_id=self._tokenizer.eos_token_id,
             early_stopping=True,
-            no_repeat_ngram_size=4,
-            num_beams=5,
-            min_length=batch["msg_input_ids"].shape[1] + 5,
-            max_length=batch["msg_input_ids"].shape[1] + 15,
+            pad_token_id=self._tokenizer.eos_token_id,
+            eos_token_id=198,
+            **self.generation_kwargs,
         )[:, batch["msg_input_ids"].shape[1] :]
 
         # decode tokenized sequences
@@ -129,9 +132,8 @@ class GPT2LMHeadModule(pl.LightningModule):
         history = []
         for i in range(len(decoded_context)):
             if "\n" in decoded_context[i]:
-
-                decoded_context[i] = decoded_context[i].split("\n")[-1]
                 history.append("\n".join(decoded_context[i].split("\n")[:-1]))
+                decoded_context[i] = decoded_context[i].split("\n")[-1]
             else:
                 history.append("")
 

@@ -1,3 +1,4 @@
+stage: test
 dataset:
   dataset_root: raw_data/multilang_v1
 
@@ -24,6 +25,14 @@ logger:
 
 model:
   encoder_decoder: true
+
+generation_kwargs:
+  num_beams: 5
+  repetition_penalty: 1.0
+  length_penalty: 1.0
+  no_repeat_ngram_size: 4
+  min_length: 1
+  max_length: 15
 
 trainer:
   gpus: 1

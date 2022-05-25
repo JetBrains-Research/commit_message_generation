@@ -1,14 +1,18 @@
 import os
 
 import hydra
+import nltk
 import pytorch_lightning as pl
 from hydra.utils import instantiate
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
+from torch.cuda import device_count
 
 from src.data_utils import CMGDataModule
 from src.model import EncoderDecoderModule, GPT2LMHeadModule
 from src.utils import LearningRateLogger
+
+nltk.download("wordnet")
 
 
 @hydra.main(config_path="conf", config_name="train_config")
@@ -20,10 +24,32 @@ def main(cfg: DictConfig) -> None:
 
     print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
 
+    if "gpus" not in cfg.trainer:
+        world_size = 1  # cpu
+    elif isinstance(cfg.trainer.gpus, int):
+        if cfg.trainer.gpus == -1:
+            world_size = device_count()  # all available gpus
+        elif cfg.trainer.gpus == 0:
+            world_size = 1  # cpu
+        else:
+            world_size = cfg.trainer.gpus  # n first gpus
+    elif isinstance(cfg.trainer.gpus, str):
+        if cfg.trainer.gpus == "-1":
+            world_size = device_count()  # all available gpus
+        else:
+            world_size = len(cfg.trainer.gpus.split(","))  # a list of specific gpus separated by ','
+    elif isinstance(cfg.trainer.gpus, ListConfig):
+        world_size = len(cfg.trainer.gpus)  # a list of specific gpus
+    else:
+        raise ValueError("Unknown format for number of gpus")
+
+    print(f"Local rank: {int(os.environ.get('LOCAL_RANK', 0))}")
+    print(f"World size: {world_size}")
+
     dm = CMGDataModule(
         **cfg.dataset,
         local_rank=int(os.environ.get("LOCAL_RANK", 0)),
-        world_size=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1,
+        world_size=world_size,
     )
     dm.setup(stage="fit")
 
@@ -35,8 +61,8 @@ def main(cfg: DictConfig) -> None:
             diff_tokenizer=dm._diff_tokenizer,
             msg_tokenizer=dm._msg_tokenizer,
             num_epochs=cfg.trainer.max_epochs,
-            num_batches=dm.train._len // (cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.gpus),
-            num_gpus=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1,
+            num_batches=dm.train._len // (cfg.dataset.train_dataloader_conf.batch_size * world_size),
+            num_gpus=world_size,
         )
     else:
         # decoder
@@ -44,8 +70,8 @@ def main(cfg: DictConfig) -> None:
             **cfg.model,
             tokenizer=dm._msg_tokenizer,
             num_epochs=cfg.trainer.max_epochs,
-            num_batches=dm.train._len // (cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.gpus),
-            num_gpus=cfg.trainer.gpus if cfg.trainer.gpus > 0 else 1,
+            num_batches=dm.train._len // (cfg.dataset.train_dataloader_conf.batch_size * world_size),
+            num_gpus=world_size,
         )
 
     # logger
