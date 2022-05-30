@@ -16,7 +16,7 @@ dataset:
 
   test_dataloader_conf:
     batch_size: 1
-    num_workers: 4
+    num_workers: 1
 
 logger:
   _target_: pytorch_lightning.loggers.WandbLogger
@@ -24,7 +24,9 @@ logger:
   project: commit_message_generation
 
 model:
-  encoder_decoder: true
+  encoder_decoder: false
+  wandb_artifact_name: distilgpt2
+  wandb_table_name: context_ratio_0.25
 
 generation_kwargs:
   num_beams: 5
@@ -36,5 +38,10 @@ generation_kwargs:
 
 trainer:
   gpus: 1
+
+artifact:
+  name: saridormi/commit_message_generation/distilgpt2:v0
+  artifact_path: last.ckpt
+  local_path: artifacts/distilgpt2
 
 ckpt_path: path/to/checkpoint

@@ -1,0 +1,9 @@
+wandb:
+  project: cmg_eval
+  name: zero_shot_distilgpt2
+  artifact_name: saridormi/commit_message_generation/zero_shot_distilgpt2_preds:v0
+  table_name: context_ratio_0.25
+
+input_file: path/to/input/file
+
+max_n_tokens: 15

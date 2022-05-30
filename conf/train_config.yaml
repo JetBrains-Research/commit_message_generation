@@ -30,6 +30,10 @@ model:
   num_layers_encoder: 4
   num_layers_decoder: 4
 
+artifact:
+  name: name
+  type: multilang model
+
 trainer:
   gpus: 3
   auto_select_gpus: false

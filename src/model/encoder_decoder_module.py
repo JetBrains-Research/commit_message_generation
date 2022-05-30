@@ -33,6 +33,8 @@ class EncoderDecoderModule(pl.LightningModule):
     Args:
         diff_tokenizer: tokenizer for source sequences (diffs)
         msg_tokenizer: tokenizer for target sequences (messages)
+        wandb_artifact_name: an artifact name for saving model predictions as W&B artifact
+        wandb_table_name: a table name for saving model predictions as W&B artifact
         learning_rate: maximum learning rate
         num_epochs: total number of epochs (used to calculate total number of steps for LR scheduler)
         num_batches: total number of batches in one epoch (used to calculate total number of steps for LR scheduler)
@@ -45,12 +47,15 @@ class EncoderDecoderModule(pl.LightningModule):
             pretrained checkpoint, it will be uniformly picked
         encoder_name_or_path: use to initialize encoder with pretrained checkpoint
         decoder_name_or_path: use to initialize decoder with pretrained checkpoint
+        generation_kwargs: kwargs for transformers.generation_utils.GenerationMixin.generate
     """
 
     def __init__(
         self,
         diff_tokenizer: PreTrainedTokenizerFast,
         msg_tokenizer: PreTrainedTokenizerFast,
+        wandb_artifact_name: Optional[str] = None,
+        wandb_table_name: Optional[str] = None,
         learning_rate: Optional[float] = None,
         num_epochs: Optional[int] = None,
         num_batches: Optional[int] = None,
@@ -67,10 +72,14 @@ class EncoderDecoderModule(pl.LightningModule):
         self._diff_tokenizer = diff_tokenizer
         self._msg_tokenizer = msg_tokenizer
 
+        self._wandb_artifact_name = wandb_artifact_name
+        self._wandb_table_name = wandb_table_name
+
         self._num_epochs = num_epochs
         self._num_batches = num_batches
         self._num_gpus = num_gpus
         self.learning_rate = learning_rate
+
         self.generation_kwargs = generation_kwargs
 
         self.save_hyperparameters()
@@ -130,7 +139,6 @@ class EncoderDecoderModule(pl.LightningModule):
         # will be logged to W&B
         self.table_data = defaultdict(list)
         self.val_metrics = EvaluationMetrics(do_strings=False, do_tensors=True, prefix="val")
-        self.test_metrics = EvaluationMetrics(do_strings=True, do_tensors=False, prefix="test")
 
         # to make logs for different batch sizes prettier
         self.examples_count = 0
@@ -188,11 +196,12 @@ class EncoderDecoderModule(pl.LightningModule):
             gen_sequences = self.generate(
                 batch,
                 pad_token_id=self._msg_tokenizer.eos_token_id,
+                eos_token_id=198,
                 early_stopping=True,
                 no_repeat_ngram_size=4,
                 num_beams=5,
-                min_length=batch["msg_input_ids"].shape[1] + 5,
-                max_length=batch["msg_input_ids"].shape[1] + 10,
+                min_length=5,
+                max_length=10,
             )[:, batch["msg_input_ids"].shape[1] :]
 
             # decode tokenized sequences
@@ -212,13 +221,15 @@ class EncoderDecoderModule(pl.LightningModule):
             outputs = outputs[0]
 
         metrics["val_loss"] = torch.stack([x["loss"] for x in outputs]).mean()
+
         # needed for ModelCheckpoint
         self.log("val_MRR_top5", metrics["val_MRR_top5"], on_step=False, on_epoch=True, prog_bar=True, logger=False)
 
-        # generation examples on marker tests
-        table = wandb.Table(dataframe=pd.DataFrame.from_dict(self.table_data))
-        self.table_data.clear()
-        metrics.update({"marker_tests": table})
+        if self.table_data:
+            # generation examples on marker tests
+            table = wandb.Table(dataframe=pd.DataFrame.from_dict(self.table_data))
+            self.table_data.clear()
+            metrics.update({"marker_tests": table})
 
         self.logger.experiment.log(metrics, step=self.examples_count)
 
@@ -240,9 +251,6 @@ class EncoderDecoderModule(pl.LightningModule):
         # remove prefix from predicted to compute metrics without it
         decoded_preds = [pred[len(prefix) :] for pred, prefix in zip(decoded_preds, batch["msg_prefix"])]
 
-        # add data to metrics
-        self.test_metrics.add_batch(predictions=decoded_preds, references=batch["msg_target"])
-
         history = []
         for i in range(len(decoded_context)):
             if "\n" in decoded_context[i]:
@@ -260,13 +268,14 @@ class EncoderDecoderModule(pl.LightningModule):
         self.table_data["Target"].extend(batch["msg_target"])
 
     def test_epoch_end(self, outputs):
-        metrics = self.test_metrics.compute()
-
         table = wandb.Table(dataframe=pd.DataFrame.from_dict(self.table_data))
         self.table_data.clear()
-        metrics.update({"test_examples": table})
+        self.logger.experiment.log({"test_examples": table}, step=self.examples_count)
 
-        self.logger.experiment.log(metrics, step=self.examples_count)
+        if self._wandb_artifact_name and self._wandb_table_name:
+            artifact = wandb.Artifact(self._wandb_artifact_name, type="multilang preds")
+            artifact.add(table, self._wandb_table_name)
+            self.logger.experiment.log_artifact(artifact)
 
     def configure_optimizers(self):
 

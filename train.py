@@ -7,6 +7,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, ListConfig, OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
 from torch.cuda import device_count
+from wandb import Artifact
 
 from src.data_utils import CMGDataModule
 from src.model import EncoderDecoderModule, GPT2LMHeadModule
@@ -92,6 +93,15 @@ def main(cfg: DictConfig) -> None:
     #         train         -
     # -----------------------
     trainer.fit(model, dm)
+
+    # -----------------------
+    #   save ckpt to wandb  -
+    # -----------------------
+    if "artifact" in cfg:
+        assert isinstance(trainer_logger, pl.loggers.WandbLogger)
+        artifact = Artifact(**cfg.artifact)
+        artifact.add_dir("checkpoint")
+        trainer_logger.experiment.log_artifact(artifact)
 
 
 if __name__ == "__main__":

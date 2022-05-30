@@ -3,6 +3,7 @@ import os
 import hydra
 import nltk
 import pytorch_lightning as pl
+import wandb
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
@@ -22,6 +23,9 @@ def main(cfg: DictConfig) -> None:
 
     print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
 
+    wandb.Table.MAX_ROWS = 50000
+    print(wandb.Table.MAX_ROWS)
+
     dm = CMGDataModule(
         **cfg.dataset,
         local_rank=int(os.environ.get("LOCAL_RANK", 0)),
@@ -29,6 +33,15 @@ def main(cfg: DictConfig) -> None:
     )
     dm.setup(stage=cfg.stage)
 
+    trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
+
+    if "artifact" in cfg:
+        assert isinstance(trainer_logger, pl.loggers.WandbLogger)
+
+        trainer_logger.experiment.use_artifact(cfg.artifact.name).get_path(cfg.artifact.artifact_path).download(
+            root=hydra.utils.to_absolute_path(cfg.artifact.local_path)
+        )
+        cfg.ckpt_path = os.path.join(hydra.utils.to_absolute_path(cfg.artifact.local_path), cfg.artifact.artifact_path)
     if "ckpt_path" in cfg:
         # initialize from already fine-tuned checkpo1int
         PATH = os.path.join(hydra.utils.get_original_cwd(), cfg.ckpt_path)
@@ -39,6 +52,8 @@ def main(cfg: DictConfig) -> None:
                 PATH,
                 diff_tokenizer=dm._diff_tokenizer,
                 msg_tokenizer=dm._msg_tokenizer,
+                wandb_artifact_name=cfg.model.wandb_artifact_name,
+                wandb_table_name=cfg.model.wandb_table_name,
                 generation_kwargs=cfg.generation_kwargs,
             )
         else:
@@ -46,9 +61,11 @@ def main(cfg: DictConfig) -> None:
             model = GPT2LMHeadModule.load_from_checkpoint(
                 PATH,
                 tokenizer=dm._msg_tokenizer,
+                wandb_artifact_name=cfg.model.wandb_artifact_name,
+                wandb_table_name=cfg.model.wandb_table_name,
                 generation_kwargs=cfg.generation_kwargs,
             )
-        trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
+
         trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger)
 
         # -----------------------

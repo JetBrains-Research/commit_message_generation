@@ -19,11 +19,12 @@ class EvaluationMetrics:
     generated and decoded strings.
 
     Args:
-        do_tensors: True to compute Accuracy@k and MRR@k and False otherwise
-        do_strings: True to compute string similarity metrics and False otherwise
+        do_tensors: True to compute Accuracy@k and MRR@k and False otherwise.
+        do_strings: True to compute string similarity metrics and False otherwise.
+        n: if an integer is given, ExactMatch metrics will be computed for first n tokens. Otherwise, it is computed for the whole sequences.
     """
 
-    def __init__(self, do_strings: bool, do_tensors: bool, prefix: Optional[str] = None):
+    def __init__(self, do_strings: bool, do_tensors: bool, n: Optional[int] = None, prefix: Optional[str] = None):
         if do_tensors:
             self.tensors_metrics = MetricCollection(
                 {"acc_top1": Accuracy(top_k=1), "acc_top5": Accuracy(top_k=5), "MRR_top5": MRR(top_k=5)},
@@ -41,9 +42,7 @@ class EvaluationMetrics:
             }
             self.strings_metrics = MetricCollection(
                 {
-                    "exact_match@1": ExactMatch(n=1),
-                    "exact_match@2": ExactMatch(n=2),
-                    "exact_match@5": ExactMatch(n=5),
+                    "exact_match": ExactMatch(n=n),
                     "edit_similarity": EditSimilarity(),
                     "log_mnext": LogMNEXT(),
                 }

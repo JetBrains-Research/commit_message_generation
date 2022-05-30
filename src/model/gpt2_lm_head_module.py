@@ -21,18 +21,23 @@ class GPT2LMHeadModule(pl.LightningModule):
     commit message completion task.
 
     Args:
-        learning_rate: maximum learning rate
         decoder_name_or_path: name or path for pretrained GPT-2 checkpoint
         tokenizer: tokenizer for target sequences (messages)
+        wandb_artifact_name: an artifact name for saving model predictions as W&B artifact
+        wandb_table_name: a table name for saving model predictions as W&B artifact
+        learning_rate: maximum learning rate
         num_epochs: total number of epochs (used to calculate total number of steps for LR scheduler)
         num_batches: total number of batches in one epoch (used to calculate total number of steps for LR scheduler)
         num_gpus: total number of GPUs (used to calculate total number of steps for LR scheduler)
+        generation_kwargs: kwargs for transformers.generation_utils.GenerationMixin.generate
     """
 
     def __init__(
         self,
         decoder_name_or_path: str,
         tokenizer: GPT2Tokenizer,
+        wandb_artifact_name: Optional[str] = None,
+        wandb_table_name: Optional[str] = None,
         learning_rate: Optional[float] = None,
         num_epochs: Optional[int] = None,
         num_batches: Optional[int] = None,
@@ -48,6 +53,9 @@ class GPT2LMHeadModule(pl.LightningModule):
         self._num_gpus = num_gpus
         self.learning_rate = learning_rate
 
+        self._wandb_artifact_name = wandb_artifact_name
+        self._wandb_table_name = wandb_table_name
+
         self.generation_kwargs = generation_kwargs
         self.save_hyperparameters()
 
@@ -57,7 +65,6 @@ class GPT2LMHeadModule(pl.LightningModule):
         # will be logged to W&B
         self.table_data = defaultdict(list)
         self.val_metrics = EvaluationMetrics(do_strings=False, do_tensors=True, prefix="val")
-        self.test_metrics = EvaluationMetrics(do_strings=True, do_tensors=False, prefix="test")
 
         # to make logs for different batch sizes prettier
         self.examples_count = 0
@@ -126,9 +133,6 @@ class GPT2LMHeadModule(pl.LightningModule):
         # remove prefix from predicted to compute metrics without it
         decoded_preds = [pred[len(prefix) :] for pred, prefix in zip(decoded_preds, batch["msg_prefix"])]
 
-        # add data to metrics
-        self.test_metrics.add_batch(predictions=decoded_preds, references=batch["msg_target"])
-
         history = []
         for i in range(len(decoded_context)):
             if "\n" in decoded_context[i]:
@@ -145,13 +149,14 @@ class GPT2LMHeadModule(pl.LightningModule):
         self.table_data["Target"].extend(batch["msg_target"])
 
     def test_epoch_end(self, outputs):
-        metrics = self.test_metrics.compute()
-
         table = wandb.Table(dataframe=pd.DataFrame.from_dict(self.table_data))
         self.table_data.clear()
-        metrics.update({"test_examples": table})
+        self.logger.experiment.log({"test_examples": table}, step=self.examples_count)
 
-        self.logger.experiment.log(metrics, step=self.examples_count)
+        if self._wandb_artifact_name and self._wandb_table_name:
+            artifact = wandb.Artifact(self._wandb_artifact_name, type="multilang preds")
+            artifact.add(table, self._wandb_table_name)
+            self.logger.experiment.log_artifact(artifact)
 
     def decode_trg(self, *args):
         return tuple(self._tokenizer.batch_decode(arg, skip_special_tokens=True) for arg in args)
