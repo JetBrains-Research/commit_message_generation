@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional
 
+import torch
 from datasets import load_metric
 from torch import Tensor
 from torchmetrics import MetricCollection
@@ -59,7 +60,9 @@ class EvaluationMetrics:
         references: Optional[List[str]] = None,
         predictions_tensor: Optional[Tensor] = None,
         references_tensor: Optional[Tensor] = None,
-    ) -> None:
+    ) -> Dict[str, torch.Tensor]:
+        cur_metrics = {}
+
         if self.datasets_metrics:
             assert predictions is not None and references is not None
             for key in self.datasets_metrics:
@@ -76,11 +79,17 @@ class EvaluationMetrics:
                     self.datasets_metrics[key].add_batch(predictions=predictions, references=references)
         if self.tensors_metrics:
             assert predictions_tensor is not None and references_tensor is not None
-            self.tensors_metrics(predictions_tensor, references_tensor)
+            cur_metrics = self.tensors_metrics(predictions_tensor, references_tensor)
 
         if self.strings_metrics:
             assert predictions is not None and references is not None
-            self.strings_metrics(predictions, references)
+            cur_string_metrics = self.strings_metrics(predictions, references)
+            if cur_metrics:
+                cur_metrics.update(cur_string_metrics)
+            else:
+                cur_metrics = cur_string_metrics
+
+        return cur_metrics
 
     def compute(self) -> Dict[str, float]:
         results = {}
