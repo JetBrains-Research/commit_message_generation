@@ -7,7 +7,7 @@ dataset:
   encoder_context_max_len: 500
   decoder_context_max_len: 200
 
-  context_ratio: 0.25
+  context_ratio: 0.05
 
   diff_tokenizer_name_or_path: raw_data/multilang_v1/diff_tokenizer.json
   msg_tokenizer_name_or_path: distilgpt2
@@ -19,14 +19,14 @@ dataset:
     num_workers: 1
 
 logger:
-  _target_: pytorch_lightning.loggers.WandbLogger
-  name: test
+  name: distilgpt2_0.05
   project: commit_message_generation
 
 model:
   encoder_decoder: false
-  wandb_artifact_name: distilgpt2
-  wandb_table_name: context_ratio_0.25
+  wandb_artifact_name: distilgpt2_preds
+  wandb_artifact_type: multilang preds
+  wandb_table_name: context_ratio_0.05
 
 generation_kwargs:
   num_beams: 5

@@ -33,7 +33,11 @@ def main(cfg: DictConfig) -> None:
     )
     dm.setup(stage=cfg.stage)
 
-    trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
+    trainer_logger = (
+        pl.loggers.WandbLogger(**cfg.logger, config=OmegaConf.to_container(cfg, resolve=True))
+        if "logger" in cfg
+        else True
+    )
 
     if "artifact" in cfg:
         assert isinstance(trainer_logger, pl.loggers.WandbLogger)
@@ -53,6 +57,7 @@ def main(cfg: DictConfig) -> None:
                 diff_tokenizer=dm._diff_tokenizer,
                 msg_tokenizer=dm._msg_tokenizer,
                 wandb_artifact_name=cfg.model.wandb_artifact_name,
+                wandb_artifact_type=cfg.model.wandb_artifact_type,
                 wandb_table_name=cfg.model.wandb_table_name,
                 generation_kwargs=cfg.generation_kwargs,
             )
@@ -62,6 +67,7 @@ def main(cfg: DictConfig) -> None:
                 PATH,
                 tokenizer=dm._msg_tokenizer,
                 wandb_artifact_name=cfg.model.wandb_artifact_name,
+                wandb_artifact_type=cfg.model.wandb_artifact_type,
                 wandb_table_name=cfg.model.wandb_table_name,
                 generation_kwargs=cfg.generation_kwargs,
             )

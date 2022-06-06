@@ -3,7 +3,6 @@ from collections import defaultdict
 from copy import copy
 from typing import Optional
 
-import nltk
 import pandas as pd
 import pytorch_lightning as pl
 import torch
@@ -34,6 +33,7 @@ class EncoderDecoderModule(pl.LightningModule):
         diff_tokenizer: tokenizer for source sequences (diffs)
         msg_tokenizer: tokenizer for target sequences (messages)
         wandb_artifact_name: an artifact name for saving model predictions as W&B artifact
+        wandb_artifact_type: an artifact type for saving model predictions as W&B artifact
         wandb_table_name: a table name for saving model predictions as W&B artifact
         learning_rate: maximum learning rate
         num_epochs: total number of epochs (used to calculate total number of steps for LR scheduler)
@@ -55,6 +55,7 @@ class EncoderDecoderModule(pl.LightningModule):
         diff_tokenizer: PreTrainedTokenizerFast,
         msg_tokenizer: PreTrainedTokenizerFast,
         wandb_artifact_name: Optional[str] = None,
+        wandb_artifact_type: Optional[str] = None,
         wandb_table_name: Optional[str] = None,
         learning_rate: Optional[float] = None,
         num_epochs: Optional[int] = None,
@@ -73,6 +74,7 @@ class EncoderDecoderModule(pl.LightningModule):
         self._msg_tokenizer = msg_tokenizer
 
         self._wandb_artifact_name = wandb_artifact_name
+        self._wandb_artifact_type = wandb_artifact_type
         self._wandb_table_name = wandb_table_name
 
         self._num_epochs = num_epochs
@@ -81,8 +83,6 @@ class EncoderDecoderModule(pl.LightningModule):
         self.learning_rate = learning_rate
 
         self.generation_kwargs = generation_kwargs
-
-        self.save_hyperparameters()
 
         if encoder_name_or_path:
             # use pretrained RoBERTa as encoder
@@ -272,8 +272,8 @@ class EncoderDecoderModule(pl.LightningModule):
         self.table_data.clear()
         self.logger.experiment.log({"test_examples": table}, step=self.examples_count)
 
-        if self._wandb_artifact_name and self._wandb_table_name:
-            artifact = wandb.Artifact(self._wandb_artifact_name, type="multilang preds")
+        if self._wandb_artifact_name and self._wandb_artifact_type and self._wandb_table_name:
+            artifact = wandb.Artifact(self._wandb_artifact_name, type=self._wandb_artifact_type)
             artifact.add(table, self._wandb_table_name)
             self.logger.experiment.log_artifact(artifact)
 

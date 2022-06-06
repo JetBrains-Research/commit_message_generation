@@ -1,9 +1,7 @@
 import os
-
 import hydra
 import nltk
 import pytorch_lightning as pl
-from hydra.utils import instantiate
 from omegaconf import DictConfig, ListConfig, OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
 from torch.cuda import device_count
@@ -16,7 +14,7 @@ from src.utils import LearningRateLogger
 nltk.download("wordnet")
 
 
-@hydra.main(config_path="conf", config_name="train_config")
+@hydra.main(config_path="conf/train_archive", config_name="transformer_with_history")
 def main(cfg: DictConfig) -> None:
     # -----------------------
     # -        init         -
@@ -76,7 +74,11 @@ def main(cfg: DictConfig) -> None:
         )
 
     # logger
-    trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
+    trainer_logger = (
+        pl.loggers.WandbLogger(**cfg.logger, config=OmegaConf.to_container(cfg, resolve=True))
+        if "logger" in cfg
+        else True
+    )
     trainer_logger.watch(model, log="gradients", log_freq=250)
 
     # callbacks

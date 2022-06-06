@@ -24,6 +24,7 @@ class GPT2LMHeadModule(pl.LightningModule):
         decoder_name_or_path: name or path for pretrained GPT-2 checkpoint
         tokenizer: tokenizer for target sequences (messages)
         wandb_artifact_name: an artifact name for saving model predictions as W&B artifact
+        wandb_artifact_type: an artifact type for saving model predictions as W&B artifact
         wandb_table_name: a table name for saving model predictions as W&B artifact
         learning_rate: maximum learning rate
         num_epochs: total number of epochs (used to calculate total number of steps for LR scheduler)
@@ -37,6 +38,7 @@ class GPT2LMHeadModule(pl.LightningModule):
         decoder_name_or_path: str,
         tokenizer: GPT2Tokenizer,
         wandb_artifact_name: Optional[str] = None,
+        wandb_artifact_type: Optional[str] = None,
         wandb_table_name: Optional[str] = None,
         learning_rate: Optional[float] = None,
         num_epochs: Optional[int] = None,
@@ -54,10 +56,10 @@ class GPT2LMHeadModule(pl.LightningModule):
         self.learning_rate = learning_rate
 
         self._wandb_artifact_name = wandb_artifact_name
+        self._wandb_artifact_type = wandb_artifact_type
         self._wandb_table_name = wandb_table_name
 
         self.generation_kwargs = generation_kwargs
-        self.save_hyperparameters()
 
         # use pretrained GPT-2 as decoder
         self.model = GPT2LMHeadModel.from_pretrained(decoder_name_or_path)
@@ -153,8 +155,8 @@ class GPT2LMHeadModule(pl.LightningModule):
         self.table_data.clear()
         self.logger.experiment.log({"test_examples": table}, step=self.examples_count)
 
-        if self._wandb_artifact_name and self._wandb_table_name:
-            artifact = wandb.Artifact(self._wandb_artifact_name, type="multilang preds")
+        if self._wandb_artifact_name and self._wandb_artifact_type and self._wandb_table_name:
+            artifact = wandb.Artifact(self._wandb_artifact_name, type=self._wandb_artifact_type)
             artifact.add(table, self._wandb_table_name)
             self.logger.experiment.log_artifact(artifact)
 
