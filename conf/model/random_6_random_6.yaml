@@ -1,0 +1,16 @@
+# @package _group_
+
+dataset_root: raw_data/multilang_v1
+
+encoder_decoder: true
+
+num_layers_encoder: 6
+encoder_model_type: roberta
+diff_tokenizer_name_or_path: raw_data/multilang_v1/diff_tokenizer.json
+
+num_layers_decoder: 6
+decoder_model_type: gpt2
+msg_tokenizer_name_or_path: distilgpt2
+
+tie_encoder_decoder: false
+tie_word_embeddings: false

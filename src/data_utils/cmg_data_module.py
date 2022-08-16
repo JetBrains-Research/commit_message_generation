@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 import hydra
@@ -20,8 +21,8 @@ class CMGDataModule(pl.LightningDataModule):
         msg_tokenizer_name_or_path: str,
         local_rank: int,
         world_size: int,
-        training_with_history: Optional[bool] = True,
-        generation_with_history: Optional[bool] = True,
+        train_with_history: Optional[bool] = True,
+        generate_with_history: Optional[bool] = True,
         use_mtests: Optional[bool] = False,
         marker_tests_root: Optional[str] = None,
         train_dataloader_conf: Optional[DictConfig] = None,
@@ -47,16 +48,9 @@ class CMGDataModule(pl.LightningDataModule):
         self.test_dataloader_conf = test_dataloader_conf
         self.marker_tests_dataloader_conf = marker_tests_dataloader_conf
 
-        if diff_tokenizer_name_or_path.endswith(".json"):
-            self._diff_tokenizer = PreTrainedTokenizerFast(tokenizer_file=to_absolute_path(diff_tokenizer_name_or_path))
-            if self._diff_tokenizer.pad_token is None:
-                self._diff_tokenizer.add_special_tokens(
-                    {"pad_token": "[PAD]", "eos_token": "[SEP]", "bos_token": "[CLS]"}
-                )
-        else:
-            self._diff_tokenizer = AutoTokenizer.from_pretrained(diff_tokenizer_name_or_path, use_fast=True)
-
-        if msg_tokenizer_name_or_path.endswith(".json"):
+        if not msg_tokenizer_name_or_path:
+            raise ValueError("Please make sure to set message tokenizer")
+        elif msg_tokenizer_name_or_path.endswith(".json"):
             self._msg_tokenizer = PreTrainedTokenizerFast(tokenizer_file=to_absolute_path(msg_tokenizer_name_or_path))
         else:
             self._msg_tokenizer = AutoTokenizer.from_pretrained(msg_tokenizer_name_or_path, use_fast=True)
@@ -68,18 +62,32 @@ class CMGDataModule(pl.LightningDataModule):
         if "gpt2" in msg_tokenizer_name_or_path and decoder_sep_tokens == "\n":
             sep_tokens_ids = [self._msg_tokenizer.convert_tokens_to_ids("Ċ")]
         elif decoder_sep_tokens:
-            sep_tokens_ids = self._msg_tokenizer(decoder_sep_tokens).input_ids
+            sep_tokens_ids = self._msg_tokenizer(decoder_sep_tokens, add_special_tokens=False).input_ids
         elif self._msg_tokenizer.sep_token_id:
             sep_tokens_ids = [self._msg_tokenizer.sep_token_id]
         else:
             sep_tokens_ids = [self._msg_tokenizer.eos_token_id]
+
+        if not diff_tokenizer_name_or_path:
+            self._diff_tokenizer = self._msg_tokenizer
+            logging.warning("Diff tokenizer is not set, using message tokenizer")
+        elif diff_tokenizer_name_or_path == msg_tokenizer_name_or_path:
+            self._diff_tokenizer = self._msg_tokenizer
+        elif diff_tokenizer_name_or_path.endswith(".json"):
+            self._diff_tokenizer = PreTrainedTokenizerFast(tokenizer_file=to_absolute_path(diff_tokenizer_name_or_path))
+            if self._diff_tokenizer.pad_token is None:
+                self._diff_tokenizer.add_special_tokens(
+                    {"pad_token": "[PAD]", "eos_token": "[SEP]", "bos_token": "[CLS]"}
+                )
+        else:
+            self._diff_tokenizer = AutoTokenizer.from_pretrained(diff_tokenizer_name_or_path, use_fast=True)
 
         self.data_collator_train = DataCollator(
             diff_tokenizer=self._diff_tokenizer,
             msg_tokenizer=self._msg_tokenizer,
             encoder_context_max_len=encoder_context_max_len,
             decoder_context_max_len=decoder_context_max_len,
-            with_history=training_with_history,
+            with_history=train_with_history,
             decoder_sep_tokens=sep_tokens_ids,
             generation=False,
             testing=testing,
@@ -99,7 +107,7 @@ class CMGDataModule(pl.LightningDataModule):
             msg_tokenizer=self._msg_tokenizer,
             encoder_context_max_len=encoder_context_max_len,
             decoder_context_max_len=decoder_context_max_len,
-            with_history=generation_with_history,
+            with_history=generate_with_history,
             decoder_sep_tokens=sep_tokens_ids,
             context_ratio=context_ratio,
             generation=True,
@@ -131,6 +139,7 @@ class CMGDataModule(pl.LightningDataModule):
                 self.dataset_root + "/test", rank=self.local_rank, world_size=self.world_size
             )
         if stage == "sweep":
+            # when tuning hyperparameters, run test_conf logic but on validation set
             self.test = CMGDatasetWithHistory.load_data(
                 self.dataset_root + "/val", rank=self.local_rank, world_size=self.world_size
             )

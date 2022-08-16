@@ -1,14 +1,14 @@
 wandb:
-  project: cmg_eval
-  name: transformer_with_history_0.25
-  input_artifact_name: saridormi/commit_message_generation/transformer_with_history_preds:v0
-  input_table_name: with_history_context_ratio_0.25
-  metadata_artifact_name: saridormi/commit_message_generation/metadata:v0
-  metadata_table_name: test_metadata
-  output_artifact_name: transformer_with_history_scores
-  output_artifact_type: multilang scores
-  output_table_name: with_history_context_ratio_0.25
+  project: test
+  model_name:
+  model_config:
+
+  artifact_project: saridormi/commit_message_generation
+  input_artifact_name: ${wandb.artifact_project}/${wandb.model_name}_preds:${wandb.model_config}
+  input_table_name: ${wandb.model_config}
+  metadata_artifact_name: saridormi/commit_message_generation/metadata:latest
 
 input_file: path/to/input/file
-
 max_n_tokens: 15
+
+language: false

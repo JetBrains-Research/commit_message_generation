@@ -1,0 +1,24 @@
+# @package _group_
+
+dataset_root:
+diff_tokenizer_name_or_path:
+msg_tokenizer_name_or_path:
+
+context_ratio:
+generate_with_history: true
+train_with_history: true
+encoder_context_max_len: 500
+decoder_context_max_len: 200
+decoder_sep_tokens: "\n"
+
+train_dataloader_conf:
+  batch_size: 16
+  num_workers: 4
+
+val_dataloader_conf:
+  batch_size: 16
+  num_workers: 4
+
+test_dataloader_conf:
+  batch_size: 1
+  num_workers: 1
