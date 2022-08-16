@@ -1,0 +1,8 @@
+# @package _group_
+
+dataset_root: raw_data/multilang_v1
+msg_tokenizer_name_or_path: distilgpt2
+diff_tokenizer_name_or_path:
+
+encoder_decoder: false
+decoder_name_or_path: distilgpt2

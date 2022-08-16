@@ -1,32 +1,10 @@
 stage: test
-dataset:
-  dataset_root: raw_data/multilang_v1
 
-  generation_with_history: true
+defaults:
+  - dataset/default_dataset
 
-  encoder_context_max_len: 500
-  decoder_context_max_len: 200
-
-  context_ratio: 0.05
-
-  diff_tokenizer_name_or_path: raw_data/multilang_v1/diff_tokenizer.json
-  msg_tokenizer_name_or_path: distilgpt2
-
-  decoder_sep_tokens: "\n"
-
-  test_dataloader_conf:
-    batch_size: 1
-    num_workers: 1
-
-logger:
-  name: distilgpt2_0.05
+wandb_logger:
   project: commit_message_generation
-
-model:
-  encoder_decoder: false
-  wandb_artifact_name: distilgpt2_preds
-  wandb_artifact_type: multilang preds
-  wandb_table_name: context_ratio_0.05
 
 generation_kwargs:
   num_beams: 5
@@ -39,9 +17,11 @@ generation_kwargs:
 trainer:
   gpus: 1
 
-artifact:
-  name: saridormi/commit_message_generation/distilgpt2:v0
-  artifact_path: last.ckpt
-  local_path: artifacts/distilgpt2
+model_name: false
 
-ckpt_path: path/to/checkpoint
+model_artifact:
+  project: saridormi/commit_message_generation
+  artifact_path: last.ckpt
+  local_path: artifacts
+
+ckpt_path: placeholder

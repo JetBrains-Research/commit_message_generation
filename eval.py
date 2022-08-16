@@ -4,11 +4,11 @@ import hydra
 import nltk
 import pytorch_lightning as pl
 import wandb
-from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from src.data_utils import CMGDataModule
 from src.model import EncoderDecoderModule, GPT2LMHeadModule
+from src.utils import WandbOrganizer, prepare_cfg
 
 nltk.download("omw-1.4")
 nltk.download("wordnet")
@@ -21,10 +21,9 @@ def main(cfg: DictConfig) -> None:
     # -----------------------
     pl.seed_everything(42)
 
-    print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
+    cfg = prepare_cfg(cfg)
 
-    wandb.Table.MAX_ROWS = 50000
-    print(wandb.Table.MAX_ROWS)
+    print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
 
     dm = CMGDataModule(
         **cfg.dataset,
@@ -33,43 +32,63 @@ def main(cfg: DictConfig) -> None:
     )
     dm.setup(stage=cfg.stage)
 
-    trainer_logger = (
-        pl.loggers.WandbLogger(**cfg.logger, config=OmegaConf.to_container(cfg, resolve=True))
-        if "logger" in cfg
-        else True
-    )
-
-    if "artifact" in cfg:
-        assert isinstance(trainer_logger, pl.loggers.WandbLogger)
-
-        trainer_logger.experiment.use_artifact(cfg.artifact.name).get_path(cfg.artifact.artifact_path).download(
-            root=hydra.utils.to_absolute_path(cfg.artifact.local_path)
+    if "wandb_logger" in cfg:
+        wandb.Table.MAX_ROWS = 50000
+        trainer_logger = pl.loggers.WandbLogger(
+            name=f"context_ratio_{cfg.dataset.context_ratio}_{('with-history' if cfg.dataset.generate_with_history else 'without-history')}",
+            project=cfg.wandb_logger.project,
+            config=OmegaConf.to_container(cfg, resolve=True),
+            job_type="eval",
         )
-        cfg.ckpt_path = os.path.join(hydra.utils.to_absolute_path(cfg.artifact.local_path), cfg.artifact.artifact_path)
+    else:
+        trainer_logger = False
+
+    if "model_name" not in cfg or not cfg.model_name:
+        cfg.model_name = WandbOrganizer.get_run_name(cfg.model, cfg.dataset)
+
+    if "model_artifact" in cfg:
+        assert isinstance(trainer_logger, pl.loggers.WandbLogger)
+        artifact_name = f"{cfg.model_artifact.project}/{cfg.model_name}:latest"
+        artifact = trainer_logger.experiment.use_artifact(artifact_name)
+        if "tags" in artifact.metadata:
+            trainer_logger.experiment.tags = artifact.metadata["tags"] + WandbOrganizer.get_tags_generate(cfg.dataset)
+
+        artifact.get_path(cfg.model_artifact.artifact_path).download(
+            root=hydra.utils.to_absolute_path(f"{cfg.model_artifact.local_path}/{cfg.model_name}")
+        )
+
+        cfg.ckpt_path = os.path.join(
+            hydra.utils.to_absolute_path(f"{cfg.model_artifact.local_path}/{cfg.model_name}"),
+            cfg.model_artifact.artifact_path,
+        )
+
     if "ckpt_path" in cfg:
-        # initialize from already fine-tuned checkpo1int
+        # initialize from fine-tuned checkpoint
         PATH = os.path.join(hydra.utils.get_original_cwd(), cfg.ckpt_path)
         print("Checkpoint path\n", PATH, "\n")
+
         if cfg.model.encoder_decoder:
             # seq2seq model
             model = EncoderDecoderModule.load_from_checkpoint(
                 PATH,
+                **cfg.model,
                 diff_tokenizer=dm._diff_tokenizer,
                 msg_tokenizer=dm._msg_tokenizer,
-                wandb_artifact_name=cfg.model.wandb_artifact_name,
-                wandb_artifact_type=cfg.model.wandb_artifact_type,
-                wandb_table_name=cfg.model.wandb_table_name,
                 generation_kwargs=cfg.generation_kwargs,
+                preds_artifact_name=f"{cfg.model_name}_preds",
+                preds_artifact_type="multilang preds",
+                preds_table_name=f"context_ratio_{cfg.dataset.context_ratio}_{('with-history' if cfg.dataset.generate_with_history else 'without-history')}",
             )
         else:
             # single decoder
             model = GPT2LMHeadModule.load_from_checkpoint(
                 PATH,
+                **cfg.model,
                 tokenizer=dm._msg_tokenizer,
-                wandb_artifact_name=cfg.model.wandb_artifact_name,
-                wandb_artifact_type=cfg.model.wandb_artifact_type,
-                wandb_table_name=cfg.model.wandb_table_name,
                 generation_kwargs=cfg.generation_kwargs,
+                preds_artifact_name=f"{cfg.model_name}_preds",
+                preds_artifact_type="multilang preds",
+                preds_table_name=f"context_ratio_{cfg.dataset.context_ratio}_{('with-history' if cfg.dataset.generate_with_history else 'without-history')}",
             )
 
         trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger)
@@ -87,6 +106,9 @@ def main(cfg: DictConfig) -> None:
                 diff_tokenizer=dm._diff_tokenizer,
                 msg_tokenizer=dm._msg_tokenizer,
                 generation_kwargs=cfg.generation_kwargs,
+                preds_artifact_name=f"{cfg.model_name}_preds",
+                preds_artifact_type="multilang preds",
+                preds_table_name=f"context_ratio_{cfg.context_ratxio}_{('with-history' if cfg.dataset.generate_with_history else 'without-history')}",
             )
         else:
             # single decoder
@@ -94,9 +116,11 @@ def main(cfg: DictConfig) -> None:
                 **cfg.model,
                 tokenizer=dm._msg_tokenizer,
                 generation_kwargs=cfg.generation_kwargs,
+                preds_artifact_name=f"{cfg.model_name}_preds",
+                preds_artifact_type="multilang preds",
+                preds_table_name=f"context_ratio_{cfg.dataset.context_ratio}_{('with-history' if cfg.dataset.generate_with_history else 'without-history')}",
             )
 
-        trainer_logger = instantiate(cfg.logger) if "logger" in cfg else True
         trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger)
 
         # -----------------------

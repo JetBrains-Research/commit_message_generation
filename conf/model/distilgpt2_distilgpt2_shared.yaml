@@ -1,0 +1,13 @@
+# @package _group_
+
+dataset_root: raw_data/multilang_v1_distilgpt2
+diff_tokenizer_name_or_path: ${model.encoder_name_or_path}
+msg_tokenizer_name_or_path: ${model.decoder_name_or_path}
+
+encoder_decoder: true
+
+encoder_name_or_path: distilgpt2
+decoder_name_or_path: distilgpt2
+
+tie_encoder_decoder: true
+tie_word_embeddings: true

@@ -33,16 +33,16 @@ class EncoderDecoderModule(pl.LightningModule):
     It is possible to either use pretrained models or initialize from scratch.
 
     Args:
-        diff_tokenizer: tokenizer for source sequences (diffs)
-        msg_tokenizer: tokenizer for target sequences (messages)
-        wandb_artifact_name: an artifact name for saving model predictions as W&B artifact
-        wandb_artifact_type: an artifact type for saving model predictions as W&B artifact
-        wandb_table_name: a table name for saving model predictions as W&B artifact
-        learning_rate: maximum learning rate
-        num_epochs: total number of epochs (used to calculate total number of steps for LR scheduler)
-        num_batches: total number of batches in one epoch (used to calculate total number of steps for LR scheduler)
-        num_gpus: total number of GPUs (used to calculate total number of steps for LR scheduler)
-        num_layers_encoder: if `encoder_name_or_path` is None, encoder will be initialized
+        diff_tokenizer: Tokenizer for source sequences (diffs)
+        msg_tokenizer: Tokenizer for target sequences (messages)
+        preds_artifact_name: An artifact name for saving model predictions as W&B artifact
+        preds_artifact_type: An artifact type for saving model predictions as W&B artifact
+        preds_table_name: A table name for saving model predictions as W&B artifact
+        learning_rate: Maximum learning rate.
+        num_epochs: Total number of epochs (used to calculate total number of steps for LR scheduler)
+        num_batches: Total number of batches in one epoch (used to calculate total number of steps for LR scheduler)
+        num_gpus: Total number of GPUs (used to calculate total number of steps for LR scheduler)
+        num_layers_encoder: If `encoder_name_or_path` is None, encoder will be initialized
             from scratch with given number of layers; else, if given number of layers is less than number of layers in
             pretrained checkpoint, it will be uniformly picked
         num_layers_decoder: If `decoder_name_or_path` is None, decoder will be initialized
@@ -61,9 +61,9 @@ class EncoderDecoderModule(pl.LightningModule):
         self,
         diff_tokenizer: PreTrainedTokenizerFast,
         msg_tokenizer: PreTrainedTokenizerFast,
-        wandb_artifact_name: Optional[str] = None,
-        wandb_artifact_type: Optional[str] = None,
-        wandb_table_name: Optional[str] = None,
+        preds_artifact_name: Optional[str] = None,
+        preds_artifact_type: Optional[str] = None,
+        preds_table_name: Optional[str] = None,
         learning_rate: Optional[float] = None,
         num_epochs: Optional[int] = None,
         num_batches: Optional[int] = None,
@@ -84,9 +84,9 @@ class EncoderDecoderModule(pl.LightningModule):
         self._diff_tokenizer = diff_tokenizer
         self._msg_tokenizer = msg_tokenizer
 
-        self._wandb_artifact_name = wandb_artifact_name
-        self._wandb_artifact_type = wandb_artifact_type
-        self._wandb_table_name = wandb_table_name
+        self._preds_artifact_name = preds_artifact_name
+        self._preds_artifact_type = preds_artifact_type
+        self._preds_table_name = preds_table_name
 
         self._num_epochs = num_epochs
         self._num_batches = num_batches
@@ -241,7 +241,7 @@ class EncoderDecoderModule(pl.LightningModule):
         train_loss_mean = torch.stack([x["loss"] for x in outputs]).mean()
         self.logger.experiment.log({"train_loss_epoch": train_loss_mean}, step=self.examples_count)
 
-    def validation_step(self, batch, batch_idx, dataloader_idx=None):
+    def validation_step(self, batch, batch_idx, dataloader_idx: Optional[int] = None):
         # validation on github data: calculating next token prediction metrics
         if not dataloader_idx:
             loss, logits = self(batch)[:2]
@@ -249,6 +249,7 @@ class EncoderDecoderModule(pl.LightningModule):
             return {"loss": loss}
         # validation on marker tests: generating examples
         if dataloader_idx == 1:
+            # some reasonable parameters are hard-coded
             # leave only generated part (without history)
             gen_sequences = self.generate(
                 batch,
@@ -273,7 +274,7 @@ class EncoderDecoderModule(pl.LightningModule):
         # next token prediction metrics
         metrics = self.val_metrics.compute()
 
-        # for case with two dataloaders: usual validation & marker test
+        # for case with two dataloaders (usual NTP validation & marker tests)
         if len(outputs) == 2 and not outputs[1]:
             outputs = outputs[0]
 
@@ -291,7 +292,7 @@ class EncoderDecoderModule(pl.LightningModule):
         self.logger.experiment.log(metrics, step=self.examples_count)
 
     def test_step(self, batch, batch_idx):
-        # leave only generated part (without history)
+        # leave only generated part (crop context)
         gen_sequences = self.generate(
             batch,
             early_stopping=True,
@@ -304,7 +305,7 @@ class EncoderDecoderModule(pl.LightningModule):
         decoded_source = self.decode_src(batch["diff_input_ids"])[0]
         decoded_context, decoded_preds = self.decode_trg(batch["msg_input_ids"], gen_sequences)
 
-        # remove prefix from predicted to compute metrics without it
+        # remove prefix from generated sequences to compute metrics without it
         decoded_preds = [pred[len(prefix) :] for pred, prefix in zip(decoded_preds, batch["msg_prefix"])]
 
         history = []
@@ -324,14 +325,20 @@ class EncoderDecoderModule(pl.LightningModule):
         self.table_data["Target"].extend(batch["msg_target"])
 
     def test_epoch_end(self, outputs):
+        # upload predictions to wandb as table
         table = wandb.Table(dataframe=pd.DataFrame.from_dict(self.table_data))
         self.table_data.clear()
         self.logger.experiment.log({"test_examples": table}, step=self.examples_count)
 
-        if self._wandb_artifact_name and self._wandb_artifact_type and self._wandb_table_name:
-            artifact = wandb.Artifact(self._wandb_artifact_name, type=self._wandb_artifact_type)
-            artifact.add(table, self._wandb_table_name)
-            self.logger.experiment.log_artifact(artifact)
+        # upload predictions to wandb as artifact
+        if self._preds_artifact_name and self._preds_artifact_type and self._preds_table_name:
+            artifact = wandb.Artifact(
+                self._preds_artifact_name,
+                type=self._preds_artifact_type,
+                metadata={"tags": self.logger.experiment.tags if self.logger.experiment.tags else None},
+            )
+            artifact.add(table, self._preds_table_name)
+            self.logger.experiment.log_artifact(artifact, aliases=self._preds_table_name)
 
     def configure_optimizers(self):
         if not self.learning_rate:

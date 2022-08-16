@@ -1,0 +1,16 @@
+# @package _group_
+
+dataset_root: raw_data/multilang_v1_codebert
+diff_tokenizer_name_or_path: ${model.encoder_name_or_path}
+msg_tokenizer_name_or_path: ${model.decoder_name_or_path}
+
+encoder_decoder: true
+
+num_layers_encoder: 6
+encoder_name_or_path: microsoft/codebert-base
+
+num_layers_decoder: 6
+decoder_name_or_path: microsoft/codebert-base
+
+tie_encoder_decoder: true
+tie_word_embeddings: true

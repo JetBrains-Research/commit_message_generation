@@ -1,6 +1,5 @@
 import logging
 from pprint import pprint
-from typing import List
 
 import hydra
 import pandas as pd
@@ -15,66 +14,57 @@ logger = logging.getLogger("datasets")
 logger.setLevel(logging.ERROR)
 
 
-def get_tags(cfg: DictConfig) -> List[str]:
-    tags = []
-    if "transformer" in cfg.wandb.input_artifact_name:
-        tags.append("transformer")
-    elif "distilgpt2" in cfg.wandb.input_artifact_name:
-        tags.append("distilgpt2")
-    if "multilang" in cfg.wandb.output_artifact_type:
-        tags.append("multilang")
-    elif "java" in cfg.wandb.output_artifact_name:
-        tags.append("java")
-    if "with_history" in cfg.wandb.input_table_name:
-        tags.append("generation with history")
-    elif "without_history" in cfg.wandb.input_table_name:
-        tags.append("generation without history")
-    if "context_ratio" in cfg.wandb.input_table_name:
-        tags.append(f"context_ratio = {cfg.wandb.input_table_name.split('context_ratio_')[-1]}")
-    if "language" in cfg:
-        tags.append(cfg.language)
-        tags.append("single language")
+def init_run(cfg: DictConfig) -> pd.DataFrame:
+    run = wandb.init(
+        project=cfg.wandb.project,
+        name=cfg.wandb.model_name,
+        job_type="metrics",
+    )
+    input_artifact = run.use_artifact(cfg.wandb.input_artifact_name)
+    if "tags" in input_artifact.metadata:
+        run.tags = input_artifact.metadata["tags"]
+        if "language" in cfg:
+            run.tags.append("single language")
+            run.tags.append(cfg.language)
+    input_table = input_artifact.get(cfg.wandb.input_table_name)
 
-    return tags
+    df = pd.DataFrame(data=input_table.data, columns=input_table.columns)
+    if "metadata_artifact_name" in cfg.wandb and "metadata_table_name" in cfg.wandb:
+        metadata_table = run.use_artifact(cfg.wandb.metadata_artifact_name).get(cfg.wandb.metadata_table_name)
+        metadata_df = pd.DataFrame(data=metadata_table.data, columns=metadata_table.columns)
+        df = pd.concat([df, metadata_df], axis=1)
+    return df
 
 
 @hydra.main(config_path="conf", config_name="metrics_config")
 def main(cfg: DictConfig):
     print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
-    wandb.Table.MAX_ROWS = 50000
 
     if cfg.wandb:
-        run = wandb.init(
-            project=cfg.wandb.project, name=cfg.language if "language" in cfg else cfg.wandb.name, tags=get_tags(cfg)
-        )
-        input_table = run.use_artifact(cfg.wandb.input_artifact_name).get(cfg.wandb.input_table_name)
-        df = pd.DataFrame(data=input_table.data, columns=input_table.columns)
-        if "metadata_artifact_name" in cfg.wandb and "metadata_table_name" in cfg.wandb:
-            metadata_table = run.use_artifact(cfg.wandb.metadata_artifact_name).get(cfg.wandb.metadata_table_name)
-            metadata_df = pd.DataFrame(data=metadata_table.data, columns=metadata_table.columns)
-            df = pd.concat([df, metadata_df], axis=1)
+        wandb.Table.MAX_ROWS = 50000
+        df = init_run(cfg)
     else:
         df = pd.read_csv(to_absolute_path(cfg.input_file))
 
-    if "language" in cfg:
-        df = df.loc[df["language"] == cfg.language]
+    if cfg.language:
+        if "language" in df.columns:
+            df = df.loc[df["language"] == cfg.language]
+        else:
+            logging.warning(
+                f"Configured to evaluate only on {cfg.language} language, but metadata is not provided. Evaluating on full dataset"
+            )
 
     full_metrics = EvaluationMetrics(do_tensors=False, do_strings=True, prefix="test")
-    metrics = {
+    prefix_metrics = {
         i: EvaluationMetrics(n=i, do_tensors=False, do_strings=True, prefix="test")
         for i in range(1, cfg.max_n_tokens + 1)
     }
-
-    sentence_level_metrics = []
 
     for _, row in tqdm(df[["Prediction", "Target"]].iterrows(), total=df.shape[0], desc="Computing metrics"):
         if not row["Target"].strip():
             continue
 
-        cur_metrics = full_metrics.add_batch(
-            predictions=[row["Prediction"].strip()], references=[row["Target"].strip()]
-        )
-        sentence_level_metrics.append({"edit_similarity": cur_metrics["edit_similarity"].item()})
+        full_metrics.add_batch(predictions=[row["Prediction"].strip()], references=[row["Target"].strip()])
 
         pred_words = row["Prediction"].strip().split()
         target_words = row["Target"].strip().split()
@@ -85,41 +75,26 @@ def main(cfg: DictConfig):
 
             pred = " ".join(pred_words[:i])
             target = " ".join(target_words[:i])
-            cur_metrics = metrics[i].add_batch(predictions=[pred], references=[target])
+            prefix_metrics[i].add_batch(predictions=[pred], references=[target])
 
-            if i in [1, 2, 5]:
-                sentence_level_metrics[-1].update(
-                    {
-                        f"edit_similarity@{i}": cur_metrics["edit_similarity"].item(),
-                        f"exact_match@{i}": cur_metrics["exact_match"].item(),
-                    }
-                )
-
-    full_metrics = full_metrics.compute()
-    metrics = {i: metrics[i].compute() for i in metrics}
+    full_metrics_results = full_metrics.compute()
+    prefix_metrics_results = {}
+    for i in prefix_metrics:
+        try:
+            prefix_metrics_results[i] = prefix_metrics[i].compute()
+        except ValueError:
+            logging.warning(f"Prefixes of length {i} did not appear in data")
 
     print("Metrics on full sequences")
-    pprint(full_metrics)
+    pprint(full_metrics_results)
     print()
     print("Metrics by number of tokens")
-    pprint(metrics)
+    pprint(prefix_metrics_results)
 
     if cfg.wandb:
-        if "language" in cfg and cfg.language == "C++":
-            suffix = "_cpp"
-        elif "language" in cfg and cfg.language == "C#":
-            suffix = "_csharp"
-        else:
-            suffix = f"_{cfg.language}" if "language" in cfg else ""
-        for i in metrics:
-            wandb.log(metrics[i], step=i)
-        wandb.log({f"{metric_name}_full": full_metrics[metric_name] for metric_name in full_metrics})
-
-        sentence_scores_df = pd.concat([df, pd.DataFrame(sentence_level_metrics)], axis=1)
-        artifact = wandb.Artifact(name=f"{cfg.wandb.output_artifact_name}{suffix}", type=cfg.wandb.output_artifact_type)
-        join_table = wandb.Table(dataframe=sentence_scores_df)
-        artifact.add(join_table, f"{cfg.wandb.output_table_name}{suffix}")
-        run.log_artifact(artifact)
+        for i in prefix_metrics_results:
+            wandb.log(prefix_metrics_results[i], step=i)
+        wandb.log({f"{metric_name}_full": full_metrics_results[metric_name] for metric_name in full_metrics_results})
 
 
 if __name__ == "__main__":
