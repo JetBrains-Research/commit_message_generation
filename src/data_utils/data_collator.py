@@ -27,6 +27,8 @@ class DataCollator:
 
       Format without history: `[BOS] X% characters of message`
 
+    Important: assumes that both diffs and messages do not contain special tokens ([BOS]/[EOS]/etc.).
+
     Args:
         diff_tokenizer: Tokenizer used to tokenize diff.
         msg_tokenizer: Tokenizer used to tokenize messages.
@@ -55,8 +57,19 @@ class DataCollator:
     def _get_prefix(
         self, message_ids: List[int], context_len: Optional[int] = None
     ) -> Dict[str, Union[List[int], str]]:
-        message = self.msg_tokenizer.decode(message_ids, skip_special_tokens=True)
+        """Builds context and target for completion-style generation.
+        The last word in context is treated as prefix for the first generated word.
 
+        Args:
+            message_ids: Input message, tokenized.
+
+        Returns:
+        Dictionary with the following keys:
+            - msg_input_ids: Context for the model, tokenized.
+            - msg_target: Target, string.
+            - msg_prefix: Prefix, string.
+        """
+        message = self.msg_tokenizer.decode(message_ids, skip_special_tokens=True)
         if not context_len:
             context_len = len(message) * self.context_ratio
         input, target = message[: int(context_len)], message[int(context_len) :]
@@ -76,9 +89,25 @@ class DataCollator:
             if len(context) > 0:
                 prefix = " " + prefix
 
-        return {"msg_input_ids": self.msg_tokenizer(context).input_ids, "msg_target": target, "msg_prefix": prefix}
+        return {
+            "msg_input_ids": self.msg_tokenizer(context, add_special_tokens=False).input_ids,
+            "msg_target": target,
+            "msg_prefix": prefix,
+        }
 
     def _process_msg_gen(self, message_ids: List[int]) -> Dict[str, Union[List[int], str]]:
+        """Builds context and target for generation.
+        The last word in context is treated as prefix for the first generated word.
+
+        Args:
+            message_ids: Input message, tokenized.
+
+        Returns:
+        Dictionary with the following keys:
+            - msg_input_ids: Context for the model, tokenized.
+            - msg_target: Target, string.
+            - msg_prefix: Prefix, string.
+        """
         # context_ratio = 0.0 => do not include anything in context
         if self.context_ratio == 0.0:
             return {
@@ -105,12 +134,12 @@ class DataCollator:
             message_inputs: List[List[int]] = [e["msg_input_ids"] for e in examples]
             history_inputs: List[List[List[int]]] = [e["history_input_ids"] for e in examples]
 
-            all_diff_ids = []
-
-            for diff in diff_inputs:
-                if diff[-1] == self.diff_tokenizer.eos_token_id:
-                    diff = diff[:-1]
-                all_diff_ids.append(diff[: self.decoder_context_max_len - 1] + [self.diff_tokenizer.eos_token_id])
+            all_diff_ids = [
+                [self.diff_tokenizer.bos_token_id]
+                + diff[: self.decoder_context_max_len - 2]
+                + [self.diff_tokenizer.eos_token_id]
+                for diff in diff_inputs
+            ]
 
             all_msg_ids = []  # input for training or NTP metrics: history + cur_msg (right-side padding)
             all_msg_masks = []  # 0 on pad tokens and 1 otherwise (right-side padding)
@@ -155,7 +184,7 @@ class DataCollator:
                 cur_ids.extend(cur_history_ids)
                 cur_ids.append(message_ids)
 
-                cur_labels = [[self.msg_tokenizer.bos_token_id]]
+                cur_labels = [[-100]]
                 cur_labels.extend(cur_history_labels)
                 cur_labels.append(message_ids)
 
