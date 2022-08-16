@@ -10,11 +10,15 @@ import wandb
 from omegaconf import DictConfig
 from transformers import (
     AdamW,
+    AutoConfig,
+    AutoModel,
+    AutoModelForCausalLM,
+    EncoderDecoderConfig,
     EncoderDecoderModel,
-    GPT2Config,
     GPT2LMHeadModel,
+    PreTrainedModel,
     PreTrainedTokenizerFast,
-    RobertaConfig,
+    RobertaForCausalLM,
     RobertaModel,
     get_linear_schedule_with_warmup,
 )
@@ -23,10 +27,9 @@ from src.utils import EvaluationMetrics, PrefixAllowedTokens
 
 
 class EncoderDecoderModule(pl.LightningModule):
-    """This class is used for training and evaluation of Transformer model for
+    """This class is used for training and evaluation of seq2seq Transformer model for
     commit message completion task.
 
-    More specifically, RoBERTa is used as an encoder and GPT-2 is used as a decoder.
     It is possible to either use pretrained models or initialize from scratch.
 
     Args:
@@ -42,11 +45,15 @@ class EncoderDecoderModule(pl.LightningModule):
         num_layers_encoder: if `encoder_name_or_path` is None, encoder will be initialized
             from scratch with given number of layers; else, if given number of layers is less than number of layers in
             pretrained checkpoint, it will be uniformly picked
-        num_layers_decoder: if `decoder_name_or_path` is None, decoder will be initialized
+        num_layers_decoder: If `decoder_name_or_path` is None, decoder will be initialized
             from scratch with given number of layers; else, if given number of layers is less than number of layers in
             pretrained checkpoint, it will be uniformly picked
-        encoder_name_or_path: use to initialize encoder with pretrained checkpoint
-        decoder_name_or_path: use to initialize decoder with pretrained checkpoint
+        encoder_name_or_path: Optional – name or path to pretrained checkpoint to initialize encoder with
+        decoder_name_or_path: Optional – name or path to pretrained checkpoint to initialize decoder with
+        encoder_model_type: Optional – if encoder is initialized from scratch, this specific model class will be used
+        decoder_model_type: Optional – if decoder is initialized from scratch, this specific model class will be used
+        tie_encoder_decoder: If set to `True`, encoder and decoder will share the same parameters
+        tie_word_embeddings: If set to `True`, encoder and decoder will share the same parameters for embedding layers
         generation_kwargs: kwargs for transformers.generation_utils.GenerationMixin.generate
     """
 
@@ -65,6 +72,10 @@ class EncoderDecoderModule(pl.LightningModule):
         num_layers_decoder: Optional[int] = None,
         encoder_name_or_path: Optional[str] = None,
         decoder_name_or_path: Optional[str] = None,
+        encoder_model_type: Optional[str] = None,
+        decoder_model_type: Optional[str] = None,
+        tie_encoder_decoder: Optional[bool] = None,
+        tie_word_embeddings: Optional[bool] = None,
         generation_kwargs: Optional[DictConfig] = None,
         **kwargs,
     ):
@@ -84,57 +95,33 @@ class EncoderDecoderModule(pl.LightningModule):
 
         self.generation_kwargs = generation_kwargs
 
-        if encoder_name_or_path:
-            # use pretrained RoBERTa as encoder
-            encoder = RobertaModel.from_pretrained(encoder_name_or_path)
-            # resize embeddings to match vocabulary size
-            encoder.resize_token_embeddings(len(self._diff_tokenizer))
-            # remove layers if necessary
-            if num_layers_encoder is not None and num_layers_encoder < encoder.config.num_hidden_layers:
-                encoder = EncoderDecoderModule.remove_layers_from_model(encoder, num_layers_encoder, is_gpt=False)
-        elif num_layers_encoder:
-            # use randomly initialized RoBERTa as encoder
-            encoder_config = RobertaConfig()
-            encoder_config.vocab_size = self._diff_tokenizer.vocab_size
-            encoder_config.num_hidden_layers = num_layers_encoder
-            encoder = RobertaModel(config=encoder_config)
-            # resize embeddings to match vocabulary size
-            encoder.resize_token_embeddings(len(self._diff_tokenizer))
-        else:
-            raise ValueError(
-                "You have to specify either `encoder_num_layers` for training from scratch \
-                                          or `encoder_name_or_path` for loading pretrained model"
-            )
+        self.save_hyperparameters()
 
-        if decoder_name_or_path:
-            # use pretrained GPT-2 as decoder
-            config = GPT2Config.from_pretrained(decoder_name_or_path)
-            config.is_decoder = True
-            config.add_cross_attention = True
-            decoder = GPT2LMHeadModel.from_pretrained(decoder_name_or_path, config=config)
-            # remove layers if necessary
-            if num_layers_decoder is not None and num_layers_decoder < decoder.config.n_layer:
-                decoder = EncoderDecoderModule.remove_layers_from_model(decoder, num_layers_decoder, is_gpt=True)
-        elif num_layers_decoder:
-            # use randomly initialized GPT-2 as decoder
-            decoder_config = GPT2Config()
-            decoder_config.n_layer = num_layers_decoder
-            decoder_config.is_decoder = True
-            decoder_config.add_cross_attention = True
-            decoder = GPT2LMHeadModel(config=decoder_config)
-        else:
-            raise ValueError(
-                "You have to specify either `decoder_num_layers` for training from scratch \
-                                          or `decoder_name_or_path` for loading pretrained model"
-            )
+        encoder = self.prepare_model(
+            encoder_or_decoder="encoder",
+            model_type=encoder_model_type,
+            name_or_path=encoder_name_or_path,
+            num_layers=num_layers_encoder,
+        )
+        decoder = self.prepare_model(
+            encoder_or_decoder="decoder",
+            model_type=decoder_model_type,
+            name_or_path=decoder_name_or_path,
+            num_layers=num_layers_decoder,
+        )
 
-        self.model = EncoderDecoderModel(encoder=encoder, decoder=decoder)
+        config = EncoderDecoderConfig.from_encoder_decoder_configs(
+            encoder_config=encoder.config, decoder_config=decoder.config
+        )
+        config.encoder.tie_encoder_decoder = tie_encoder_decoder
+        config.decoder.tie_encoder_decoder = tie_encoder_decoder
+        config.tie_encoder_decoder = tie_encoder_decoder
+        config.tie_word_embeddings = tie_word_embeddings
+
+        self.model = EncoderDecoderModel(encoder=encoder, decoder=decoder, config=config)
 
         # cache is currently not supported by EncoderDecoder framework
         self.model.decoder.config.use_cache = False
-
-        # do not tie output embeddings to input embeddings
-        self.model.config.tie_word_embeddings = False
 
         # will be logged to W&B
         self.table_data = defaultdict(list)
@@ -142,6 +129,76 @@ class EncoderDecoderModule(pl.LightningModule):
 
         # to make logs for different batch sizes prettier
         self.examples_count = 0
+
+    def prepare_model(
+        self,
+        encoder_or_decoder: str,
+        model_type: str,
+        num_layers: Optional[int] = None,
+        name_or_path: Optional[str] = None,
+    ) -> PreTrainedModel:
+        """
+        Initializes either encoder or decoder for further use in EncoderDecoderModel class.
+
+        Args:
+            encoder_or_decoder: Pass `encoder` to correctly initialize any model as seq2seq encoder.
+              Pass `decoder` to correctly initialize any model as seq2seq decoder.
+            model_type: Necessary for training from scratch. Corresponding model class will be used.
+              Currently supported: `bert`, `roberta`, `gpt2`.
+            num_layers: Optional – number of layers. If pretrained model is used and `num_layers` is less than
+              actual number of layers in the model, `num_layers` layers will be picked uniformly. When empty,
+              default number of layers will be used.
+            name_or_path: Optional – name on HuggingFace Hub or path to pretrained model weights.
+
+        Returns:
+            initialized model for further use in EncoderDecoderModel class
+        """
+        # use pretrained model
+        if name_or_path:
+            if encoder_or_decoder == "encoder":
+                model = AutoModel.from_pretrained(name_or_path)
+            else:
+                model = AutoModelForCausalLM.from_pretrained(name_or_path, is_decoder=True, add_cross_attention=True)
+
+            # remove layers if necessary
+            if num_layers is not None:
+                if model.config.model_type in ["bert", "roberta", "gpt2"]:
+                    if (
+                        model.config.model_type in ["bert", "roberta"]
+                        and num_layers < model.config.num_hidden_layers
+                        or model.config.model_type == "gpt2"
+                        and num_layers < model.config.n_layer
+                    ):
+                        model = EncoderDecoderModule.remove_layers_from_model(model, num_layers)
+                else:
+                    logging.warning("Unknown model type, default number of layers is used")
+        elif num_layers:
+            # use randomly initialized model
+            config = AutoConfig.for_model(model_type=model_type)
+
+            # set specified number of hidden layers
+            if config.model_type == "gpt2":
+                config.n_layer = num_layers
+            elif config.model_type in ["bert", "roberta"]:
+                config.num_hidden_layers = num_layers
+            else:
+                logging.warning("Unknown model type, default number of layers is used")
+
+            # update vocabulary size according to corresponding tokenizer
+            if encoder_or_decoder == "encoder":
+                config.vocab_size = len(self._diff_tokenizer)
+                model = AutoModel.from_config(config=config)
+            else:
+                config.vocab_size = len(self._msg_tokenizer)
+                config.is_decoder = True
+                config.add_cross_attention = True
+                model = AutoModelForCausalLM.from_config(config=config)
+        else:
+            raise ValueError(
+                f"Unable to initialize {encoder_or_decoder}. You have to specify either `num_layers` and `model_type` to train from scratch or `name_or_path` to load pretrained model"
+            )
+
+        return model
 
     def forward(self, batch):
         return self.model(
@@ -245,7 +302,6 @@ class EncoderDecoderModule(pl.LightningModule):
 
         # decode tokenized sequences
         decoded_source = self.decode_src(batch["diff_input_ids"])[0]
-
         decoded_context, decoded_preds = self.decode_trg(batch["msg_input_ids"], gen_sequences)
 
         # remove prefix from predicted to compute metrics without it
@@ -278,7 +334,6 @@ class EncoderDecoderModule(pl.LightningModule):
             self.logger.experiment.log_artifact(artifact)
 
     def configure_optimizers(self):
-
         if not self.learning_rate:
             logging.warning("Learning rate is not set, proceeding with default value 1e-3")
             self.learning_rate = 1e-3
@@ -305,9 +360,28 @@ class EncoderDecoderModule(pl.LightningModule):
         return tuple(self._msg_tokenizer.batch_decode(arg, skip_special_tokens=True) for arg in args)
 
     @staticmethod
-    def remove_layers_from_model(teacher, num_layers, is_gpt):
-        if not is_gpt:
-            teacher_config = teacher.config
+    def remove_layers_from_model(teacher: PreTrainedModel, num_layers: int) -> PreTrainedModel:
+        if isinstance(teacher, RobertaForCausalLM):
+            student_config = copy(teacher.config)
+            student_config.num_hidden_layers = num_layers
+            student = RobertaForCausalLM(config=student_config)
+
+            # copy all embeddings
+            student.roberta.embeddings.word_embeddings = teacher.roberta.embeddings.word_embeddings
+            student.roberta.embeddings.position_embeddings = teacher.roberta.embeddings.position_embeddings
+            student.roberta.embeddings.token_type_embeddings = teacher.roberta.embeddings.token_type_embeddings
+            student.roberta.embeddings.LayerNorm = teacher.roberta.embeddings.LayerNorm
+            student.roberta.embeddings.dropout = teacher.roberta.embeddings.dropout
+
+            # uniformly pick from middle layers from teacher
+            # it is basically np.linspace(0, teacher_config.num_hidden_layers,
+            #                             num=student_config.num_hidden_layers, endpoint=True)
+            step = (teacher.config.num_hidden_layers - 1) / (student_config.num_hidden_layers - 1)
+            for student_layer, teacher_layer in enumerate(
+                int(i * step) for i in range(student_config.num_hidden_layers)
+            ):
+                student.roberta.encoder.layer[student_layer] = teacher.roberta.encoder.layer[teacher_layer]
+        elif isinstance(teacher, RobertaModel):
             student_config = copy(teacher.config)
             student_config.num_hidden_layers = num_layers
             student = RobertaModel(config=student_config)
@@ -322,14 +396,12 @@ class EncoderDecoderModule(pl.LightningModule):
             # uniformly pick from middle layers from teacher
             # it is basically np.linspace(0, teacher_config.num_hidden_layers,
             #                             num=student_config.num_hidden_layers, endpoint=True)
-            step = (teacher_config.num_hidden_layers - 1) / (student_config.num_hidden_layers - 1)
+            step = (teacher.config.num_hidden_layers - 1) / (student_config.num_hidden_layers - 1)
             for student_layer, teacher_layer in enumerate(
                 int(i * step) for i in range(student_config.num_hidden_layers)
             ):
                 student.encoder.layer[student_layer] = teacher.encoder.layer[teacher_layer]
-
-        else:
-            teacher_config = teacher.config
+        elif isinstance(teacher, GPT2LMHeadModel):
             student_config = copy(teacher.config)
             student_config.n_layer = num_layers
 
@@ -344,7 +416,7 @@ class EncoderDecoderModule(pl.LightningModule):
             student.tie_weights()
             # Uniformly pick from middle layers from teacher
             # It is basically np.linspace(0, teacher_config.n_layer, num=student_config.n_layer, endpoint=True)
-            step = (teacher_config.n_layer - 1) / (student_config.n_layer - 1)
+            step = (teacher.config.n_layer - 1) / (student_config.n_layer - 1)
             for student_layer, teacher_layer in enumerate(int(i * step) for i in range(student_config.n_layer)):
                 student.transformer.h[student_layer] = teacher.transformer.h[teacher_layer]
         return student
