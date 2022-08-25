@@ -2,19 +2,22 @@ import pytest
 import torch
 from transformers import AutoTokenizer
 
-from src.model import EncoderDecoderModule
-from src.utils import PrefixAllowedTokens
+from src.model import CMCModule
+from src.utils import Batch, PrefixAllowedTokens
 
 torch.manual_seed(42)
 
 
 @pytest.fixture
 def default_setting():
-    model = EncoderDecoderModule(
+    model = CMCModule(
+        model_configuration="encoder_decoder",
         diff_tokenizer=AutoTokenizer.from_pretrained("distilbert-base-uncased"),
         msg_tokenizer=AutoTokenizer.from_pretrained("distilgpt2"),
         encoder_name_or_path="distilbert-base-uncased",
         decoder_name_or_path="distilgpt2",
+        encoder_context_max_len=512,
+        decoder_context_max_len=256,
     )
     return model, {"num_beams": 4, "num_return_sequences": 4}
 
@@ -36,17 +39,19 @@ def test_with_and_without_prefix_fn(default_setting, context, prefix, expected):
     tokenized_context = model._msg_tokenizer(context, return_tensors="pt").input_ids
     tokenized_context_w_prefix = model._msg_tokenizer(context + prefix, return_tensors="pt").input_ids
 
-    min_len = 4
-    max_len = 4
+    min_len = 2
+    max_len = 2
 
     results_with_prefix_fn = model.generate(
-        batch={
-            "diff_input_ids": None,
-            "diff_attention_mask": None,
-            "msg_input_ids": tokenized_context,
-            "msg_attention_mask": torch.ones_like(tokenized_context),
-            "msg_prefix": [prefix],
-        },
+        batch=Batch(
+            diff_input_ids=torch.zeros_like(tokenized_context),
+            diff_attention_mask=torch.zeros_like(tokenized_context),
+            msg_input_ids=tokenized_context,
+            msg_attention_mask=torch.ones_like(tokenized_context),
+            msg_prefixes=[prefix],
+            msg_targets=[],
+            msg_labels=tokenized_context,
+        ),
         bos_token_id=model._diff_tokenizer.cls_token_id,
         min_length=min_len + tokenized_context.shape[1],
         max_length=max_len + tokenized_context.shape[1],
@@ -57,13 +62,15 @@ def test_with_and_without_prefix_fn(default_setting, context, prefix, expected):
     )
 
     results_without_prefix_fn = model.generate(
-        batch={
-            "diff_input_ids": None,
-            "diff_attention_mask": None,
-            "msg_input_ids": tokenized_context_w_prefix,
-            "msg_attention_mask": torch.ones_like(tokenized_context_w_prefix),
-            "msg_prefix": [],
-        },
+        batch=Batch(
+            diff_input_ids=torch.zeros_like(tokenized_context_w_prefix),
+            diff_attention_mask=torch.zeros_like(tokenized_context_w_prefix),
+            msg_input_ids=tokenized_context_w_prefix,
+            msg_attention_mask=torch.ones_like(tokenized_context_w_prefix),
+            msg_prefixes=[],
+            msg_targets=[],
+            msg_labels=tokenized_context_w_prefix,
+        ),
         bos_token_id=model._diff_tokenizer.cls_token_id,
         min_length=min_len + tokenized_context_w_prefix.shape[1],
         max_length=max_len + tokenized_context_w_prefix.shape[1],

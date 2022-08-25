@@ -18,15 +18,17 @@ class EditSimilarity(Metric):
         deletion_cost: int = 1,
         substitution_cost: int = 1,
         dist_sync_on_step: Optional[bool] = False,
-    ):
+    ) -> None:
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
         self.weights = (insertion_cost, deletion_cost, substitution_cost)
 
+        self.scores: torch.Tensor
+        self.total: torch.Tensor
         self.add_state("scores", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
-    def update(self, predictions: List[str], references: List[str]) -> None:
+    def update(self, predictions: List[str], references: List[str]) -> None:  # type: ignore[override]
         for pred, ref in zip(predictions, references):
             e_sim = normalized_similarity(
                 pred,
@@ -40,5 +42,5 @@ class EditSimilarity(Metric):
                 self.scores += torch.tensor(e_sim)
             self.total += 1
 
-    def compute(self) -> float:
+    def compute(self) -> torch.Tensor:
         return self.scores / self.total

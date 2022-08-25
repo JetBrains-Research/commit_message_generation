@@ -56,9 +56,7 @@ class BLEUNorm(datasets.Metric):
             codebase_urls=["https://github.com/DeepSoftwareAnalytics/CommitMsgEmpirical/blob/main/metrics/B-Norm.py"],
         )
 
-    def _compute(self, predictions: List[str], references: List[str]) -> Dict[str, float]:
-
+    def _compute(self, predictions: List[str], references: List[str]) -> Dict[str, float]:  # type: ignore[override]
         prediction_map = {i: [splitPuncts(pred.strip().lower())] for i, pred in enumerate(predictions)}
         gold_map = {i: [splitPuncts(ref.strip().lower())] for i, ref in enumerate(references)}
-
         return {"b_norm": bleuFromMaps(gold_map, prediction_map)[0] / 100.0}

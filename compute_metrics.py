@@ -8,35 +8,43 @@ from hydra.utils import to_absolute_path
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-from src.utils import EvaluationMetrics
+from src.utils import EvaluationMetrics, prepare_metrics_cfg
 
 logger = logging.getLogger("datasets")
 logger.setLevel(logging.ERROR)
 
 
 def init_run(cfg: DictConfig) -> pd.DataFrame:
-    run = wandb.init(
+    cfg = prepare_metrics_cfg(cfg)
+    run: wandb.wandb_sdk.wandb_run.Run = wandb.init(
         project=cfg.wandb.project,
         name=cfg.wandb.model_name,
         job_type="metrics",
-    )
+    )  # type: ignore[assignment]
     input_artifact = run.use_artifact(cfg.wandb.input_artifact_name)
     if "tags" in input_artifact.metadata:
         run.tags = input_artifact.metadata["tags"]
-        if "language" in cfg:
-            run.tags.append("single language")
-            run.tags.append(cfg.language)
+        if "language" in cfg and cfg.language:
+            run.tags += ("single language",)
+            run.tags += (cfg.language,)
     input_table = input_artifact.get(cfg.wandb.input_table_name)
 
     df = pd.DataFrame(data=input_table.data, columns=input_table.columns)
     if "metadata_artifact_name" in cfg.wandb and "metadata_table_name" in cfg.wandb:
         metadata_table = run.use_artifact(cfg.wandb.metadata_artifact_name).get(cfg.wandb.metadata_table_name)
         metadata_df = pd.DataFrame(data=metadata_table.data, columns=metadata_table.columns)
+
+        # only happens when only first N examples were generated (e.g. for testing purposes)
+        if len(df) < len(metadata_df):
+            logging.warning(
+                f"Predictions table is smaller than metadata table: {len(df)} vs {len(metadata_df)}! Trimming metadata table to {len(df)}"
+            )
+            metadata_df = metadata_df.head(len(df))
         df = pd.concat([df, metadata_df], axis=1)
     return df
 
 
-@hydra.main(config_path="conf", config_name="metrics_config")
+@hydra.main(version_base=None, config_path="conf", config_name="metrics_config")
 def main(cfg: DictConfig):
     print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
 
@@ -53,6 +61,12 @@ def main(cfg: DictConfig):
             logging.warning(
                 f"Configured to evaluate only on {cfg.language} language, but metadata is not provided. Evaluating on full dataset"
             )
+
+    if cfg.only_short_sequences:
+        df = df.loc[df["bpe_num_tokens_diff"] <= 512]
+
+    if cfg.only_long_sequences:
+        df = df.loc[df["bpe_num_tokens_diff"] > 512]
 
     full_metrics = EvaluationMetrics(do_tensors=False, do_strings=True, prefix="test")
     prefix_metrics = {
@@ -84,6 +98,8 @@ def main(cfg: DictConfig):
             prefix_metrics_results[i] = prefix_metrics[i].compute()
         except ValueError:
             logging.warning(f"Prefixes of length {i} did not appear in data")
+        except ZeroDivisionError as e:
+            logging.warning(f"ZeroDivisionError with prefixes of length {i}")
 
     print("Metrics on full sequences")
     pprint(full_metrics_results)

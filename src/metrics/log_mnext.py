@@ -18,14 +18,15 @@ class LogMNEXT(Metric):
 
     def __init__(self, dist_sync_on_step: Optional[bool] = False):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
-
+        self.scores: torch.Tensor
+        self.total: torch.Tensor
         self.add_state("scores", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
-    def update(self, predictions: List[str], references: List[str]) -> None:
+    def update(self, predictions: List[str], references: List[str]) -> None:  # type: ignore[override]
         for pred, ref in zip(predictions, references):
             self.scores += torch.tensor(log_mnext_score([ref], pred))
             self.total += 1
 
-    def compute(self) -> float:
+    def compute(self) -> torch.Tensor:
         return self.scores / self.total

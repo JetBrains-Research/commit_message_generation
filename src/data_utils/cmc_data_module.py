@@ -1,28 +1,30 @@
 import logging
+import os
 from typing import Optional
 
 import hydra
 import pytorch_lightning as pl
-from hydra.utils import to_absolute_path
 from omegaconf import DictConfig
-from transformers import AutoTokenizer, PreTrainedTokenizerFast
+from transformers import AutoTokenizer
 
-from .cmg_dataset_w_history import CMGDatasetWithHistory
+from .cmc_dataset_w_history import CMCDatasetWithHistory
 from .data_collator import DataCollator
 
 
-class CMGDataModule(pl.LightningDataModule):
+class CMCDataModule(pl.LightningDataModule):
     def __init__(
         self,
         dataset_root: str,
+        diffs_folder: str,
+        msgs_folder: str,
         encoder_context_max_len: int,
         decoder_context_max_len: int,
         diff_tokenizer_name_or_path: str,
         msg_tokenizer_name_or_path: str,
         local_rank: int,
         world_size: int,
-        train_with_history: Optional[bool] = True,
-        generate_with_history: Optional[bool] = True,
+        train_with_history: bool,
+        generate_with_history: bool,
         use_mtests: Optional[bool] = False,
         marker_tests_root: Optional[str] = None,
         train_dataloader_conf: Optional[DictConfig] = None,
@@ -35,13 +37,17 @@ class CMGDataModule(pl.LightningDataModule):
     ):
         super().__init__()
 
-        self.dataset_root = hydra.utils.to_absolute_path(dataset_root)
+        dataset_root = hydra.utils.to_absolute_path(dataset_root)
+        self.diffs_path = os.path.join(dataset_root, "diffs", diffs_folder)
+        self.msgs_path = os.path.join(dataset_root, "msgs", msgs_folder)
         self.marker_tests_root = None
-        if use_mtests:
+        if use_mtests and marker_tests_root:
             self.marker_tests_root = hydra.utils.to_absolute_path(marker_tests_root)
 
         self.local_rank = local_rank
         self.world_size = world_size
+
+        self.train_len: int
 
         self.train_dataloader_conf = train_dataloader_conf
         self.val_dataloader_conf = val_dataloader_conf
@@ -50,14 +56,16 @@ class CMGDataModule(pl.LightningDataModule):
 
         if not msg_tokenizer_name_or_path:
             raise ValueError("Please make sure to set message tokenizer")
-        elif msg_tokenizer_name_or_path.endswith(".json"):
-            self._msg_tokenizer = PreTrainedTokenizerFast(tokenizer_file=to_absolute_path(msg_tokenizer_name_or_path))
-        else:
-            self._msg_tokenizer = AutoTokenizer.from_pretrained(msg_tokenizer_name_or_path, use_fast=True)
+        try:
+            self._msg_tokenizer = AutoTokenizer.from_pretrained(msg_tokenizer_name_or_path)
+        except ValueError:
+            self._msg_tokenizer = AutoTokenizer.from_pretrained(
+                hydra.utils.to_absolute_path(msg_tokenizer_name_or_path)
+            )
+        if "gpt2" in msg_tokenizer_name_or_path:
             # set pad_token_id to unk_token_id -> be careful here as unk_token_id == eos_token_id == bos_token_id
             # (from https://huggingface.co/patrickvonplaten/bert2gpt2-cnn_dailymail-fp16)
-            if "gpt2" in msg_tokenizer_name_or_path:
-                self._msg_tokenizer.pad_token = self._msg_tokenizer.unk_token
+            self._msg_tokenizer.pad_token = self._msg_tokenizer.unk_token
 
         if "gpt2" in msg_tokenizer_name_or_path and decoder_sep_tokens == "\n":
             sep_tokens_ids = [self._msg_tokenizer.convert_tokens_to_ids("Ċ")]
@@ -73,14 +81,13 @@ class CMGDataModule(pl.LightningDataModule):
             logging.warning("Diff tokenizer is not set, using message tokenizer")
         elif diff_tokenizer_name_or_path == msg_tokenizer_name_or_path:
             self._diff_tokenizer = self._msg_tokenizer
-        elif diff_tokenizer_name_or_path.endswith(".json"):
-            self._diff_tokenizer = PreTrainedTokenizerFast(tokenizer_file=to_absolute_path(diff_tokenizer_name_or_path))
-            if self._diff_tokenizer.pad_token is None:
-                self._diff_tokenizer.add_special_tokens(
-                    {"pad_token": "[PAD]", "eos_token": "[SEP]", "bos_token": "[CLS]"}
-                )
         else:
-            self._diff_tokenizer = AutoTokenizer.from_pretrained(diff_tokenizer_name_or_path, use_fast=True)
+            try:
+                self._diff_tokenizer = AutoTokenizer.from_pretrained(diff_tokenizer_name_or_path)
+            except ValueError:
+                self._diff_tokenizer = AutoTokenizer.from_pretrained(
+                    hydra.utils.to_absolute_path(diff_tokenizer_name_or_path)
+                )
 
         self.data_collator_train = DataCollator(
             diff_tokenizer=self._diff_tokenizer,
@@ -122,26 +129,47 @@ class CMGDataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # called on every GPU
         if stage == "fit" or stage is None:
-            self.train = CMGDatasetWithHistory.load_data(
-                self.dataset_root + "/train", rank=self.local_rank, world_size=self.world_size
+            self.train = CMCDatasetWithHistory.load_data(
+                diffs_path=self.diffs_path,
+                msgs_path=self.msgs_path,
+                part="train",
+                rank=self.local_rank,
+                world_size=self.world_size,
             )
-            self.val = CMGDatasetWithHistory.load_data(
-                self.dataset_root + "/val", rank=self.local_rank, world_size=self.world_size
+            self.train_len = self.train._len
+            self.val = CMCDatasetWithHistory.load_data(
+                diffs_path=self.diffs_path,
+                msgs_path=self.msgs_path,
+                part="val",
+                rank=self.local_rank,
+                world_size=self.world_size,
             )
 
             self.marker_tests = None
             if self.marker_tests_root:
-                self.marker_tests = CMGDatasetWithHistory.load_data(
-                    self.marker_tests_root + "/mtests", rank=self.local_rank, world_size=self.world_size
+                self.marker_tests = CMCDatasetWithHistory.load_data(
+                    diffs_path=self.diffs_path,
+                    msgs_path=self.msgs_path,
+                    part="mtests",
+                    rank=self.local_rank,
+                    world_size=self.world_size,
                 )
         if stage == "test" or stage is None:
-            self.test = CMGDatasetWithHistory.load_data(
-                self.dataset_root + "/test", rank=self.local_rank, world_size=self.world_size
+            self.test = CMCDatasetWithHistory.load_data(
+                diffs_path=self.diffs_path,
+                msgs_path=self.msgs_path,
+                part="test",
+                rank=self.local_rank,
+                world_size=self.world_size,
             )
         if stage == "sweep":
             # when tuning hyperparameters, run test_conf logic but on validation set
-            self.test = CMGDatasetWithHistory.load_data(
-                self.dataset_root + "/val", rank=self.local_rank, world_size=self.world_size
+            self.test = CMCDatasetWithHistory.load_data(
+                diffs_path=self.diffs_path,
+                msgs_path=self.msgs_path,
+                part="val",
+                rank=self.local_rank,
+                world_size=self.world_size,
             )
 
     def train_dataloader(self):

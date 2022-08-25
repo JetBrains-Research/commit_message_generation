@@ -1,3 +1,3 @@
-from src.data_utils.cmg_data_module import CMGDataModule
+from src.data_utils.cmc_data_module import CMCDataModule
 
-__all__ = ["CMGDataModule"]
+__all__ = ["CMCDataModule"]

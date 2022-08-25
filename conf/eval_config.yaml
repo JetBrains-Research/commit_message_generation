@@ -1,6 +1,7 @@
 stage: test
 
 defaults:
+  - _self_
   - dataset/default_dataset
 
 wandb_logger:
@@ -11,11 +12,11 @@ generation_kwargs:
   repetition_penalty: 1.0
   length_penalty: 1.0
   no_repeat_ngram_size: 4
-  min_length: 1
-  max_length: 15
+  max_new_tokens: 15
 
 trainer:
-  gpus: 1
+  accelerator: gpu
+  devices: 1
 
 model_name: false
 
