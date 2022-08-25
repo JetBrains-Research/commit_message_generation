@@ -15,15 +15,17 @@ class ExactMatch(Metric):
         n: Number of words to compare. Optional, full sequences will be considered if n is not given.
     """
 
-    def __init__(self, n: Optional[int] = None, dist_sync_on_step=False):
+    def __init__(self, n: Optional[int] = None, dist_sync_on_step=False) -> None:
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
         self.n = n
 
+        self.correct: torch.Tensor
+        self.total: torch.Tensor
         self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
-    def update(self, predictions: List[str], references: List[str]):
+    def update(self, predictions: List[str], references: List[str]) -> None:  # type: ignore[override]
         for pred, ref in zip(predictions, references):
             pred_words, ref_words = pred.strip().split(), ref.strip().split()
 
@@ -45,7 +47,7 @@ class ExactMatch(Metric):
                     self.correct += 1
                 self.total += 1
 
-    def compute(self):
+    def compute(self) -> torch.Tensor:
         if not self.total.item():
             return self.total
 

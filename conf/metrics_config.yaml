@@ -1,14 +1,16 @@
 wandb:
-  project: test
+  project: commit_message_generation
   model_name:
   model_config:
-
   artifact_project: saridormi/commit_message_generation
-  input_artifact_name: ${wandb.artifact_project}/${wandb.model_name}_preds:${wandb.model_config}
-  input_table_name: ${wandb.model_config}
+  input_artifact_name:
+  input_table_name:
   metadata_artifact_name: saridormi/commit_message_generation/metadata:latest
+  metadata_table_name: test_metadata
 
 input_file: path/to/input/file
 max_n_tokens: 15
 
 language: false
+only_short_sequences: false
+only_long_sequences: false

@@ -1,18 +1,18 @@
 from typing import Dict, List
 
 import torch
-from transformers import PreTrainedTokenizerBase
+from transformers import PreTrainedTokenizerFast
 
 
 class PrefixAllowedTokens:
-    def __init__(self, context_len: Dict[int, int], prefix: Dict[int, str], tokenizer: PreTrainedTokenizerBase):
+    def __init__(self, context_len: Dict[int, int], prefix: Dict[int, str], tokenizer: PreTrainedTokenizerFast):
         self._context_len = context_len
         self._prefix = prefix
         self._tokenizer = tokenizer
 
     def __call__(self, batch_id: int, sentence: torch.Tensor) -> List[int]:
-        vocab = self._tokenizer.get_vocab()
-        decoded_sentence = self._tokenizer.decode(sentence[self._context_len[batch_id] :])
+        vocab = self._tokenizer.get_vocab()  # type: ignore[attr-defined]
+        decoded_sentence = self._tokenizer.decode(sentence[self._context_len[batch_id] :])  # type: ignore[attr-defined]
 
         # when given prefix is empty, we can generate any token
         if not self._prefix:

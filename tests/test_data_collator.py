@@ -41,8 +41,8 @@ def test_get_prefix(default_tokenizers, input, target, expected_context, expecte
 
     res = data_collator._get_prefix(message_ids, context_len=len(input))
 
-    assert decoder_tok.decode(res["msg_input_ids"]) == expected_context
-    assert res["msg_prefix"] == expected_prefix
+    assert decoder_tok.decode(res.msg_input_ids) == expected_context
+    assert res.msg_prefix == expected_prefix
 
 
 @pytest.mark.parametrize(
@@ -83,8 +83,8 @@ def test_generation_collator_with_history(msgs, diffs, histories, default_tokeni
         data_collator = DataCollator(
             diff_tokenizer=encoder_tok,
             msg_tokenizer=decoder_tok,
-            encoder_context_max_len=500,
-            decoder_context_max_len=200,
+            encoder_context_max_len=512,
+            decoder_context_max_len=256,
             with_history=True,
             decoder_sep_tokens=[sep_tokens_id],
             context_ratio=context_ratio,
@@ -92,10 +92,10 @@ def test_generation_collator_with_history(msgs, diffs, histories, default_tokeni
         )
         res = data_collator(inputs)
 
-        assert res["diff_input_ids"].shape[1] <= 500
-        assert res["msg_input_ids"].shape[1] <= 200
+        assert res.diff_input_ids.shape[1] <= 512
+        assert res.msg_input_ids.shape[1] <= 256
 
-        for context, prefix, target, msg in zip(res["msg_input_ids"], res["msg_prefix"], res["msg_target"], msgs):
+        for context, prefix, target, msg in zip(res.msg_input_ids, res.msg_prefixes, res.msg_targets, msgs):
             if sep_tokens_id in context:
                 last_nl_idx = (context == sep_tokens_id).nonzero(as_tuple=True)[0][-1].item()
                 decoded_context = decoder_tok.decode(context[last_nl_idx + 1 :], skip_special_tokens=True)
@@ -142,10 +142,10 @@ def test_generation_collator_without_history(msgs, diffs, default_tokenizers):
         )
         res = data_collator(inputs)
 
-        assert res["diff_input_ids"].shape[1] <= 500
-        assert res["msg_input_ids"].shape[1] <= 200
+        assert res.diff_input_ids.shape[1] <= 500
+        assert res.msg_input_ids.shape[1] <= 200
 
-        for context, prefix, target, msg in zip(res["msg_input_ids"], res["msg_prefix"], res["msg_target"], msgs):
+        for context, prefix, target, msg in zip(res.msg_input_ids, res.msg_prefixes, res.msg_targets, msgs):
             decoded_context = decoder_tok.decode(context, skip_special_tokens=True)
             assert decoded_context + prefix + target == msg
 
@@ -185,11 +185,11 @@ def test_training_collator_without_history(msgs, diffs, default_tokenizers):
     )
     res = data_collator(inputs)
 
-    assert res["diff_input_ids"].shape[1] <= 500
-    assert res["msg_input_ids"].shape[1] <= 200
+    assert res.diff_input_ids.shape[1] <= 500
+    assert res.msg_input_ids.shape[1] <= 200
 
-    assert res["diff_input_ids"][0, 0] == encoder_tok.bos_token_id
-    assert res["diff_input_ids"][res["diff_attention_mask"] == 1][-1] == encoder_tok.eos_token_id
+    assert res.diff_input_ids[0, 0] == encoder_tok.bos_token_id
+    assert res.diff_input_ids[res.diff_attention_mask == 1][-1] == encoder_tok.eos_token_id
 
-    assert res["msg_input_ids"][0, 0] == decoder_tok.eos_token_id
-    assert res["msg_input_ids"][res["msg_attention_mask"] == 1][-1] == sep_token_id
+    assert res.msg_input_ids[0, 0] == decoder_tok.eos_token_id
+    assert res.msg_input_ids[res.msg_attention_mask == 1][-1] == sep_token_id

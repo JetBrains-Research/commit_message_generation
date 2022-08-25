@@ -28,10 +28,11 @@ def test_full_top1_match(metrics_collection):
 
 def test_full_top3_match(metrics_collection):
     scores = torch.tensor(
-        [[0.5, 0, 0.3, 0.2, 0.4], [1.0, -100, -200, -100, 0], [-1, -1, -1, -1, -1]], dtype=torch.float
+        [[0.5, 0, 0.3, 0.2, 0.4], [1.0, -100, -200, -101, 0], [-1, -1, -1, -1, -1]], dtype=torch.float
     )
     labels = torch.tensor([-1, 2, 1], dtype=torch.long)
     results = metrics_collection(scores, labels)
+    print(results["MRR@1"].item(), results["MRR@3"].item())
     assert np.allclose(
         [results["MRR@1"].item(), results["MRR@3"].item()], [0.0, (1 / 3 + 1 / 3) / 2], rtol=1e-05, atol=1e-08
     )

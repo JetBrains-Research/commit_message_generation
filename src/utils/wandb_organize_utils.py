@@ -17,13 +17,10 @@ class WandbOrganizer:
     def _get_model_tags(model_cfg: DictConfig) -> List[str]:
         tags = []
 
-        if model_cfg.encoder_decoder:
-            tags.append("seq2seq")
-        else:
-            tags.append("decoder-only")
+        tags.append(model_cfg.model_configuration)
 
         for model_part in ["encoder", "decoder"]:
-            if model_part == "encoder" and not model_cfg.encoder_decoder:
+            if model_part == "encoder" and model_cfg.model_configuration == "decoder":
                 continue
             if f"{model_part}_name_or_path" in model_cfg:
                 tags.append(
@@ -34,7 +31,7 @@ class WandbOrganizer:
             if f"num_layers_{model_part}" in model_cfg:
                 tags[-1] += f" {model_cfg[f'num_layers_{model_part}']} layers"
 
-        if model_cfg.encoder_decoder:
+        if model_cfg.model_configuration == "encoder_decoder":
             if model_cfg.tie_encoder_decoder:
                 tags.append("shared weights")
             elif model_cfg.tie_word_embeddings:
@@ -46,7 +43,7 @@ class WandbOrganizer:
     def get_run_name(model_cfg: DictConfig, dataset_cfg: DictConfig) -> str:
         name = []
         for model_part in ["encoder", "decoder"]:
-            if model_part == "encoder" and not model_cfg.encoder_decoder:
+            if model_part == "encoder" and model_cfg.model_configuration == "decoder":
                 continue
             if f"{model_part}_name_or_path" in model_cfg:
                 name.append(f"{WandbOrganizer._prepare_pretrained_name(model_cfg[f'{model_part}_name_or_path'])}")
@@ -56,11 +53,11 @@ class WandbOrganizer:
             if f"num_layers_{model_part}" in model_cfg:
                 name.append(f"{model_cfg[f'num_layers_{model_part}']}")
 
-            if model_cfg.encoder_decoder:
-                if model_cfg.tie_encoder_decoder:
-                    name.append("shared")
-                elif model_cfg.tie_word_embeddings:
-                    name.append("shared_embeddings")
+        if model_cfg.model_configuration == "encoder_decoder":
+            if model_cfg.tie_encoder_decoder:
+                name.append("shared")
+            elif model_cfg.tie_word_embeddings:
+                name.append("shared-embeddings")
         name.append("with-history" if dataset_cfg.train_with_history else "without-history")
 
         return "_".join(name)

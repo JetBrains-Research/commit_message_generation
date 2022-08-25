@@ -6,16 +6,18 @@ class MRR(Metric):
     """Mean Reciprocal Rank (MRR)@k metric. In contrast with accuracy, it takes a position of correct prediction among
     top k into account."""
 
-    def __init__(self, top_k: int = 5, ignore_index: int = -100, dist_sync_on_step=False):
+    def __init__(self, top_k: int = 5, ignore_index: int = -100, dist_sync_on_step=False) -> None:
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
         self.top_k = top_k
         self.ignore_index = ignore_index
 
+        self.mrr: torch.Tensor
+        self.total: torch.Tensor
         self.add_state("mrr", default=torch.tensor(0).float(), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
-    def update(self, predictions: torch.Tensor, references: torch.Tensor):
+    def update(self, predictions: torch.Tensor, references: torch.Tensor) -> None:  # type: ignore[override]
 
         assert predictions.ndimension() == references.ndimension() + 1
         assert predictions.size()[:-1] == references.size()
@@ -49,5 +51,5 @@ class MRR(Metric):
             self.mrr = self.mrr.to(mrr_top_k_list.device)
             self.total = self.total.to(self.mrr.device)
 
-    def compute(self):
+    def compute(self) -> torch.Tensor:  # type: ignore[override]
         return self.mrr.float() / self.total

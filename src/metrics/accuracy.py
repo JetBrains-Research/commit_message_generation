@@ -5,16 +5,19 @@ from torchmetrics import Metric
 class Accuracy(Metric):
     """Accuracy@k metric. Returns a ratio of examples where reference is present among top k predictions."""
 
-    def __init__(self, top_k: int = 5, ignore_index: int = -100, dist_sync_on_step=False):
+    def __init__(self, top_k: int = 5, ignore_index: int = -100, dist_sync_on_step=False) -> None:
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
         self.top_k = top_k
         self.ignore_index = ignore_index
 
+        self.accuracy: torch.Tensor
+        self.total: torch.Tensor
+
         self.add_state("accuracy", default=torch.tensor(0).float(), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
-    def update(self, predictions: torch.Tensor, references: torch.Tensor):
+    def update(self, predictions: torch.Tensor, references: torch.Tensor) -> None:  # type: ignore[override]
         assert predictions.ndimension() == references.ndimension() + 1
         assert predictions.size()[:-1] == references.size()
         assert predictions.size()[-1] >= self.top_k
@@ -46,5 +49,5 @@ class Accuracy(Metric):
             self.accuracy = self.accuracy.to(acc_top_k_list.device)
             self.total = self.total.to(self.accuracy.device)
 
-    def compute(self):
+    def compute(self) -> torch.Tensor:
         return self.accuracy.float() / self.total
