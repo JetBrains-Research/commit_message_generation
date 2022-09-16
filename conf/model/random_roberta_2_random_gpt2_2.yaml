@@ -1,6 +1,13 @@
-model_configuration: decoder
+model_configuration: encoder_decoder
 
-decoder_name_or_path: distilgpt2
+num_layers_encoder: 2
+encoder_model_type: roberta
+
+num_layers_decoder: 2
+decoder_model_type: gpt2
+
+tie_encoder_decoder: false
+tie_word_embeddings: false
 
 dataset:
   dataset_root: raw_data/multilang

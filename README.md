@@ -5,15 +5,9 @@
 This repository contains code for training and evaluation of Transformer-based models for commit messages completion
 task.
 
-## Pretrained models and dataset
+## Models checkpoints and dataset
 
-Several pretrained models are
-available [as Weights & Biases artifacts](https://wandb.ai/saridormi/commit_message_generation/artifacts/model). You can
-simply download them or do whatever can be done with artifacts *(
-see [Weights & Biases docs](https://docs.wandb.ai/guides/artifacts) for more information)*.
-
-Also, as part of this project, data about ~1.6M commits from open GitHub repositories was collected and preprocessed,
-see [this repo](https://github.com/saridormi/commits_dataset) for more information.
+> TODO: later we'll share information about available models checkpoints and dataset
 
 ## Usage
 
@@ -28,7 +22,7 @@ To use this project, follow these steps:
 2. **Install dependencies**
 
    This project has the following prerequisites:
-    * Python 3.8
+    * Python
     * Neural networks frameworks: [PyTorch](https://pytorch.org/)
       , [🤗 Transformers](https://huggingface.co/transformers/)
       and [PyTorch Lightning](https://www.pytorchlightning.ai/)
@@ -37,17 +31,14 @@ To use this project, follow these steps:
     * Metrics: [TorchMetrics](https://torchmetrics.readthedocs.io/en/stable/)
       , [🤗 Datasets](https://huggingface.co/docs/datasets/)
       and other packages necessary for specific metrics implementations
-    * Lint & unit tests: [Black](https://black.readthedocs.io/en/stable/), [isort](https://pycqa.github.io/isort/)
+    * Lint & unit tests: [mypy](), [Black](https://black.readthedocs.io/en/stable/), [isort](https://pycqa.github.io/isort/)
       , [pytest](https://docs.pytest.org/en/7.1.x/)
 
    You can install Python packages with [pip](https://pip.pypa.io/en/stable/):
     ```
     pip install -r requirements.txt
     ```
-   Or with [conda](https://docs.conda.io/en/latest/):
-    ```
-    conda env create -f environment.yml
-    ```
+
 3. **Prepare data**
 
    You can use script from [this repo](https://github.com/saridormi/commits_dataset) for data preparation.
@@ -86,96 +77,55 @@ To use this project, follow these steps:
        ```
        dataset:
          kwarg: ...
-       logger:
-         kwarg: ...
        model:
          kwarg: ...
-       trainer:
+       wandb_logger:
          kwarg: ...
-       artifact:
+       trainer:
          kwarg: ...
       ```
 
       See more information about possible options below.
 
-        * `dataset` defines everything data-related
-
-            * `dataset_root`: your path to dataset
-
-            * `use_mtests`: **true** if you want to run additional validation on a small set of "marker tests" and **
-              false**
-              otherwise
-
-            * `marker_tests_root`: your path to marker tests
-
-            * `training_with_history`: **true** if you want to use previous message history during training and **
-              false**
-              otherwise
-
-            * `encoder_context_max_len`: maximum allowed number of tokens in encoder context
-
-            * `decoder_context_max_len`: maximum allowed number of tokens in decoder context
-
-            * `encoder_name_or_path`: pretrained model name or path for **diff tokenizer** *(
-              see [HuggingFace docs](https://huggingface.co/transformers/v4.2.2/internal/tokenization_utils.html#transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained)
-              for additional info)*
-
-            * `decoder_name_or_path`: pretrained model name or path for **message tokenizer** *(
-              see [HuggingFace docs](https://huggingface.co/transformers/v4.2.2/internal/tokenization_utils.html#transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained)
-              for additional info)*
-
+        * `dataset` defines everything data-related. 
+            
+            Part of data configuration is related to specific model (e.g. tokenizer paths) and it is defined in model config! 
+        All other options are defined in separate config, e.g. [`conf/dataset/default_dataset.yaml`](conf/dataset/default_dataset.yaml).
+        
+            * `testing`: True to generate noise of maximum allowed context length instead of using real data, False otherwise (used for bach size-tuning purposes).
+            * `context_ratio`: Relevant for generation: ratio of characters of target message that would be passed to model context. Float, should be in (0,1) range.
+            * `train_with_history`: **True** if you want to use commit message history during training, False otherwise.
+            * `generate_with_history`: **True** if you want to use commit message history during generation, False otherwise.
+            * `encoder_input_type`: What type of input will be passed to encoder. Currently, `history` and `diff` are supported.
             * `train_dataloader_conf` and etc. are passed to corresponding DataLoaders *(
               see [PyTorch docs](https://pytorch.org/docs/1.7.0/data.html#torch.utils.data.DataLoader) for additional
-              info)*
+              information)*.
 
-        * `logger` defines everything logging-related
+        * `model` defines everything model-related.
 
-            * `_target_`: logger object that you want to use *(for Weights & Biases
-              it's `pytorch_lightning.loggers.WandbLogger`,
-              see [PyTorch Lightning docs](https://pytorch-lightning.readthedocs.io/en/1.1.4/logging.html#supported-loggers)
-              for other options)*
+            Only optimizer-related model parameters are defined at [`conf/train_config.yaml`](conf/train_config.yaml):
+            * `learning_rate`: well, learning rate! But note that: 
+                * [`get_linear_schedule_with_warmup`](https://huggingface.co/docs/transformers/main_classes/optimizer_schedules#transformers.get_linear_schedule_with_warmup) is used, so this learning rate value is maximum that it is reached after `num_warmup_steps` steps
+                * this learning rate value will be multiplied by batch size
+            * `weight_decay`: Float, will be passed to AdamW optimizer.
+            * `num_warmup_steps`: Int, number of warmup steps for scheduler.
+            
+            Other parameters are defined in a separate config, we have several examples in [`conf/model`](conf/model) folder. Currently, we have two supported model configurations: encoder-decoder Transformer and decoder-only Transformer.
+            The following options are available for **decoder-only Transformer** (example: [`conf/model/distilgpt2.yaml`](conf/model/distilgpt2.yaml)):
+            *  
+        
+        * `wandb_logger` defines everything logging-related.
+            
+            You can set `wandb_logger` to False to avoid using W&B, then Tensorboard (default option in Lightning) will be used.
 
-            * everything else is passed to logger object as kwargs
+            * `project`: Name of W&B project.
+            * `use_api_key`: True to explicitly set env variable to W&B API key, False to just use the default user. 
+            * `save_model_as_artifact`: True to upload model checkpoint to W&B after training.
 
-        * `model` defines everything model-related
-
-          Note that this project supports full encoder-decoder Transformer model and Transformer decoder model.
-
-            * `encoder_decoder`:  **true** if you want to use full encoder-decoder Transformer and **false** if you want
-              to use Transformer decoder
-
-            1. Encoder-decoder configuration:
-
-                * `learning_rate`: pretty self-explanatory, but note
-                  that [`get_linear_schedule_with_warmup`](https://huggingface.co/transformers/v4.2.2/main_classes/optimizer_schedules.html#transformers.get_linear_schedule_with_warmup)
-                  is used so this learning rate value is maximum and it is reached after 4000 steps
-                * `decoder_name_or_path`: pretrained model name or path for **decoder** *(
-                  see [HuggingFace docs](https://huggingface.co/transformers/v4.2.2/internal/tokenization_utils.html#transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained)
-                  for additional info)*
-                * `encoder_name_or_path`: pretrained model name or path for **encoder** *(
-                  see [HuggingFace docs](https://huggingface.co/transformers/v4.2.2/internal/tokenization_utils.html#transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained)
-                  for additional info)*
-                * `num_layers_encoder`: number of layers in **encoder**
-                * `num_layers_decoder`: number of layers in **decoder**
-
-               You have to specify either `num_layers` for training from scratch or `name_or_path` for loading
-               pretrained models. You can also specify `num_layers` for pretrained models, if it is less than actual
-               number of layers in pretrained checkpoint, `num_layers` layers will be chosen uniformly.
-
-            2. Decoder-only configuration:
-
-                * `learning_rate`: pretty self-explanatory, but note
-                  that [`get_linear_schedule_with_warmup`](https://huggingface.co/transformers/v4.2.2/main_classes/optimizer_schedules.html#transformers.get_linear_schedule_with_warmup)
-                  is used so this learning rate value is maximum and it is reached after 4000 steps
-                * `decoder_name_or_path`: pretrained model name or path for **decoder** *(
-                  see [HuggingFace docs](https://huggingface.co/transformers/v4.2.2/internal/tokenization_utils.html#transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained)
-                  for additional info)*
-
-        * `trainer` defines everything trainer-related
+        * `trainer` defines everything trainer-related.
 
           All options from here are passed to Trainer as kwargs *(
-          see [PyTorch Lightning docs](https://pytorch-lightning.readthedocs.io/en/1.1.4/trainer.html) for additional
-          info)*
+          see [PyTorch Lightning docs](https://pytorch-lightning.readthedocs.io/en/stable/common/trainer.html#trainer-class-api) for additional information)*.
 
         * `artifact` defines configuration for saving Weights & Biases artifact
 

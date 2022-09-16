@@ -23,16 +23,12 @@ def remove_layers_from_model(
         # uniformly pick from middle layers from teacher
         # it is basically np.linspace(0, teacher_config.num_hidden_layers,
         #                             num=student_config.num_hidden_layers, endpoint=True)
-        step = (teacher.config.num_hidden_layers - 1) / (
-            student_config.num_hidden_layers - 1
-        )  # type: ignore[attr-defined]
+        step = (teacher.config.num_hidden_layers - 1) / (student_config.num_hidden_layers - 1)
         for student_layer, teacher_layer in enumerate(int(i * step) for i in range(student_config.num_hidden_layers)):
-            roberta_lm.roberta.encoder.layer[student_layer] = teacher.roberta.encoder.layer[
-                teacher_layer
-            ]  # type: ignore[attr-defined]
+            roberta_lm.roberta.encoder.layer[student_layer] = teacher.roberta.encoder.layer[teacher_layer]
         return roberta_lm
     elif isinstance(teacher, RobertaModel):
-        student_config = copy(teacher.config)  # type: ignore[attr-defined]
+        student_config = copy(teacher.config)
         student_config.num_hidden_layers = num_layers
         roberta = RobertaModel(config=student_config)  # type: ignore[assignment]
 

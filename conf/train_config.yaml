@@ -3,17 +3,19 @@ defaults:
   - dataset/default_dataset
 
 model:
-  learning_rate: 1e-4
-  weight_decay: 1e-4
-  num_warmup_steps: 10
+  learning_rate:
+  weight_decay:
+  num_warmup_steps: 4000
 
 wandb_logger:
-  project: commit_message_generation
+  project: commit_message_completion
   save_model_as_artifact: true
+  use_api_key: false
 
 trainer:
-  max_epochs: 2
+  max_epochs: 5
   precision: 16
   amp_backend: native
   accumulate_grad_batches: 1
-  num_sanity_val_steps: 0
+  num_sanity_val_steps: 100
+  gradient_clip_val: 1.0

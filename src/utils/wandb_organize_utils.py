@@ -58,7 +58,10 @@ class WandbOrganizer:
                 name.append("shared")
             elif model_cfg.tie_word_embeddings:
                 name.append("shared-embeddings")
-        name.append("with-history" if dataset_cfg.train_with_history else "without-history")
+        if dataset_cfg.encoder_input_type == "diff":
+            name.append("with-history" if dataset_cfg.train_with_history else "without-history")
+        elif dataset_cfg.encoder_input_type == "history":
+            name.append("history-input")
 
         return "_".join(name)
 
@@ -66,6 +69,7 @@ class WandbOrganizer:
     def get_tags_train(model_cfg: DictConfig, dataset_cfg: DictConfig) -> List[str]:
         tags = WandbOrganizer._get_model_tags(model_cfg)
         tags.append("train with history" if dataset_cfg.train_with_history else "train without history")
+        tags.append(dataset_cfg.encoder_input_type)
         return tags
 
     @staticmethod

@@ -5,7 +5,7 @@ import nltk
 import pytorch_lightning as pl
 from omegaconf import DictConfig, ListConfig, OmegaConf
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
-from torch.cuda import device_count
+from pytorch_lightning.utilities.device_parser import num_cuda_devices
 from wandb import Artifact
 
 from src.data_utils import CMCDataModule
@@ -15,7 +15,7 @@ from src.utils import WandbOrganizer
 nltk.download("wordnet")
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="train_config")
+@hydra.main(config_path="conf", config_name="train_config")
 def main(cfg: DictConfig) -> None:
     # -----------------------
     # -        init         -
@@ -24,50 +24,70 @@ def main(cfg: DictConfig) -> None:
 
     print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg, resolve=True)}")
 
-    if "gpus" not in cfg.trainer:
-        world_size = 1  # cpu
-    elif isinstance(cfg.trainer.gpus, int):
-        if cfg.trainer.gpus == -1:
-            world_size = device_count()  # all available gpus
-        elif cfg.trainer.gpus == 0:
-            world_size = 1  # cpu
-        else:
-            world_size = cfg.trainer.gpus  # n first gpus
-    elif isinstance(cfg.trainer.gpus, str):
-        if cfg.trainer.gpus == "-1":
-            world_size = device_count()  # all available gpus
-        else:
-            world_size = len(cfg.trainer.gpus.split(","))  # a list of specific gpus separated by ','
-    elif isinstance(cfg.trainer.gpus, ListConfig):
-        world_size = len(cfg.trainer.gpus)  # a list of specific gpus
-    else:
+    world_size = None
+    if cfg.trainer.accelerator == "cpu":
+        world_size = 1
+    elif cfg.trainer.accelerator == "gpu":
+        if cfg.trainer.devices == "auto":
+            world_size = num_cuda_devices()  # all available gpus
+        elif isinstance(cfg.trainer.devices, int):
+            if cfg.trainer.devices == -1:
+                world_size = num_cuda_devices()  # all available gpus
+            else:
+                world_size = cfg.trainer.devices  # n first gpus
+        elif isinstance(cfg.trainer.devices, str):
+            if cfg.trainer.devices == "-1":
+                world_size = num_cuda_devices()  # all available gpus
+            else:
+                world_size = len(cfg.trainer.devices.split(","))  # a list of specific gpus separated by ','
+        elif isinstance(cfg.trainer.devices, ListConfig):
+            world_size = len(cfg.trainer.devices)  # a list of specific gpus
+
+    if world_size is None:
         raise ValueError("Unknown format for number of gpus")
 
     print(f"Local rank: {int(os.environ.get('LOCAL_RANK', 0))}")
     print(f"World size: {world_size}")
+
+    if cfg.model.dataset.diff_tokenizer_name_or_path == cfg.model.dataset.msg_tokenizer_name_or_path:
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     dm = CMCDataModule(
         **cfg.dataset,
         **cfg.model.dataset,
         local_rank=int(os.environ.get("LOCAL_RANK", 0)),
         world_size=world_size,
+        shift_labels=cfg.model.model_configuration == "encoder_decoder",
     )
     dm.setup(stage="fit")
+
+    batch_size = cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.accumulate_grad_batches * world_size
+    num_train_batches = dm.train_len // batch_size
+
+    if "limit_train_batches" in cfg.trainer:
+        num_train_batches = min(
+            cfg.trainer.limit_train_batches // cfg.trainer.accumulate_grad_batches, num_train_batches
+        )
 
     # main module with model logic
     model = CMCModule(
         **cfg.model,
         diff_tokenizer=dm._diff_tokenizer,
         msg_tokenizer=dm._msg_tokenizer,
-        encoder_context_max_len=cfg.dataset.encoder_context_max_len,
-        decoder_context_max_len=cfg.dataset.decoder_context_max_len,
-        num_epochs=cfg.trainer.max_epochs,
-        num_batches=dm.train_len // (cfg.dataset.train_dataloader_conf.batch_size * world_size),
+        encoder_context_max_len=cfg.model.dataset.encoder_context_max_len,
+        decoder_context_max_len=cfg.model.dataset.decoder_context_max_len,
+        batch_size=batch_size,
         num_gpus=world_size,
+        num_epochs=cfg.trainer.max_epochs,
+        num_batches=num_train_batches,
     )
+
+    cfg.model.learning_rate = model.learning_rate
 
     # logger
     if "wandb_logger" in cfg:
+        if "api_key" in cfg.wandb_logger and cfg.wandb_logger.api_key:
+            os.environ["WANDB_API_KEY"] = cfg.wandb_logger.api_key
         use_wandb = True
         trainer_logger = pl.loggers.WandbLogger(
             name=WandbOrganizer.get_run_name(cfg.model, cfg.dataset),
@@ -111,7 +131,7 @@ def main(cfg: DictConfig) -> None:
     ):
         artifact = Artifact(
             name=WandbOrganizer.get_run_name(cfg.model, cfg.dataset),
-            type="multilang model",
+            type="model",
             metadata={"tags": WandbOrganizer.get_tags_train(cfg.model, cfg.dataset)},
         )
         artifact.add_dir(f"{WandbOrganizer.get_run_name(cfg.model, cfg.dataset)}_checkpoint")

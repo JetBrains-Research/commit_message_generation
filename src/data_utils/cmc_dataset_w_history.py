@@ -1,24 +1,24 @@
 import json
 import os
-from typing import Any, Dict, Generator, Iterator, List, Union
+from typing import Any, Callable, Dict, Generator, Iterator, List
 
 import torch
 from torch.utils.data import DataLoader, IterableDataset
 
-from .data_collator import DataCollator
+from src.utils import SingleExample
 
 
 class CMCDatasetWithHistory(IterableDataset):
     def __init__(self, filename: str, history: Dict[str, List[List[int]]], rank: int, world_size: int):
         """
         Defines an iterable-style dataset for commit message generation task.
-        This version provides history from the same author for each commit.
+        This version expects input to be already tokenized and provides history for each commit.
 
         Args:
             filename: File to read diff, author ids and positions in history from.
             history: Dictionary with full message history for each author.
             rank: Rank of the process in DDP (must be 0 if you have single process).
-            world_size: AAmount of processes in DDP (must be 1 if you have single process).
+            world_size: Amount of processes in DDP (must be 1 if you have single process).
         """
 
         self.filename = filename
@@ -29,8 +29,8 @@ class CMCDatasetWithHistory(IterableDataset):
 
         self._gpu_rank: int = rank
         self._gpu_world_size: int = world_size
-        self._num_workers: int
 
+        self._num_workers: int
         self.world_size: int
         self.process_rank: int
 
@@ -43,7 +43,7 @@ class CMCDatasetWithHistory(IterableDataset):
         dataset.process_rank = dataset._gpu_rank * dataset._num_workers + worker_info.id
         dataset.world_size = dataset._gpu_world_size * dataset._num_workers
 
-    def _get_examples_generator(self) -> Generator[Dict[str, List], None, None]:
+    def _get_examples_generator(self) -> Generator[SingleExample, None, None]:
         """
         For multiprocessing support:
 
@@ -52,6 +52,7 @@ class CMCDatasetWithHistory(IterableDataset):
 
         This function yields local_rank'th row from every world_size rows.
         """
+
         with open(self.filename) as f:
             for i, line in enumerate(f):
                 if i % self.world_size == self.process_rank:
@@ -59,17 +60,18 @@ class CMCDatasetWithHistory(IterableDataset):
                     author: str = str(batch["author"])
                     diff_input_ids: List[int] = batch["diff_input_ids"]
                     pos_in_history: int = batch["pos_in_history"]
-                    yield {
-                        "diff_input_ids": diff_input_ids,
-                        "msg_input_ids": self.history[str(author)][pos_in_history],
-                        "history_input_ids": self.history[str(author)][:pos_in_history],
-                    }
 
-    def __iter__(self) -> Iterator[Dict[str, List[int]]]:
+                    yield SingleExample(
+                        diff_input_ids=diff_input_ids,
+                        msg_input_ids=self.history[str(author)][pos_in_history],
+                        history_input_ids=self.history[str(author)][:pos_in_history],
+                    )
+
+    def __iter__(self) -> Iterator[SingleExample]:
         assert self._num_workers is not None, f"You must access __iter__ through DataLoader"
         return iter(self._get_examples_generator())
 
-    def get_dataloader(self, batch_size: int, num_workers: int, collate_fn: DataCollator) -> DataLoader:
+    def get_dataloader(self, batch_size: int, num_workers: int, collate_fn: Callable) -> DataLoader:
         """Creates DataLoader in a proper way."""
         assert num_workers >= 0, "num_workers must be at least 0"
         if num_workers == 0:

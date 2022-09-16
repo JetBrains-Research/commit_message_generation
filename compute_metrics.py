@@ -18,16 +18,18 @@ def init_run(cfg: DictConfig) -> pd.DataFrame:
     cfg = prepare_metrics_cfg(cfg)
     run: wandb.wandb_sdk.wandb_run.Run = wandb.init(
         project=cfg.wandb.project,
-        name=cfg.wandb.model_name,
+        name=cfg.wandb.artifact.name,
         job_type="metrics",
     )  # type: ignore[assignment]
-    input_artifact = run.use_artifact(cfg.wandb.input_artifact_name)
+    input_artifact = run.use_artifact(
+        f"{cfg.wandb.artifact.project}/{cfg.wandb.artifact.name}:{cfg.wandb.artifact.version}"
+    )
     if "tags" in input_artifact.metadata:
         run.tags = input_artifact.metadata["tags"]
         if "language" in cfg and cfg.language:
             run.tags += ("single language",)
             run.tags += (cfg.language,)
-    input_table = input_artifact.get(cfg.wandb.input_table_name)
+    input_table: wandb.Table = input_artifact.get(cfg.wandb.artifact.table_name)
 
     df = pd.DataFrame(data=input_table.data, columns=input_table.columns)
     if "metadata_artifact_name" in cfg.wandb and "metadata_table_name" in cfg.wandb:
@@ -44,7 +46,7 @@ def init_run(cfg: DictConfig) -> pd.DataFrame:
     return df
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="metrics_config")
+@hydra.main(config_path="conf", config_name="metrics_config")
 def main(cfg: DictConfig):
     print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
 
@@ -63,14 +65,24 @@ def main(cfg: DictConfig):
             )
 
     if cfg.only_short_sequences:
-        df = df.loc[df["bpe_num_tokens_diff"] <= 512]
+        if "bpe_num_tokens_diff" in df.columns:
+            df = df.loc[df["bpe_num_tokens_diff"] <= 512]
+        else:
+            logging.warning(
+                f"Configured to evaluate only on short sequences, but metadata is not provided. Evaluating on full dataset"
+            )
 
     if cfg.only_long_sequences:
-        df = df.loc[df["bpe_num_tokens_diff"] > 512]
+        if "bpe_num_tokens_diff" in df.columns:
+            df = df.loc[df["bpe_num_tokens_diff"] > 512]
+        else:
+            logging.warning(
+                f"Configured to evaluate only on long sequences, but metadata is not provided. Evaluating on full dataset"
+            )
 
-    full_metrics = EvaluationMetrics(do_tensors=False, do_strings=True, prefix="test")
+    full_metrics = EvaluationMetrics(do_tensors=False, do_strings=True, prefix="test", shift=False)
     prefix_metrics = {
-        i: EvaluationMetrics(n=i, do_tensors=False, do_strings=True, prefix="test")
+        i: EvaluationMetrics(n=i, do_tensors=False, do_strings=True, prefix="test", shift=False)
         for i in range(1, cfg.max_n_tokens + 1)
     }
 
