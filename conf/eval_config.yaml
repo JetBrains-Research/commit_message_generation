@@ -5,13 +5,14 @@ defaults:
   - dataset/default_dataset
 
 wandb_logger:
-  project: commit_message_generation
+  project: commit_message_completion
+  use_api_key: true
 
 generation_kwargs:
   num_beams: 5
   repetition_penalty: 1.0
   length_penalty: 1.0
-  no_repeat_ngram_size: 4
+  no_repeat_ngram_size: 3
   max_new_tokens: 15
 
 trainer:
@@ -21,7 +22,8 @@ trainer:
 model_name: false
 
 model_artifact:
-  project: saridormi/commit_message_generation
+  project: saridormi/commit_message_completion
+  version: latest
   artifact_path: last.ckpt
   local_path: artifacts
 

@@ -3,7 +3,7 @@ import torch
 from transformers import AutoTokenizer
 
 from src.model import CMCModule
-from src.utils import Batch, PrefixAllowedTokens
+from src.utils import BatchTest, PrefixAllowedTokens
 
 torch.manual_seed(42)
 
@@ -18,6 +18,7 @@ def default_setting():
         decoder_name_or_path="distilgpt2",
         encoder_context_max_len=512,
         decoder_context_max_len=256,
+        batch_size=1,
     )
     return model, {"num_beams": 4, "num_return_sequences": 4}
 
@@ -43,16 +44,15 @@ def test_with_and_without_prefix_fn(default_setting, context, prefix, expected):
     max_len = 2
 
     results_with_prefix_fn = model.generate(
-        batch=Batch(
-            diff_input_ids=torch.zeros_like(tokenized_context),
-            diff_attention_mask=torch.zeros_like(tokenized_context),
-            msg_input_ids=tokenized_context,
-            msg_attention_mask=torch.ones_like(tokenized_context),
-            msg_prefixes=[prefix],
-            msg_targets=[],
-            msg_labels=tokenized_context,
+        batch=BatchTest(
+            encoder_input_ids=torch.zeros_like(tokenized_context),
+            encoder_attention_mask=torch.zeros_like(tokenized_context),
+            decoder_input_ids=tokenized_context,
+            decoder_attention_mask=torch.ones_like(tokenized_context),
+            prefixes=[prefix],
+            targets=[],
+            labels=None,
         ),
-        bos_token_id=model._diff_tokenizer.cls_token_id,
         min_length=min_len + tokenized_context.shape[1],
         max_length=max_len + tokenized_context.shape[1],
         **generation_kwargs
@@ -62,16 +62,15 @@ def test_with_and_without_prefix_fn(default_setting, context, prefix, expected):
     )
 
     results_without_prefix_fn = model.generate(
-        batch=Batch(
-            diff_input_ids=torch.zeros_like(tokenized_context_w_prefix),
-            diff_attention_mask=torch.zeros_like(tokenized_context_w_prefix),
-            msg_input_ids=tokenized_context_w_prefix,
-            msg_attention_mask=torch.ones_like(tokenized_context_w_prefix),
-            msg_prefixes=[],
-            msg_targets=[],
-            msg_labels=tokenized_context_w_prefix,
+        batch=BatchTest(
+            encoder_input_ids=torch.zeros_like(tokenized_context_w_prefix),
+            encoder_attention_mask=torch.zeros_like(tokenized_context_w_prefix),
+            decoder_input_ids=tokenized_context_w_prefix,
+            decoder_attention_mask=torch.ones_like(tokenized_context_w_prefix),
+            prefixes=[],
+            targets=[],
+            labels=None,
         ),
-        bos_token_id=model._diff_tokenizer.cls_token_id,
         min_length=min_len + tokenized_context_w_prefix.shape[1],
         max_length=max_len + tokenized_context_w_prefix.shape[1],
         **generation_kwargs

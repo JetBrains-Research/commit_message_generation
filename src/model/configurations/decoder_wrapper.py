@@ -1,7 +1,7 @@
 from transformers import AutoModelForCausalLM, GPT2Tokenizer, PreTrainedTokenizerFast
 
 from src.model.configurations.base_model import BaseModel
-from src.utils import Batch, PrefixAllowedTokens
+from src.utils import Batch, BatchTest, PrefixAllowedTokens
 
 
 class DecoderWrapper(BaseModel):
@@ -33,22 +33,23 @@ class DecoderWrapper(BaseModel):
 
     def forward(self, batch: Batch):
         return self.model(
-            input_ids=batch.msg_input_ids, attention_mask=batch.msg_attention_mask, labels=batch.msg_labels
+            input_ids=batch.decoder_input_ids, attention_mask=batch.decoder_attention_mask, labels=batch.labels
         )
 
-    def generate(self, batch: Batch, **generation_kwargs):
+    def generate(self, batch: BatchTest, **generation_kwargs):
         prefix_fn = PrefixAllowedTokens(
-            prefix={i: prefix for i, prefix in enumerate(batch.msg_prefixes)},
-            context_len={i: len(msg) for i, msg in enumerate(batch.msg_input_ids)},
+            prefix={i: prefix for i, prefix in enumerate(batch.prefixes)},
+            context_len={i: len(msg) for i, msg in enumerate(batch.decoder_input_ids)},
             tokenizer=self._tokenizer,
         )
 
         return self.model.generate(
-            input_ids=batch.msg_input_ids,
-            attention_mask=batch.msg_attention_mask,
+            input_ids=batch.decoder_input_ids,
+            attention_mask=batch.decoder_attention_mask,
             prefix_allowed_tokens_fn=prefix_fn,
-            eos_token_id=198
-            if isinstance(self._tokenizer, GPT2Tokenizer)
-            else self._tokenizer.convert_tokens_to_ids("\n"),  # type: ignore[attr-defined]
+            eos_token_id=self._tokenizer.eos_token_id,  # type: ignore[attr-defined]
             **generation_kwargs,
         )
+
+    def num_parameters(self, exclude_embeddings: bool):
+        return self.model.num_parameters(exclude_embeddings=exclude_embeddings)

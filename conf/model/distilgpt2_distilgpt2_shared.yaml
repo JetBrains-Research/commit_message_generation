@@ -12,3 +12,5 @@ dataset:
   msgs_folder: distilgpt2
   diff_tokenizer_name_or_path: distilgpt2
   msg_tokenizer_name_or_path: distilgpt2
+  encoder_context_max_len: 512
+  decoder_context_max_len: 512

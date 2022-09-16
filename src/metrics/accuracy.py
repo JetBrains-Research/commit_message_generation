@@ -5,11 +5,12 @@ from torchmetrics import Metric
 class Accuracy(Metric):
     """Accuracy@k metric. Returns a ratio of examples where reference is present among top k predictions."""
 
-    def __init__(self, top_k: int = 5, ignore_index: int = -100, dist_sync_on_step=False) -> None:
+    def __init__(self, top_k: int = 5, ignore_index: int = -100, shift: bool = True, dist_sync_on_step=False) -> None:
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
         self.top_k = top_k
         self.ignore_index = ignore_index
+        self.shift = shift
 
         self.accuracy: torch.Tensor
         self.total: torch.Tensor
@@ -28,8 +29,9 @@ class Accuracy(Metric):
             predictions = predictions.unsqueeze(0)
 
         # shift scores and labels
-        predictions = predictions[..., :-1, :]
-        references = references[..., 1:]
+        if self.shift:
+            predictions = predictions[..., :-1, :]
+            references = references[..., 1:]
 
         # labels =  [batch_size x seq_len - 1]
         # scores = [batch_size x seq_len - 1 x vocab_size]

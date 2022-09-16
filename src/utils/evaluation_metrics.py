@@ -25,7 +25,14 @@ class EvaluationMetrics:
         n: if an integer is given, ExactMatch metrics will be computed for first n tokens. Otherwise, it is computed for the whole sequences.
     """
 
-    def __init__(self, do_strings: bool, do_tensors: bool, n: Optional[int] = None, prefix: Optional[str] = None):
+    def __init__(
+        self,
+        do_strings: bool,
+        do_tensors: bool,
+        shift: bool,
+        n: Optional[int] = None,
+        prefix: Optional[str] = None,
+    ):
 
         self.tensors_metrics: MetricCollection = MetricCollection({})
         self.datasets_metrics: Dict[str, Metric] = {}
@@ -33,7 +40,11 @@ class EvaluationMetrics:
 
         if do_tensors:
             self.tensors_metrics = MetricCollection(
-                {"acc_top1": Accuracy(top_k=1), "acc_top5": Accuracy(top_k=5), "MRR_top5": MRR(top_k=5)},
+                {
+                    "acc_top1": Accuracy(top_k=1, shift=shift),
+                    "acc_top5": Accuracy(top_k=5, shift=shift),
+                    "MRR_top5": MRR(top_k=5, shift=shift),
+                },
             )
 
         if do_strings:

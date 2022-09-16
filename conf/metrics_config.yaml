@@ -1,12 +1,10 @@
 wandb:
-  project: commit_message_generation
-  model_name:
-  model_config:
-  artifact_project: saridormi/commit_message_generation
-  input_artifact_name:
-  input_table_name:
-  metadata_artifact_name: saridormi/commit_message_generation/metadata:latest
-  metadata_table_name: test_metadata
+  project: commit_message_completion
+  artifact:
+    project: saridormi/commit_message_completion
+    name:
+    version:
+    table_name:
 
 input_file: path/to/input/file
 max_n_tokens: 15

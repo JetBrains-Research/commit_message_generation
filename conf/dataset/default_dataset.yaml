@@ -1,12 +1,10 @@
-testing: true
+testing: false
 
 context_ratio:
 generate_with_history: true
 train_with_history: true
 
-encoder_context_max_len: 512
-decoder_context_max_len: 256
-decoder_sep_tokens: "\n"
+encoder_input_type: diff
 
 train_dataloader_conf:
   batch_size: 16
