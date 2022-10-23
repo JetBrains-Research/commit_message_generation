@@ -1,5 +1,25 @@
-hydra-core==1.0.5
-pytorch-lightning==1.1.4
-torch==1.5.0
-transformers==4.2.1
-wandb==0.10.14
+# NN packages
+scikit-learn~=1.1.2
+annoy~=1.17.1
+numpy~=1.23.4
+
+# DL packages
+pytorch-lightning~=1.7.2
+torch~=1.12.1
+transformers~=4.21.1
+
+# DL utils
+wandb~=0.13.4
+hydra-core~=1.2.0
+
+# data utils
+jsonlines
+pandas~=1.5.1
+
+# code quality
+black~=22.6.0
+isort~=5.10.1
+mypy~=0.971
+pytest~=7.1.2
+
+

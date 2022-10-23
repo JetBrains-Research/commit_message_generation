@@ -1,19 +1,40 @@
 dataset:
-  dataset_root: raw_data/CleanedJiang
-  diff_max_len: 110
-  msg_max_len: 30
-  encoder_name_or_path: microsoft/codebert-base
+  dataset_root: placeholder
+  train_fname: placeholder
+  val_fname: placeholder
+  test_fname: placeholder
   train_dataloader_conf:
-    batch_size: 32
-    shuffle: true
-    num_workers: 4
+    batch_size: 1
+    num_workers: 16
   val_dataloader_conf:
-    batch_size: 32
-    num_workers: 4
+    batch_size: 1
+    num_workers: 16
   test_dataloader_conf:
-    batch_size: 32
-    num_workers: 4
+    batch_size: 1
+    num_workers: 16
+
+embedder:
+  configuration: bag_of_words
+  bag_of_words:
+    max_features: 100000
+    load_vocab: false
+    save_vocab: true
+    chunksize: 10000
+
+search:
+  configuration: diff
+  diff:
+    num_neighbors: 5
+    num_trees: 10000
+    load_index: false
+
 logger:
-  _target_: pytorch_lightning.loggers.WandbLogger
-  name: codebert + nn
-  project: commit_message_generation
+  args:
+    name: placeholder
+    project: placeholder
+  log_artifact: true
+  artifact:
+    name: placeholder
+    type: placeholder
+    table_name: placeholder
+
