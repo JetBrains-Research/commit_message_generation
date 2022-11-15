@@ -5,20 +5,11 @@ from src.utils import Batch, BatchTest, PrefixAllowedTokens
 
 
 class DecoderWrapper(BaseModel):
-    """This class is used for training and evaluation of GPT-2-based model for
-    commit message completion task.
+    """This class serves as a GPT-2 wrapper for commit message completion task.
 
     Args:
-        decoder_name_or_path: name or path for pretrained GPT-2 checkpoint
         tokenizer: tokenizer for target sequences (messages)
-        preds_artifact_name: an artifact name for saving model predictions as W&B artifact
-        preds_artifact_type: an artifact type for saving model predictions as W&B artifact
-        preds_table_name: a table name for saving model predictions as W&B artifact
-        learning_rate: maximum learning rate
-        num_epochs: total number of epochs (used to calculate total number of steps for LR scheduler)
-        num_batches: total number of batches in one epoch (used to calculate total number of steps for LR scheduler)
-        num_gpus: total number of GPUs (used to calculate total number of steps for LR scheduler)
-        generation_kwargs: kwargs for transformers.generation_utils.GenerationMixin.generate
+        decoder_name_or_path: name or path for pretrained GPT-2 checkpoint
     """
 
     def __init__(

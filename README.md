@@ -31,7 +31,7 @@ To use this project, follow these steps:
     * Metrics: [TorchMetrics](https://torchmetrics.readthedocs.io/en/stable/)
       , [🤗 Datasets](https://huggingface.co/docs/datasets/)
       and other packages necessary for specific metrics implementations
-    * Lint & unit tests: [mypy](), [Black](https://black.readthedocs.io/en/stable/), [isort](https://pycqa.github.io/isort/)
+    * Lint & unit tests: [mypy](https://github.com/python/mypy), [Black](https://black.readthedocs.io/en/stable/), [isort](https://pycqa.github.io/isort/)
       , [pytest](https://docs.pytest.org/en/7.1.x/)
 
    You can install Python packages with [pip](https://pip.pypa.io/en/stable/):
@@ -88,14 +88,16 @@ To use this project, follow these steps:
       See more information about possible options below.
 
         * `dataset` defines everything data-related. 
-            
-            Part of data configuration is related to specific model (e.g. tokenizer paths) and it is defined in model config! 
-        All other options are defined in separate config, e.g. [`conf/dataset/default_dataset.yaml`](conf/dataset/default_dataset.yaml).
         
+            You can check [corresponding DataModule class](src/data_utils/cmc_data_module.py) for full list of parameters.
+            
+            Part of data configuration is related to specific model (e.g. tokenizer paths) and it is defined in model config!
+            All other options are defined in separate config, e.g. [`conf/dataset/default_dataset.yaml`](conf/dataset/default_dataset.yaml):
+
             * `testing`: True to generate noise of maximum allowed context length instead of using real data, False otherwise (used for bach size-tuning purposes).
             * `context_ratio`: Relevant for generation: ratio of characters of target message that would be passed to model context. Float, should be in (0,1) range.
-            * `train_with_history`: **True** if you want to use commit message history during training, False otherwise.
-            * `generate_with_history`: **True** if you want to use commit message history during generation, False otherwise.
+            * `train_with_history`: True if you want to use commit message history during training, False otherwise.
+            * `generate_with_history`: True if you want to use commit message history during generation, False otherwise.
             * `encoder_input_type`: What type of input will be passed to encoder. Currently, `history` and `diff` are supported.
             * `train_dataloader_conf` and etc. are passed to corresponding DataLoaders *(
               see [PyTorch docs](https://pytorch.org/docs/1.7.0/data.html#torch.utils.data.DataLoader) for additional
@@ -110,28 +112,24 @@ To use this project, follow these steps:
             * `weight_decay`: Float, will be passed to AdamW optimizer.
             * `num_warmup_steps`: Int, number of warmup steps for scheduler.
             
-            Other parameters are defined in a separate config, we have several examples in [`conf/model`](conf/model) folder. Currently, we have two supported model configurations: encoder-decoder Transformer and decoder-only Transformer.
-            The following options are available for **decoder-only Transformer** (example: [`conf/model/distilgpt2.yaml`](conf/model/distilgpt2.yaml)):
-            *  
-        
+            Other parameters are defined in a separate model config. Currently, we have two supported model configurations: encoder-decoder Transformer and decoder-only Transformer.
+            
+            * There is an example available for **decoder-only Transformer**: [`distilgpt2`](conf/model/distilgpt2.yaml). 
+              Check out [corresponding class](src/model/configurations/decoder_wrapper.py) for information on parameters.
+          
+            * There are two examples available for **encoder-decoder Transformer**: [`random_roberta_2_random_gpt2_2`](conf/model/random_roberta_2_random_gpt2_2.yaml) and [`distilgpt2_distilgpt2_shared`](conf/model/distilgpt2_distilgpt2_shared.yaml).
+              Check out [corresponding class](src/model/configurations/encoder_decoder_wrapper.py) for information on parameters.
+
         * `wandb_logger` defines everything logging-related.
             
             You can set `wandb_logger` to False to avoid using W&B, then Tensorboard (default option in Lightning) will be used.
 
             * `project`: Name of W&B project.
-            * `use_api_key`: True to explicitly set env variable to W&B API key, False to just use the default user. 
             * `save_model_as_artifact`: True to upload model checkpoint to W&B after training.
 
         * `trainer` defines everything trainer-related.
 
-          All options from here are passed to Trainer as kwargs *(
-          see [PyTorch Lightning docs](https://pytorch-lightning.readthedocs.io/en/stable/common/trainer.html#trainer-class-api) for additional information)*.
-
-        * `artifact` defines configuration for saving Weights & Biases artifact
-
-          There is a possibility to save model checkpoints after training as Weights & Biases artifact. All options from
-          here are passed to wandb.Artifact as kwargs *(see [W&B docs](https://docs.wandb.ai/ref/python/artifact) for
-          additional info)*
+          All options from here are passed to Trainer as kwargs *(see [Lightning docs](https://pytorch-lightning.readthedocs.io/en/stable/common/trainer.html) for additional information)*.
       </details>
 
     * Configuration for generating predictions for the test set is defined
@@ -143,103 +141,60 @@ To use this project, follow these steps:
       Basically, config looks like that:
 
       ```
-      stage: test
+      stage: ...
+      
       dataset:
         kwarg: ... 
-      logger:
+      
+      wandb_logger:
         kwarg: ...
-      model:
-        kwarg: ...
+      
+      generation_kwargs:
+        kwargs: ...
+      
       trainer:
         kwarg: ...
+      
+      model:
+        kwarg: ...
+        
+      model_name: ...
+      
       artifact:
         kwarg: ...
+
       ckpt_path: ...
       ```
 
       See more information about possible options below.
 
         * `stage` is set to `test` by default, it might be set to `sweep` to use validation set instead of test when
-          tuning hyperparameters with W&B sweep
+          tuning hyperparameters with W&B sweep.
 
-        * `dataset` defines everything data-related
+        * `dataset` defines everything data-related. 
+           
+          It is the same as in the train config, check the information above. 
 
-            * `dataset_root`: your path to data
+        * `wandb_logger` defines everything logging-related.
 
-            * `generation_with_history`: **true** if you want to use previous message history during evaluation and **
-              false** otherwise
+            You can set `wandb_logger` to False to avoid using W&B, then Tensorboard (default option in Lightning) will be used.
 
-            * `encoder_context_max_len`: maximum allowed number of tokens in encoder context
+            * `project`: Name of W&B project.
+        
+        * `generation_kwargs` defines parameters for generation.
 
-            * `decoder_context_max_len`: maximum allowed number of tokens in decoder context
+            Check [HuggingFace's `generate` documentation](https://huggingface.co/docs/transformers/v4.24.0/en/main_classes/text_generation#transformers.generation_utils.GenerationMixin.generate) for more information
 
-            * `context_ratio`: a ratio of target message characters that go into context
-
-            * `encoder_name_or_path`: pretrained model name or path for **diff tokenizer** *(
-              see [HuggingFace docs](https://huggingface.co/transformers/v4.2.2/internal/tokenization_utils.html#transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained)
-              for additional info)*
-
-            * `decoder_name_or_path`: pretrained model name or path for **message tokenizer** *(
-              see [HuggingFace docs](https://huggingface.co/transformers/v4.2.2/internal/tokenization_utils.html#transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained)
-              for additional info)*
-
-            * `test_dataloader_conf` is passed to corresponding DataLoader *(
-              see [PyTorch docs](https://pytorch.org/docs/1.7.0/data.html#torch.utils.data.DataLoader) for additional
-              info)*
-
-        * `logger` defines everything logging-related
-
-            * `_target_`: logger object that you want to use *(for Weights & Biases
-              it's `pytorch_lightning.loggers.WandbLogger`,
-              see [PyTorch Lightning docs](https://pytorch-lightning.readthedocs.io/en/1.1.4/logging.html#supported-loggers)
-              for other options)*
-
-            * everything else is passed to logger object as kwargs
-
-        * `model` defines everything model-related
-
-          Note that this project supports full encoder-decoder Transformer model and Transformer decoder model.
-
-            * `encoder_decoder`:  **true** if you want to use full encoder-decoder Transformer and **false** if you want
-              to use Transformer decoder
-
-            1. Encoder-decoder configuration:
-
-                * `decoder_name_or_path`: pretrained model name or path for **decoder** *(
-                  see [HuggingFace docs](https://huggingface.co/transformers/v4.2.2/internal/tokenization_utils.html#transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained)
-                  for additional info)*
-                * `encoder_name_or_path`: pretrained model name or path for **encoder** *(
-                  see [HuggingFace docs](https://huggingface.co/transformers/v4.2.2/internal/tokenization_utils.html#transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained)
-                  for additional info)*
-                * `num_layers_encoder`: number of layers in **encoder**
-                * `num_layers_decoder`: number of layers in **decoder**
-
-               You have to specify either `num_layers` for initializing model randomly or `name_or_path` for loading
-               pretrained models. You can also specify `num_layers` for pretrained models, if it is less than actual
-               number of layers in pretrained checkpoint, `num_layers` layers will be chosen uniformly.
-
-            2. Decoder-only configuration:
-
-                * `decoder_name_or_path`: pretrained model name or path for **decoder** *(
-                  see [HuggingFace docs](https://huggingface.co/transformers/v4.2.2/internal/tokenization_utils.html#transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained)
-                  for additional info)*
-
-        * `trainer` defines everything trainer-related
-
-          All options from here are passed to Trainer as kwargs *(
-          see [PyTorch Lightning docs](https://pytorch-lightning.readthedocs.io/en/1.1.4/trainer.html) for additional
-          info)*
-
-        * `artifact`
-
-          There is a possibility to use W&B artifact with model checkpoint for evaluation.
-            * `name`: full W&B artifact name
-            * `artifact_path`: a path to specific file to download within W&B artifact
-            * `local_path`: a path where specified file will be saved locally
-
-        * `ckpt_path`
-
-          Another option: when you already have a model checkpoint saved locally, provide a path to checkpoint here.
+        Next, you can either:
+        * use fine-tuned model
+          * load from W&B artifact
+            * define artifact parameters under `model_artifact` key
+            * define `model_name` key (or define model configuration under `model` key, and `model_name` will be constructed automatically)
+          * load from local path
+           * provide local path under `ckpt_path` key
+           * define `model_name` key (or define model configuration under `model` key, and `model_name` will be constructed automatically)
+        * initialize random/pretrained model
+          * define model configuration under `model` key (it is the same as in the train config, check the information above)
       </details>
 
     * Configuration for computing metrics is defined at [`conf/metrics_config.yaml`](conf/metrics_config.yaml)
@@ -252,23 +207,30 @@ To use this project, follow these steps:
       ```
       wandb:
         kwarg: ...
+        artifact: 
+          kwargs: ...
+      
       input_file: ...
       max_n_tokens: ...
+      
+      language: ...
+      only_short_sequences: ...
+      only_long_sequences: ...
       ```
 
       See more information about possible options below.
 
-        * `wandb` defines everything Weights & Biases-related
+        * `wandb` defines everything W&B-related
 
-          Firstly, there is an option to use model predictions stored as W&B artifact table. The following options
-          define the configuration:
-            * `artifact_name`: full W&B artifact name
-            * `table_name`:  a name for specific table in the artifact
+          Firstly, there is an option to use model predictions stored as W&B artifact table. Define the configuration under `artifact` key:
+            * `project`: W&B project.
+            * `name`:  Artifact name.
+            * `version`: Artifact version (or alias).
+            * `table_name`: Name of file with prediction in the artifact (by default, it is assumed to be the same as artifact alias).
 
-          Secondly, there is an option to log metrics to W&B in a separate run. The following options define the
+          Secondly, there is an option to log metrics to W&B. The following options define the
           configuration:
             * `project`: W&B project name
-            * `name`:  W&B run name
 
         * `input_file`
 
@@ -278,6 +240,11 @@ To use this project, follow these steps:
 
           Metrics are computed both for full predictions and references and for their prefixes of first `i` tokens,
           where `i` goes from `1` to `max_n_tokens + 1`.
+      
+        Next, we also support a couple of filters:
+        * `language`: Set to False to evaluate on full test set, set to programming language name to evaluate only on examples on this language.
+        * `only_short_sequences`: Set to False to evaluate on full test set, set to True to evaluate only on examples with <= 512 tokens in diffs.
+        * `only_long_sequences`: Set to False to evaluate on full test set, set to True to evaluate only on examples with > 512 tokens in diffs.
       </details>
 
 5. **Train**

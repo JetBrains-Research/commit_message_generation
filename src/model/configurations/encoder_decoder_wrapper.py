@@ -7,7 +7,6 @@ from transformers import (
     AutoModelForCausalLM,
     EncoderDecoderConfig,
     EncoderDecoderModel,
-    GPT2Tokenizer,
     PreTrainedModel,
     PreTrainedTokenizerFast,
 )
@@ -44,7 +43,6 @@ class EncoderDecoderWrapper(BaseModel):
           (should be used with the same model classes and tokenizers).
         tie_word_embeddings: If set to `True`, encoder and decoder will share the same parameters for embedding layers
           (should be used with the same model classes and tokenizers).
-        generation_kwargs: kwargs for transformers.generation_utils.GenerationMixin.generate
     """
 
     def __init__(

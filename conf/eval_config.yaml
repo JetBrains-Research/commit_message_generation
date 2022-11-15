@@ -6,7 +6,6 @@ defaults:
 
 wandb_logger:
   project: commit_message_completion
-  use_api_key: true
 
 generation_kwargs:
   num_beams: 5
