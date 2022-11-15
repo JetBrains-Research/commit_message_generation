@@ -10,7 +10,6 @@ model:
 wandb_logger:
   project: commit_message_completion
   save_model_as_artifact: true
-  use_api_key: false
 
 trainer:
   max_epochs: 5

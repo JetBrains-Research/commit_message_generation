@@ -86,8 +86,6 @@ def main(cfg: DictConfig) -> None:
 
     # logger
     if "wandb_logger" in cfg:
-        if "api_key" in cfg.wandb_logger and cfg.wandb_logger.api_key:
-            os.environ["WANDB_API_KEY"] = cfg.wandb_logger.api_key
         use_wandb = True
         trainer_logger = pl.loggers.WandbLogger(
             name=WandbOrganizer.get_run_name(cfg.model, cfg.dataset),

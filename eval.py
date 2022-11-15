@@ -38,8 +38,6 @@ def main(cfg: DictConfig) -> None:
 
     if "wandb_logger" in cfg:
         wandb.Table.MAX_ROWS = 50000
-        if "api_key" in cfg.wandb_logger and cfg.wandb_logger.api_key:
-            os.environ["WANDB_API_KEY"] = cfg.wandb_logger.api_key
         use_wandb = True
         trainer_logger = pl.loggers.WandbLogger(
             name=f"context_ratio_{cfg.dataset.context_ratio}_{('with-history' if cfg.dataset.generate_with_history else 'without-history')}",
