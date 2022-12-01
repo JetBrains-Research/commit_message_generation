@@ -2,7 +2,7 @@ import pytest
 import torch
 from transformers import AutoTokenizer
 
-from src.data_utils.data_collator import DataCollatorTest
+from src.data_utils.data_collators import DataCollatorTest
 from src.utils import SingleExample
 
 

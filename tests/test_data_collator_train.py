@@ -5,7 +5,7 @@ from transformers.models.encoder_decoder.modeling_encoder_decoder import (
     shift_tokens_right,
 )
 
-from src.data_utils.data_collator import DataCollatorTrain
+from src.data_utils.data_collators import DataCollatorTrain
 from src.utils import SingleExample
 
 

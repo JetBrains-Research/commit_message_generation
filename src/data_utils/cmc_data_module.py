@@ -8,7 +8,7 @@ from omegaconf import DictConfig
 from transformers import AutoTokenizer
 
 from .cmc_dataset_w_history import CMCDatasetWithHistory
-from .data_collator import DataCollatorTest, DataCollatorTrain
+from .data_collators import DataCollatorTest, DataCollatorTrain
 
 
 class CMCDataModule(pl.LightningDataModule):
