@@ -11,7 +11,7 @@ from src.utils import SingleExample
 class CMCDatasetWithHistory(IterableDataset):
     def __init__(self, filename: str, history: Dict[str, List[List[int]]], rank: int, world_size: int):
         """
-        Defines an iterable-style dataset for commit message generation task.
+        Defines an iterable-style dataset for commit message completion task.
         This version expects input to be already tokenized and provides history for each commit.
 
         Args:
@@ -21,18 +21,24 @@ class CMCDatasetWithHistory(IterableDataset):
             world_size: Amount of processes in DDP (must be 1 if you have single process).
         """
 
-        self.filename = filename
-        self.history = history
+        self._filename = filename
+        self._history = history
 
-        with open(filename, "r") as f:
-            self._len = sum(1 for _ in f)
+        self._len = None
 
         self._gpu_rank: int = rank
         self._gpu_world_size: int = world_size
 
         self._num_workers: int
-        self.world_size: int
-        self.process_rank: int
+        self._world_size: int
+        self._process_rank: int
+
+    @property
+    def len(self):
+        if self._len is None:
+            with open(self._filename, "r") as f:
+                self._len = sum(1 for _ in f)
+        return self._len
 
     @staticmethod
     def _init_worker_fn(worker_id: int) -> None:
@@ -40,8 +46,8 @@ class CMCDatasetWithHistory(IterableDataset):
         worker_info = torch.utils.data.get_worker_info()
         assert worker_id == worker_info.id
         dataset: CMCDatasetWithHistory = worker_info.dataset
-        dataset.process_rank = dataset._gpu_rank * dataset._num_workers + worker_info.id
-        dataset.world_size = dataset._gpu_world_size * dataset._num_workers
+        dataset._process_rank = dataset._gpu_rank * dataset._num_workers + worker_info.id
+        dataset._world_size = dataset._gpu_world_size * dataset._num_workers
 
     def _get_examples_generator(self) -> Generator[SingleExample, None, None]:
         """
@@ -53,18 +59,18 @@ class CMCDatasetWithHistory(IterableDataset):
         This function yields local_rank'th row from every world_size rows.
         """
 
-        with open(self.filename) as f:
+        with open(self._filename) as f:
             for i, line in enumerate(f):
-                if i % self.world_size == self.process_rank:
-                    batch: Dict[str, Any] = json.loads(line.strip())
-                    author: str = str(batch["author"])
-                    diff_input_ids: List[int] = batch["diff_input_ids"]
-                    pos_in_history: int = batch["pos_in_history"]
+                if i % self._world_size == self._process_rank:
+                    example: Dict[str, Any] = json.loads(line.strip())
+                    author: str = str(example["author"])
+                    diff_input_ids: List[int] = example["diff_input_ids"]
+                    pos_in_history: int = example["pos_in_history"]
 
                     yield SingleExample(
                         diff_input_ids=diff_input_ids,
-                        msg_input_ids=self.history[str(author)][pos_in_history],
-                        history_input_ids=self.history[str(author)][:pos_in_history],
+                        msg_input_ids=self._history[str(author)][pos_in_history],
+                        history_input_ids=self._history[str(author)][:pos_in_history],
                     )
 
     def __iter__(self) -> Iterator[SingleExample]:
@@ -89,17 +95,18 @@ class CMCDatasetWithHistory(IterableDataset):
         )
 
     @staticmethod
-    def load_data(diffs_path: str, msgs_path: str, part: str, rank: int, world_size: int):
+    def load_data(history_path: str, data_path: str, rank: int, world_size: int):
         """
         Load dataset from files on disk.
 
         Args:
-            dataset_root: Path to dataset, including part (train/val/test).
+            history_path: Path to history file.
+            data_path: Path to data file.
             rank: Rank of the process in DDP (must be 0 if you have single process).
-            world_size: AAmount of processes in DDP (must be 1 if you have single process).
+            world_size: Amount of processes in DDP (must be 1 if you have single process).
         """
 
-        with open(os.path.join(msgs_path, f"{part}_history.json"), "r") as infile:
+        with open(history_path, "r") as infile:
             history = json.load(infile)
 
-        return CMCDatasetWithHistory(os.path.join(diffs_path, f"{part}.json"), history, rank, world_size)
+        return CMCDatasetWithHistory(data_path, history, rank, world_size)

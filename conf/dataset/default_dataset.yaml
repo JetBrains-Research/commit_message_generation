@@ -1,10 +1,17 @@
 testing: false
 
+dataset_root: raw_data/multilang
+
 context_ratio:
 generate_with_history: true
 train_with_history: true
 
 encoder_input_type: diff
+
+preprocessor_conf:
+  configuration: default
+  default:
+    chunksize: 4096
 
 train_dataloader_conf:
   batch_size: 16

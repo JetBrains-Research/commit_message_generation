@@ -30,10 +30,12 @@ def main(cfg: DictConfig) -> None:
     dm = CMCDataModule(
         **cfg.dataset,
         **cfg.model.dataset,
+        use_cache=True,
         local_rank=int(os.environ.get("LOCAL_RANK", 0)),
         world_size=1,
         shift_labels=cfg.model.model_configuration == "encoder_decoder",
     )
+    dm.prepare_data()
     dm.setup(stage=cfg.stage)
 
     if "wandb_logger" in cfg:

@@ -49,9 +49,6 @@ def main(cfg: DictConfig) -> None:
     print(f"Local rank: {int(os.environ.get('LOCAL_RANK', 0))}")
     print(f"World size: {world_size}")
 
-    if cfg.model.dataset.diff_tokenizer_name_or_path == cfg.model.dataset.msg_tokenizer_name_or_path:
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
     dm = CMCDataModule(
         **cfg.dataset,
         **cfg.model.dataset,
@@ -59,10 +56,12 @@ def main(cfg: DictConfig) -> None:
         world_size=world_size,
         shift_labels=cfg.model.model_configuration == "encoder_decoder",
     )
+
+    dm.prepare_data()
     dm.setup(stage="fit")
 
     batch_size = cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.accumulate_grad_batches * world_size
-    num_train_batches = dm.train_len // batch_size
+    num_train_batches = dm.train.len // batch_size  # type: ignore[attr-defined]
 
     if "limit_train_batches" in cfg.trainer:
         num_train_batches = min(
