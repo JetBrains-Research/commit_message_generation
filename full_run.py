@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 
 import hydra
 import jsonlines
@@ -12,7 +11,7 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from src.data_utils.cmg_data_module import CMGDataModule
-from src.embedders import BagOfWordsEmbedder
+from src.embedders import BagOfWordsEmbedder, TransformerEmbedder
 from src.search import DiffSearch
 
 
@@ -31,9 +30,7 @@ def main(cfg: DictConfig) -> None:
         run = wandb.init(
             **cfg.logger.args,
             tags=[
-                cfg.embedder.configuration,
-                f"{cfg.search.configuration}",
-                f"{cfg.search[cfg.search.configuration].num_neighbors}NN",
+                cfg.configuration,
             ],
             config=OmegaConf.to_container(cfg, resolve=True),  # type: ignore
         )
@@ -42,9 +39,9 @@ def main(cfg: DictConfig) -> None:
     dm = CMGDataModule(**cfg.dataset)
 
     # init embedder
-    if cfg.embedder.configuration == "bag_of_words":
+    embedder_conf = cfg.embedder[cfg.configuration]
+    if cfg.configuration == "bag_of_words":
         logging.info("Using Bag-of-Words embedder")
-        embedder_conf = cfg.embedder[cfg.embedder.configuration]
         vocabulary = None
         if embedder_conf.load_vocab:
             logging.info("Loading pretrained vocabulary...")
@@ -52,19 +49,23 @@ def main(cfg: DictConfig) -> None:
                 vocabulary = json.load(f)
         embedder = BagOfWordsEmbedder(vocabulary=vocabulary, max_features=embedder_conf.max_features)
         logging.info("Building vocabulary...")
-        embedder.fit_full_file(input_filename=dm.train_path, chunksize=embedder_conf.chunksize)
+        embedder.build_vocab(input_filename=dm.train_path, chunksize=embedder_conf.chunksize)
         if embedder_conf.save_vocab:
             embedder.save_vocab(vocab_filename=f"vocab_{embedder_conf.max_features}.json")
+    elif cfg.configuration == "transformer":
+        logging.info("Using Transformer embedder")
+        embedder = TransformerEmbedder(**embedder_conf)
     else:
         raise ValueError(f"Unknown embedder '{cfg.embedder.configuration}'")
 
-    # setup embedder and datasets
-    dm.setup(embedder, "fit")
+    # setup datasets
+    dm.setup("fit")
 
     # init retrieval class
-    if cfg.search.configuration == "diff":
+    search_conf = cfg.search[cfg.configuration]
+    if search_conf.configuration == "diff":
+        search_conf = search_conf["diff"]
         logging.info("Using diff-based retrieval")
-        search_conf = cfg.search[cfg.search.configuration]
         search = DiffSearch(
             num_neighbors=search_conf.num_neighbors,
             num_trees=search_conf.num_trees,
@@ -72,7 +73,7 @@ def main(cfg: DictConfig) -> None:
             input_fname=dm.train_path,
         )
     else:
-        raise ValueError(f"Unknown search '{cfg.search.configuration}'")
+        raise ValueError(f"Unknown search '{search_conf.configuration}'")
 
     # -------------------------------
     #              train            -
@@ -85,35 +86,38 @@ def main(cfg: DictConfig) -> None:
         search.load_index(search_conf.index_fname)
     else:
         for batch in tqdm(dm.train_dataloader(), desc="Building embeddings index"):
-            search.add_batch(batch)
+            search.add_batch(embedder.transform(batch))
         search.finalize()
 
     # ----------------------
     #         test         -
     # ----------------------
-    dm.setup(embedder, "test")
+    dm.setup("test")
 
     test_predictions = []
     test_inputs = []
     for batch in tqdm(dm.test_dataloader(), desc="Retrieving test predictions"):
-        test_predictions.extend(search.predict_batch(batch))
-        test_inputs.extend([example.dict() for example in batch])
+        test_predictions.extend(search.predict_batch(embedder.transform(batch)))
+        test_inputs.extend(batch)
 
+    logging.info("Saving predictions")
     with jsonlines.open("test_predictions.jsonl", "w") as writer:
-        writer.write_all([pred.dict() for pred in test_predictions])
+        writer.write_all(test_predictions)
 
     if run and cfg.logger.log_artifact:
+        logging.info("Adding artifact to W&B")
         wandb.Table.MAX_ROWS = 50000
         artifact = wandb.Artifact(cfg.logger.artifact.name, type=cfg.logger.artifact.type)
         preds_df = pd.DataFrame(test_predictions).add_suffix("_prediction")
         inputs_ds = pd.DataFrame(test_inputs).add_suffix("_input")
         df = pd.concat([inputs_ds, preds_df], axis=1).rename(
             columns={
-                "message_prediction": "Prediction",
-                "message_input": "Target",
-                "diff_prediction": "Retrieved diff",
+                "idx_input": "Input id",
                 "diff_input": "Input diff",
-                "idx_input": "Id",
+                "message_input": "Input message",
+                "idx_prediction": "Retrieved Id",
+                "diff_prediction": "Retrieved diff",
+                "message_prediction": "Retrieved message",
                 "distance_prediction": "Distance",
             }
         )
@@ -121,7 +125,7 @@ def main(cfg: DictConfig) -> None:
             wandb.Table(dataframe=df[["Id", "Input diff", "Retrieved diff", "Prediction", "Target", "Distance"]]),
             cfg.logger.artifact.table_name,
         )
-        run.log_artifact(artifact, aliases=[f"{cfg.embedder.configuration}_{search_conf.num_neighbors}NN"])
+        run.log_artifact(artifact, aliases=[f"{cfg.configuration}_{search_conf.num_neighbors}NN"])
 
 
 if __name__ == "__main__":

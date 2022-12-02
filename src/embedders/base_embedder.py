@@ -1,26 +1,32 @@
+from abc import ABC, abstractmethod
 from typing import List
 
-import pandas as pd
-from tqdm import tqdm
+import numpy.typing as npt
 
-from src.utils import mods_to_diff
+from src.utils import CommitEmbeddingExample, CommitTextExample
 
 
-class BaseEmbedder:
-    def fit(self, *args, **kwargs):
+class BaseEmbedder(ABC):
+    """Base class for embedders.
+
+    Method "_transform" should do real work, "transform" uses its result to support correct input/output format.
+    """
+
+    @abstractmethod
+    def _transform(self, diffs: List[str], *args, **kwargs) -> npt.NDArray:
         raise NotImplementedError
 
-    def fit_full_file(self, input_filename: str, chunksize: int):
-        reader = pd.read_json(input_filename, orient="records", lines=True, chunksize=chunksize)
-        it = (
-            [mods_to_diff(mods) for mods in chunk["mods"].tolist()]
-            for chunk in tqdm(reader, desc=f"Iterating over {input_filename} to fit embedder")
-        )
-        self.fit(item for lst in it for item in lst)
-
-    def transform(self, text: List[str], *args, **kwargs) -> List[int]:
-        raise NotImplementedError
+    def transform(self, inputs: List[CommitTextExample], *args, **kwargs) -> List[CommitEmbeddingExample]:
+        diffs = [ex["diff"] for ex in inputs]
+        diffs_embeddings: npt.NDArray = self._transform(diffs, *args, **kwargs)
+        return [
+            CommitEmbeddingExample(
+                diff=input["diff"], message=input["message"], diff_embedding=embedding, idx=input["idx"]
+            )
+            for input, embedding in zip(inputs, diffs_embeddings)
+        ]
 
     @property
+    @abstractmethod
     def embeddings_dim(self):
         raise NotImplementedError

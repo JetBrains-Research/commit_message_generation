@@ -62,6 +62,7 @@ def test_nn_search(tmp_path):
         message="message 0",
         diff="path[NL]diff 0[NL]",
         distance=pytest.approx(angular_dist([1, 0, 1], [1, 0, 1]), abs=1e-7),
+        idx=0,
     )
 
 
@@ -94,4 +95,5 @@ def test_2nn_search(tmp_path):
         message="message 2",
         diff="path[NL]diff 2[NL]",
         distance=pytest.approx(angular_dist([1, 0, 1], [1, 1, 1])),
+        idx=2,
     )

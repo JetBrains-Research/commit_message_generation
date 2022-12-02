@@ -5,7 +5,7 @@ numpy~=1.23.4
 
 # DL packages
 pytorch-lightning~=1.7.2
-torch~=1.12.1
+torch~=1.13.0
 transformers~=4.21.1
 
 # DL utils

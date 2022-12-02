@@ -1,0 +1,5 @@
+.idea
+.mypy_cache
+.pytest_cache
+outputs
+raw_data

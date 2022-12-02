@@ -1,32 +1,41 @@
+configuration: transformer
+
 dataset:
-  dataset_root: placeholder
-  train_fname: placeholder
-  val_fname: placeholder
-  test_fname: placeholder
+  dataset_root: raw_data/multilang
   train_dataloader_conf:
-    batch_size: 1
-    num_workers: 16
+    batch_size: 16
+    num_workers: 8
   val_dataloader_conf:
-    batch_size: 1
-    num_workers: 16
+    batch_size: 16
+    num_workers: 8
   test_dataloader_conf:
     batch_size: 1
-    num_workers: 16
+    num_workers: 1
 
 embedder:
-  configuration: bag_of_words
   bag_of_words:
     max_features: 100000
     load_vocab: false
     save_vocab: true
     chunksize: 10000
+  transformer:
+    name_or_path: microsoft/codebert-base
+    normalize_embeddings: true
+    device: cpu
 
 search:
-  configuration: diff
-  diff:
-    num_neighbors: 5
-    num_trees: 10000
-    load_index: false
+  bag_of_words:
+    configuration: diff
+    diff:
+      num_neighbors: 5
+      num_trees: 10000
+      load_index: false
+  transformer:
+    configuration: diff
+    diff:
+      num_neighbors: 1
+      num_trees: 100
+      load_index: false
 
 logger:
   args:
@@ -37,4 +46,3 @@ logger:
     name: placeholder
     type: placeholder
     table_name: placeholder
-

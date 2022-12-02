@@ -1,28 +1,27 @@
-from dataclasses import asdict, dataclass
 from typing import Dict, List
 
 import numpy.typing as npt
+from typing_extensions import TypedDict
 
 
-@dataclass
-class RetrievalExample:
-    diff_input_ids: List[int] | npt.NDArray
+class CommitTextExample(TypedDict):
     diff: str
     message: str
     idx: int
 
-    def dict(self):
-        return {k: v for k, v in asdict(self).items() if k != "diff_input_ids"}
 
-
-@dataclass
-class RetrievalPrediction:
-    message: str
+class CommitEmbeddingExample(TypedDict):
+    diff_embedding: npt.NDArray
     diff: str
-    distance: float
+    message: str
+    idx: int
 
-    def dict(self):
-        return {k: v for k, v in asdict(self).items()}
+
+class RetrievalPrediction(TypedDict):
+    diff: str
+    message: str
+    idx: int
+    distance: float
 
 
 def mods_to_diff(mods: List[Dict[str, str]], line_sep: str = "[NL]") -> str:

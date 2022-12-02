@@ -1,10 +1,13 @@
 import json
-from typing import Iterator, List, Mapping, Optional
+from typing import List, Mapping, Optional
 
 import numpy.typing as npt
+import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer
+from tqdm import tqdm
 
 from src.embedders.base_embedder import BaseEmbedder
+from src.utils import mods_to_diff
 
 
 class BagOfWordsEmbedder(BaseEmbedder):
@@ -26,11 +29,17 @@ class BagOfWordsEmbedder(BaseEmbedder):
         with open(vocab_filename, "w") as f:
             json.dump({key: int(self.vocab[key]) for key in self.vocab}, f)
 
-    def fit(self, input_content: Iterator[str], *args, **kwargs) -> None:
-        self._vectorizer.fit(input_content)
+    def build_vocab(self, input_filename: str, chunksize: int) -> None:
+        """Given input file, builds vocabulary by iterating over it in chunks."""
+        reader = pd.read_json(input_filename, orient="records", lines=True, chunksize=chunksize)
+        it = (
+            [mods_to_diff(mods) for mods in chunk["mods"].tolist()]
+            for chunk in tqdm(reader, desc=f"Iterating over {input_filename} to fit embedder")
+        )
+        self._vectorizer.fit(item for lst in it for item in lst)
 
-    def transform(self, input_content: List[str], *args, **kwargs) -> npt.NDArray:
-        return self._vectorizer.transform(input_content).toarray()
+    def _transform(self, diffs: List[str], *args, **kwargs) -> npt.NDArray:
+        return self._vectorizer.transform(diffs).toarray()
 
     @property
     def embeddings_dim(self):
