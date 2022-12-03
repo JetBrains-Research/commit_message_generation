@@ -71,8 +71,8 @@ def main(cfg: DictConfig) -> None:
     # main module with model logic
     model = CMCModule(
         **cfg.model,
-        diff_tokenizer=dm._diff_tokenizer,
-        msg_tokenizer=dm._msg_tokenizer,
+        diff_tokenizer=dm.diff_tokenizer,
+        msg_tokenizer=dm.msg_tokenizer,
         encoder_context_max_len=cfg.model.dataset.encoder_context_max_len,
         decoder_context_max_len=cfg.model.dataset.decoder_context_max_len,
         batch_size=batch_size,

@@ -85,8 +85,8 @@ def main(cfg: DictConfig) -> None:
         model = CMCModule.load_from_checkpoint(
             PATH,
             **cfg.model,
-            diff_tokenizer=dm._diff_tokenizer,
-            msg_tokenizer=dm._msg_tokenizer,
+            diff_tokenizer=dm.diff_tokenizer,
+            msg_tokenizer=dm.msg_tokenizer,
             generation_kwargs=cfg.generation_kwargs,
             preds_artifact_name=f"{cfg.model_name}_preds",
             preds_artifact_type="multilang preds",
@@ -97,8 +97,8 @@ def main(cfg: DictConfig) -> None:
         # use zero-shot pretrained model or even random model
         model = CMCModule(
             **cfg.model,
-            diff_tokenizer=dm._diff_tokenizer,
-            msg_tokenizer=dm._msg_tokenizer,
+            diff_tokenizer=dm.diff_tokenizer,
+            msg_tokenizer=dm.msg_tokenizer,
             generation_kwargs=cfg.generation_kwargs,
             preds_artifact_name=f"{cfg.model_name}_preds",
             preds_artifact_type="multilang preds",

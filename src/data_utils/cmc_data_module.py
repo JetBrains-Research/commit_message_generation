@@ -23,7 +23,6 @@ class CMCDataModule(pl.LightningDataModule):
         encoder_input_type: str,
         encoder_context_max_len: int,
         decoder_context_max_len: int,
-        diff_tokenizer_name_or_path: str,
         msg_tokenizer_name_or_path: str,
         diff_tokenizer_name_or_path: Optional[str],
         local_rank: int,
