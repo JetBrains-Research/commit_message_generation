@@ -7,6 +7,10 @@ transformers~=4.21.1
 wandb~=0.13.1
 hydra-core~=1.2.0
 
+# data preprocessing
+pandas
+jsonlines
+
 # metrics utils
 torchmetrics~=0.9.3
 datasets~=2.4.0
