@@ -3,7 +3,6 @@ model_configuration: decoder
 decoder_name_or_path: distilgpt2
 
 dataset:
-  dataset_root: raw_data/multilang
   diffs_folder: byte_level
   msgs_folder: byte_level
   diff_tokenizer_name_or_path: raw_data/multilang/byte_level/tokenizer
