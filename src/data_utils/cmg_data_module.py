@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
-from src.data_utils.cmg_dataset import RetrievalDataset
+from .cmg_dataset import RetrievalDataset
 
 
 def collate_fn(x):

@@ -10,8 +10,8 @@ from hydra.utils import to_absolute_path
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-from src.data_utils.cmg_data_module import CMGDataModule
-from src.embedders import BagOfWordsEmbedder, TransformerEmbedder
+from src.data_utils import CMGDataModule
+from src.embedders import BaseEmbedder, BagOfWordsEmbedder, TransformerEmbedder
 from src.search import DiffSearch
 
 
@@ -40,6 +40,7 @@ def main(cfg: DictConfig) -> None:
 
     # init embedder
     embedder_conf = cfg.embedder[cfg.configuration]
+    embedder: BaseEmbedder
     if cfg.configuration == "bag_of_words":
         logging.info("Using Bag-of-Words embedder")
         vocabulary = None
