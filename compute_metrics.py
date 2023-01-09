@@ -43,6 +43,7 @@ def init_run(cfg: DictConfig) -> pd.DataFrame:
             )
             metadata_df = metadata_df.head(len(df))
         df = pd.concat([df, metadata_df], axis=1)
+    df["Prediction"] = [row["Prediction"][len(row["Prefix"]) :] for _, row in df.iterrows()]
     return df
 
 
@@ -90,10 +91,13 @@ def main(cfg: DictConfig):
         if not row["Target"].strip():
             continue
 
-        full_metrics.add_batch(predictions=[row["Prediction"].strip()], references=[row["Target"].strip()])
+        full_metrics.add_batch(
+            predictions=[row["Prediction"].strip().replace("[NL]", "\n")],
+            references=[row["Target"].strip().replace("[NL]", "\n")],
+        )
 
-        pred_words = row["Prediction"].strip().split()
-        target_words = row["Target"].strip().split()
+        pred_words = row["Prediction"].strip().replace("[NL]", "\n").split()
+        target_words = row["Target"].strip().replace("[NL]", "\n").split()
 
         for i in range(1, cfg.max_n_tokens + 1):
             if len(target_words) < i:

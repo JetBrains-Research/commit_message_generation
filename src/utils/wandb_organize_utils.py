@@ -15,43 +15,54 @@ class WandbOrganizer:
 
     @staticmethod
     def _get_model_tags(model_cfg: DictConfig) -> List[str]:
-        tags = []
+        tags = [model_cfg.model_configuration]
 
-        tags.append(model_cfg.model_configuration)
+        if model_cfg.model_configuration == "seq2seq":
+            tags.append(WandbOrganizer._prepare_pretrained_name((model_cfg["name_or_path"])))
+        elif model_cfg.model_configuration == "race":
+            tags.append("race")
+            tags.append(WandbOrganizer._prepare_pretrained_name((model_cfg["name_or_path"])))
+        else:
+            for model_part in ["encoder", "decoder"]:
+                if model_part == "encoder" and model_cfg.model_configuration == "decoder":
+                    continue
+                if f"{model_part}_name_or_path" in model_cfg:
+                    tags.append(
+                        f"{model_part}: {WandbOrganizer._prepare_pretrained_name(model_cfg[f'{model_part}_name_or_path'])}"
+                    )
+                else:
+                    tags.append(f"{model_part}: random_{model_cfg[f'{model_part}_model_type']}")
+                if f"num_layers_{model_part}" in model_cfg:
+                    tags[-1] += f" {model_cfg[f'num_layers_{model_part}']} layers"
 
-        for model_part in ["encoder", "decoder"]:
-            if model_part == "encoder" and model_cfg.model_configuration == "decoder":
-                continue
-            if f"{model_part}_name_or_path" in model_cfg:
-                tags.append(
-                    f"{model_part}: {WandbOrganizer._prepare_pretrained_name(model_cfg[f'{model_part}_name_or_path'])}"
-                )
-            else:
-                tags.append(f"{model_part}: random_{model_cfg[f'{model_part}_model_type']}")
-            if f"num_layers_{model_part}" in model_cfg:
-                tags[-1] += f" {model_cfg[f'num_layers_{model_part}']} layers"
-
-        if model_cfg.model_configuration == "encoder_decoder":
-            if model_cfg.tie_encoder_decoder:
-                tags.append("shared weights")
-            elif model_cfg.tie_word_embeddings:
-                tags.append("shared embeddings")
+            if model_cfg.model_configuration == "encoder_decoder":
+                if model_cfg.tie_encoder_decoder:
+                    tags.append("shared weights")
+                elif model_cfg.tie_word_embeddings:
+                    tags.append("shared embeddings")
 
         return tags
 
     @staticmethod
     def get_run_name(model_cfg: DictConfig, dataset_cfg: DictConfig) -> str:
         name = []
-        for model_part in ["encoder", "decoder"]:
-            if model_part == "encoder" and model_cfg.model_configuration == "decoder":
-                continue
-            if f"{model_part}_name_or_path" in model_cfg:
-                name.append(f"{WandbOrganizer._prepare_pretrained_name(model_cfg[f'{model_part}_name_or_path'])}")
-            else:
-                name.append(f"random_{model_cfg[f'{model_part}_model_type']}")
 
-            if f"num_layers_{model_part}" in model_cfg:
-                name.append(f"{model_cfg[f'num_layers_{model_part}']}")
+        if model_cfg.model_configuration == "seq2seq":
+            name.append(WandbOrganizer._prepare_pretrained_name((model_cfg["name_or_path"])))
+        elif model_cfg.model_configuration == "race":
+            name.append("race")
+            name.append(WandbOrganizer._prepare_pretrained_name((model_cfg["name_or_path"])))
+        else:
+            for model_part in ["encoder", "decoder"]:
+                if model_part == "encoder" and model_cfg.model_configuration == "decoder":
+                    continue
+                if f"{model_part}_name_or_path" in model_cfg:
+                    name.append(f"{WandbOrganizer._prepare_pretrained_name(model_cfg[f'{model_part}_name_or_path'])}")
+                else:
+                    name.append(f"random_{model_cfg[f'{model_part}_model_type']}")
+
+                if f"num_layers_{model_part}" in model_cfg:
+                    name.append(f"{model_cfg[f'num_layers_{model_part}']}")
 
         if model_cfg.model_configuration == "encoder_decoder":
             if model_cfg.tie_encoder_decoder:

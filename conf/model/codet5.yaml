@@ -1,0 +1,11 @@
+model_configuration: seq2seq
+
+name_or_path: Salesforce/codet5-small
+
+dataset:
+  diffs_tok_dir: codet5-small
+  msgs_tok_dir: codet5-small
+  diff_tokenizer_name_or_path: Salesforce/codet5-small
+  msg_tokenizer_name_or_path: Salesforce/codet5-small
+  encoder_context_max_len: 512
+  decoder_context_max_len: 512

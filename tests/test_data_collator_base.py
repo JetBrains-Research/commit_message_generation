@@ -16,11 +16,17 @@ def default_tokenizers():
 def collator_diff(default_tokenizers):
     encoder_tok, decoder_tok = default_tokenizers
     collator = BaseCollatorUtils(
-        encoder_tok,
-        decoder_tok,
+        diff_bos_token_id=encoder_tok.bos_token_id,
+        diff_eos_token_id=encoder_tok.eos_token_id,
+        diff_pad_token_id=encoder_tok.pad_token_id,
+        msg_bos_token_id=decoder_tok.bos_token_id,
+        msg_eos_token_id=decoder_tok.eos_token_id,
+        msg_pad_token_id=decoder_tok.pad_token_id,
+        msg_sep_token_id=decoder_tok.sep_token_id,
         encoder_context_max_len=512,
         decoder_context_max_len=256,
         with_history=True,
+        process_retrieved=False,
         encoder_input_type="diff",
         testing=False,
     )
@@ -31,7 +37,7 @@ def test_diff_single_example(default_tokenizers, collator_diff):
     encoder_tok, decoder_tok = default_tokenizers
 
     diff_inputs = [SingleExample(diff_input_ids=[i for i in range(5, 105)], msg_input_ids=[], history_input_ids=[])]
-    encoder_input_ids, encoder_attention_mask = collator_diff._process_encoder_input(diff_inputs)
+    (encoder_input_ids, encoder_attention_mask), _, _ = collator_diff._process_encoder_input(diff_inputs)
 
     assert encoder_input_ids.shape == (1, 102)
     assert torch.all(
@@ -49,7 +55,7 @@ def test_diff_batch_pad_max_len(default_tokenizers, collator_diff):
         SingleExample(diff_input_ids=[i for i in range(5, 105)], msg_input_ids=[], history_input_ids=[]),
         SingleExample(diff_input_ids=[i for i in range(5, 50)], msg_input_ids=[], history_input_ids=[]),
     ]
-    encoder_input_ids, encoder_attention_mask = collator_diff._process_encoder_input(diff_inputs)
+    (encoder_input_ids, encoder_attention_mask), _, _ = collator_diff._process_encoder_input(diff_inputs)
 
     assert encoder_input_ids.shape == (2, 102)
     assert torch.all(
@@ -79,7 +85,7 @@ def test_diff_batch_truncate_max_len(default_tokenizers, collator_diff):
         SingleExample(diff_input_ids=[i for i in range(5, 1024)], msg_input_ids=[], history_input_ids=[]),
         SingleExample(diff_input_ids=[i for i in range(5, 50)], msg_input_ids=[], history_input_ids=[]),
     ]
-    encoder_input_ids, encoder_attention_mask = collator_diff._process_encoder_input(diff_inputs)
+    (encoder_input_ids, encoder_attention_mask), _, _ = collator_diff._process_encoder_input(diff_inputs)
 
     assert encoder_input_ids.shape == (2, 512)
     assert torch.all(
@@ -106,13 +112,19 @@ def test_history(default_tokenizers):
     encoder_tok, decoder_tok = default_tokenizers
 
     collator_history = BaseCollatorUtils(
-        encoder_tok,
-        decoder_tok,
+        diff_bos_token_id=encoder_tok.bos_token_id,
+        diff_eos_token_id=encoder_tok.eos_token_id,
+        diff_pad_token_id=encoder_tok.pad_token_id,
+        msg_bos_token_id=decoder_tok.bos_token_id,
+        msg_eos_token_id=decoder_tok.eos_token_id,
+        msg_pad_token_id=decoder_tok.pad_token_id,
+        msg_sep_token_id=decoder_tok.sep_token_id,
         encoder_context_max_len=8,
         encoder_input_type="history",
         testing=None,
         decoder_context_max_len=None,
         with_history=None,
+        process_retrieved=False,
     )
 
     history_inputs = [
@@ -120,7 +132,7 @@ def test_history(default_tokenizers):
         SingleExample(diff_input_ids=[], msg_input_ids=[], history_input_ids=[[i] for i in range(1024, 1026)]),
     ]
 
-    encoder_input_ids, encoder_attention_mask = collator_history._process_encoder_input(history_inputs)
+    (encoder_input_ids, encoder_attention_mask), _, _ = collator_history._process_encoder_input(history_inputs)
 
     assert encoder_input_ids.shape == (2, 7)
     assert torch.all(
@@ -146,15 +158,6 @@ def test_history(default_tokenizers):
     assert torch.all(encoder_attention_mask[1] == torch.tensor([1 for _ in range(5)] + [0 for _ in range(2)]))
 
     history_inputs = [
-        {"history_input_ids": []},
-        {
-            "history_input_ids": [
-                decoder_tok("another old message", add_special_tokens=False, padding=False, truncation=False).input_ids
-            ]
-        },
-    ]
-
-    history_inputs = [
         SingleExample(
             diff_input_ids=[],
             msg_input_ids=[],
@@ -173,15 +176,21 @@ def test_history(default_tokenizers):
     ]
 
     collator_history = BaseCollatorUtils(
-        encoder_tok,
-        decoder_tok,
+        diff_bos_token_id=encoder_tok.bos_token_id,
+        diff_eos_token_id=encoder_tok.eos_token_id,
+        diff_pad_token_id=encoder_tok.pad_token_id,
+        msg_bos_token_id=decoder_tok.bos_token_id,
+        msg_eos_token_id=decoder_tok.eos_token_id,
+        msg_pad_token_id=decoder_tok.pad_token_id,
+        msg_sep_token_id=decoder_tok.sep_token_id,
         encoder_context_max_len=256,
         encoder_input_type="history",
         testing=None,
         decoder_context_max_len=None,
         with_history=None,
+        process_retrieved=False,
     )
-    encoder_input_ids, encoder_attention_mask = collator_history._process_encoder_input(history_inputs)
+    (encoder_input_ids, encoder_attention_mask), _, _ = collator_history._process_encoder_input(history_inputs)
 
     assert encoder_input_ids.shape == (
         2,

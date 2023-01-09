@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import torch
+from transformers import PreTrainedTokenizerFast
 
 from src.utils import BatchTest, SingleExample
 
@@ -29,6 +30,8 @@ class DataCollatorTest(BaseCollatorUtils):
           (but this restriction is not applied to input message, it can still be up to `decoder_context_max_len` long).
     """
 
+    diff_tokenizer: PreTrainedTokenizerFast
+    msg_tokenizer: PreTrainedTokenizerFast
     context_ratio: float
     max_new_tokens: int = 15  # TODO: make configurable
 
@@ -99,7 +102,7 @@ class DataCollatorTest(BaseCollatorUtils):
                     history_ids=history_ids,
                 )
 
-            cur_ids = [[self.msg_tokenizer.bos_token_id]] + cur_history_ids + [message_ids]  # type: ignore[attr-defined]
+            cur_ids = [[self.msg_bos_token_id]] + cur_history_ids + [message_ids]
             cur_ids_tensor = torch.tensor([ex for sublist in cur_ids for ex in sublist], dtype=torch.int64)
             cur_mask_tensor = torch.ones_like(cur_ids_tensor)
 
@@ -116,7 +119,7 @@ class DataCollatorTest(BaseCollatorUtils):
             self._pad_tensor(
                 tensor,
                 pad_len=msg_max_len - tensor.numel(),
-                value=self.msg_tokenizer.pad_token_id,  # type: ignore[attr-defined]
+                value=self.msg_pad_token_id,
                 left=True,
             )
             for tensor in all_msg_ids
@@ -134,17 +137,13 @@ class DataCollatorTest(BaseCollatorUtils):
         return torch.stack(all_msg_ids), torch.stack(all_msg_masks), all_msg_targets, all_msg_prefixes
 
     def __call__(self, examples: List[SingleExample]) -> BatchTest:
-        assert self.diff_tokenizer.bos_token_id is not None  # type: ignore[attr-defined]
-        assert self.diff_tokenizer.eos_token_id is not None  # type: ignore[attr-defined]
-        assert self.diff_tokenizer.pad_token_id is not None  # type: ignore[attr-defined]
-
-        assert self.msg_tokenizer.bos_token_id is not None  # type: ignore[attr-defined]
-        assert self.msg_tokenizer.eos_token_id is not None  # type: ignore[attr-defined]
-        assert self.msg_tokenizer.pad_token_id is not None  # type: ignore[attr-defined]
-        assert self.msg_tokenizer.sep_token_id is not None  # type: ignore[attr-defined]
-
         if not self.testing:
-            encoder_input_ids, encoder_attention_mask = self._process_encoder_input(examples=examples)
+            (
+                (encoder_input_ids, encoder_attention_mask),
+                (retrieved_diff_input_ids, retrieved_diff_attention_mask),
+                (retrieved_msg_input_ids, retrieved_msg_attention_mask),
+            ) = self._process_encoder_input(examples=examples)
+
             decoder_input_ids, decoder_attention_mask, targets, prefixes = self._process_decoder_input(
                 examples=examples
             )
@@ -157,19 +156,27 @@ class DataCollatorTest(BaseCollatorUtils):
                 labels=None,
                 targets=targets,
                 prefixes=prefixes,
+                retrieved_diff_input_ids=retrieved_diff_input_ids,
+                retrieved_diff_attention_mask=retrieved_diff_attention_mask,
+                retrieved_msg_input_ids=retrieved_msg_input_ids,
+                retrieved_msg_attention_mask=retrieved_msg_attention_mask,
             )
         else:
             batch_size = len(examples)
             return BatchTest(
-                encoder_input_ids=torch.randint(
-                    self.diff_tokenizer.vocab_size, (batch_size, self.encoder_context_max_len), dtype=torch.int64  # type: ignore[attr-defined]
-                ),
+                encoder_input_ids=torch.randint(1000, (batch_size, self.encoder_context_max_len), dtype=torch.int64),
                 encoder_attention_mask=torch.ones(batch_size, self.encoder_context_max_len, dtype=torch.int64),
-                decoder_input_ids=torch.randint(
-                    self.msg_tokenizer.vocab_size, (batch_size, self.decoder_context_max_len), dtype=torch.int64  # type: ignore[attr-defined]
-                ),
+                decoder_input_ids=torch.randint(1000, (batch_size, self.decoder_context_max_len), dtype=torch.int64),
                 decoder_attention_mask=torch.ones(batch_size, self.decoder_context_max_len, dtype=torch.int64),
                 labels=None,
                 targets=[],
                 prefixes=[],
+                retrieved_diff_input_ids=torch.randint(
+                    1000, (batch_size, self.encoder_context_max_len), dtype=torch.int64
+                ),
+                retrieved_diff_attention_mask=torch.ones(batch_size, self.encoder_context_max_len, dtype=torch.int64),
+                retrieved_msg_input_ids=torch.randint(
+                    1000, (batch_size, self.encoder_context_max_len), dtype=torch.int64
+                ),
+                retrieved_msg_attention_mask=torch.ones(batch_size, self.encoder_context_max_len, dtype=torch.int64),
             )

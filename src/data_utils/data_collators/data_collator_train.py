@@ -36,7 +36,7 @@ class DataCollatorTrain(BaseCollatorUtils):
         with pad token. In our case, history ids are masked -100 in labels, but they are still
         meaningful ids. Therefore, we can't use the default approach.
         """
-        ids = [[self.msg_tokenizer.bos_token_id]] + ids[:-1]  # type: ignore[attr-defined]
+        ids = [[self.msg_bos_token_id]] + ids[:-1]
         return ids, labels
 
     def _process_decoder_input(self, examples: List[SingleExample]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -68,18 +68,8 @@ class DataCollatorTrain(BaseCollatorUtils):
                 )
                 cur_history_labels = [[-100 for _ in message] for message in cur_history_ids]
 
-            cur_ids = (
-                [[self.msg_tokenizer.bos_token_id]]  # type: ignore[attr-defined]
-                + cur_history_ids
-                + [message_ids]
-                + [[self.msg_tokenizer.eos_token_id]]  # type: ignore[attr-defined]
-            )
-            cur_labels = (
-                [[self.msg_tokenizer.bos_token_id]]  # type: ignore[attr-defined]
-                + cur_history_labels
-                + [message_ids]
-                + [[self.msg_tokenizer.eos_token_id]]  # type: ignore[attr-defined]
-            )
+            cur_ids = [[self.msg_bos_token_id]] + cur_history_ids + [message_ids] + [[self.msg_eos_token_id]]
+            cur_labels = [[self.msg_bos_token_id]] + cur_history_labels + [message_ids] + [[self.msg_eos_token_id]]
 
             if self.shift_labels:
                 cur_ids, cur_labels = self._shift_for_encoder_decoder(cur_ids, cur_labels)
@@ -99,7 +89,7 @@ class DataCollatorTrain(BaseCollatorUtils):
             self._pad_tensor(
                 tensor,
                 pad_len=msg_max_len - tensor.numel(),
-                value=self.msg_tokenizer.pad_token_id,  # type: ignore[attr-defined]
+                value=self.msg_pad_token_id,
                 left=False,
             )
             for tensor in all_msg_ids
@@ -126,18 +116,13 @@ class DataCollatorTrain(BaseCollatorUtils):
         return torch.stack(all_msg_ids), torch.stack(all_msg_masks), torch.stack(all_msg_labels)
 
     def __call__(self, examples: List[SingleExample]) -> BatchTrain:
-        # explicit checks - some of these ids are allowed to be 0, so otherwise it might lead to an error
-        assert self.diff_tokenizer.bos_token_id is not None  # type: ignore[attr-defined]
-        assert self.diff_tokenizer.eos_token_id is not None  # type: ignore[attr-defined]
-        assert self.diff_tokenizer.pad_token_id is not None  # type: ignore[attr-defined]
-
-        assert self.msg_tokenizer.bos_token_id is not None  # type: ignore[attr-defined]
-        assert self.msg_tokenizer.eos_token_id is not None  # type: ignore[attr-defined]
-        assert self.msg_tokenizer.pad_token_id is not None  # type: ignore[attr-defined]
-        assert self.msg_tokenizer.sep_token_id is not None  # type: ignore[attr-defined]
-
         if not self.testing:
-            encoder_input_ids, encoder_attention_mask = self._process_encoder_input(examples=examples)
+            (
+                (encoder_input_ids, encoder_attention_mask),
+                (retrieved_diff_input_ids, retrieved_diff_attention_mask),
+                (retrieved_msg_input_ids, retrieved_msg_attention_mask),
+            ) = self._process_encoder_input(examples=examples)
+
             decoder_input_ids, decoder_attention_mask, labels = self._process_decoder_input(examples=examples)
 
             return BatchTrain(
@@ -146,19 +131,25 @@ class DataCollatorTrain(BaseCollatorUtils):
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
                 labels=labels,
+                retrieved_diff_input_ids=retrieved_diff_input_ids,
+                retrieved_diff_attention_mask=retrieved_diff_attention_mask,
+                retrieved_msg_input_ids=retrieved_msg_input_ids,
+                retrieved_msg_attention_mask=retrieved_msg_attention_mask,
             )
         else:
             batch_size = len(examples)
             return BatchTrain(
-                encoder_input_ids=torch.randint(
-                    self.diff_tokenizer.vocab_size, (batch_size, self.encoder_context_max_len), dtype=torch.int64  # type: ignore[attr-defined]
-                ),
+                encoder_input_ids=torch.randint(1000, (batch_size, self.encoder_context_max_len), dtype=torch.int64),
                 encoder_attention_mask=torch.ones(batch_size, self.encoder_context_max_len, dtype=torch.int64),
-                decoder_input_ids=torch.randint(
-                    self.msg_tokenizer.vocab_size, (batch_size, self.decoder_context_max_len), dtype=torch.int64  # type: ignore[attr-defined]
-                ),
+                decoder_input_ids=torch.randint(1000, (batch_size, self.decoder_context_max_len), dtype=torch.int64),
                 decoder_attention_mask=torch.ones(batch_size, self.decoder_context_max_len, dtype=torch.int64),
-                labels=torch.randint(
-                    self.msg_tokenizer.vocab_size, (batch_size, self.decoder_context_max_len), dtype=torch.int64  # type: ignore[attr-defined]
+                labels=torch.randint(1000, (batch_size, self.decoder_context_max_len), dtype=torch.int64),
+                retrieved_diff_input_ids=torch.randint(
+                    1000, (batch_size, self.encoder_context_max_len), dtype=torch.int64
                 ),
+                retrieved_diff_attention_mask=torch.ones(batch_size, self.encoder_context_max_len, dtype=torch.int64),
+                retrieved_msg_input_ids=torch.randint(
+                    1000, (batch_size, self.encoder_context_max_len), dtype=torch.int64
+                ),
+                retrieved_msg_attention_mask=torch.ones(batch_size, self.encoder_context_max_len, dtype=torch.int64),
             )

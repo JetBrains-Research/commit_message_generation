@@ -1,8 +1,8 @@
+import logging
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Literal, Optional, Tuple
 
 import torch
-from transformers import PreTrainedTokenizerFast
 
 from src.utils import SingleExample
 
@@ -12,8 +12,6 @@ class BaseCollatorUtils:
     """Base class for utilities both for training and evaluations collators (e.g. processing encoder input).
 
     Args:
-        diff_tokenizer: Tokenizer used to tokenize diff.
-        msg_tokenizer: Tokenizer used to tokenize messages.
         encoder_context_max_len: Maximum allowed number of tokens in encoder context.
         decoder_context_max_len: Maximum allowed number of tokens in decoder context.
         with_history: True to add history to decoder input, False otherwise.
@@ -23,12 +21,18 @@ class BaseCollatorUtils:
          input data  (used to quickly test whether current batch size fits in GPU memory).
     """
 
-    diff_tokenizer: PreTrainedTokenizerFast
-    msg_tokenizer: PreTrainedTokenizerFast
+    msg_bos_token_id: int
+    msg_eos_token_id: int
+    msg_pad_token_id: int
+    msg_sep_token_id: int
+    diff_bos_token_id: int
+    diff_eos_token_id: int
+    diff_pad_token_id: int
     encoder_context_max_len: int
     decoder_context_max_len: int
     with_history: bool
     encoder_input_type: str
+    process_retrieved: bool
     testing: bool
 
     def _pad_tensor(self, input_tensor: torch.Tensor, pad_len: int, value: int, left: bool) -> torch.Tensor:
@@ -57,7 +61,7 @@ class BaseCollatorUtils:
                 break
 
             cur_len += len(history_input_ids) + 1
-            cur_history_ids.append(history_input_ids + [self.msg_tokenizer.sep_token_id])  # type: ignore[attr-defined]
+            cur_history_ids.append(history_input_ids + [self.msg_sep_token_id])
         return cur_history_ids[::-1]
 
     def _process_history(self, history_inputs: List[List[List[int]]]) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -88,11 +92,9 @@ class BaseCollatorUtils:
                     break
 
                 cur_len += len(history_ids) + 1
-                cur_history_ids.append(history_ids + [self.msg_tokenizer.sep_token_id])  # type: ignore[attr-defined]
+                cur_history_ids.append(history_ids + [self.msg_sep_token_id])
 
-            cur_history_ids = (
-                [[self.msg_tokenizer.bos_token_id]] + cur_history_ids[::-1] + [[self.msg_tokenizer.eos_token_id]]  # type: ignore[attr-defined]
-            )
+            cur_history_ids = [[self.msg_bos_token_id]] + cur_history_ids[::-1] + [[self.msg_eos_token_id]]
             # drop last [SEP] token
             cur_history_ids[-2] = cur_history_ids[-2][:-1]
 
@@ -108,9 +110,7 @@ class BaseCollatorUtils:
 
         # pad tensors to max length in batch
         all_history_ids = [
-            self._pad_tensor(
-                tensor, pad_len=history_max_len - tensor.numel(), value=self.msg_tokenizer.pad_token_id, left=False  # type: ignore[attr-defined]
-            )
+            self._pad_tensor(tensor, pad_len=history_max_len - tensor.numel(), value=self.msg_pad_token_id, left=False)
             for tensor in all_history_ids
         ]
         all_history_masks = [
@@ -119,54 +119,64 @@ class BaseCollatorUtils:
         ]
         return torch.stack(all_history_ids), torch.stack(all_history_masks)
 
-    def _process_diff(self, diff_inputs: List[List[int]]):
+    def _process_inputs(self, inputs: List[List[int]], are_messages: bool = False):
         """
-        This helper method processes history as encoder input.
+        This helper method processes either diffs or messsages as encoder input.
 
-        It truncates the diffs to maximum allowed length.
+        It truncates the inputs to maximum allowed length.
 
-        It also adds all required special tokens: format is [BOS] diff [EOS].
+        It also adds all required special tokens: format is [BOS] input [EOS].
 
         Finally, it is responsible for padding to maximum length in batch and conversion to torch.Tensor.
 
         Args:
-            diff_inputs: A list of diffs for current batch.
+            inputs: A list of tokenized examples from current batch.
 
         Returns:
             input_ids for encoder, attention_mask for encoder
         """
-        all_diff_ids = [
-            [self.diff_tokenizer.bos_token_id]  # type: ignore[attr-defined]
-            + diff[: self.encoder_context_max_len - 2]
-            + [self.diff_tokenizer.eos_token_id]  # type: ignore[attr-defined]
-            for diff in diff_inputs
-        ]
-        all_diff_ids_tensors = [torch.tensor(ids, dtype=torch.int64) for ids in all_diff_ids]
-        all_diff_masks_tensors = [torch.ones_like(ids) for ids in all_diff_ids_tensors]
+        if are_messages:
+            bos_token_id = self.msg_bos_token_id
+            eos_token_id = self.msg_eos_token_id
+            pad_token_id = self.msg_pad_token_id
+        else:
+            bos_token_id = self.diff_bos_token_id
+            eos_token_id = self.diff_eos_token_id
+            pad_token_id = self.diff_pad_token_id
+
+        inputs = [[bos_token_id] + example[: self.encoder_context_max_len - 2] + [eos_token_id] for example in inputs]
+        inputs_tensors = [torch.tensor(ids, dtype=torch.int64) for ids in inputs]
+        masks_tensors = [torch.ones_like(ids) for ids in inputs_tensors]
 
         # pad tensors to max length in batch
-        diff_max_len = max(len(tensor) for tensor in all_diff_ids)
-        all_diff_ids_tensors = [
+        inputs_max_len = max(len(tensor) for tensor in inputs)
+        inputs_tensors = [
             self._pad_tensor(
                 tensor,
-                pad_len=diff_max_len - tensor.numel(),
-                value=self.diff_tokenizer.pad_token_id,  # type: ignore[attr-defined]
+                pad_len=inputs_max_len - tensor.numel(),
+                value=pad_token_id,
                 left=False,
             )
-            for tensor in all_diff_ids_tensors
+            for tensor in inputs_tensors
         ]
-        all_diff_masks_tensors = [
+        masks_tensors = [
             self._pad_tensor(
                 tensor,
-                pad_len=diff_max_len - tensor.numel(),
+                pad_len=inputs_max_len - tensor.numel(),
                 value=0,
                 left=False,
             )
-            for tensor in all_diff_masks_tensors
+            for tensor in masks_tensors
         ]
-        return torch.stack(all_diff_ids_tensors), torch.stack(all_diff_masks_tensors)
+        return torch.stack(inputs_tensors), torch.stack(masks_tensors)
 
-    def _process_encoder_input(self, examples: List[SingleExample]) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _process_encoder_input(
+        self, examples: List[SingleExample]
+    ) -> Tuple[
+        Tuple[torch.Tensor, torch.Tensor],
+        Tuple[Optional[torch.Tensor], Optional[torch.Tensor]],
+        Tuple[Optional[torch.Tensor], Optional[torch.Tensor]],
+    ]:
         """
         A helper method to process encoder input.
 
@@ -180,9 +190,23 @@ class BaseCollatorUtils:
         """
         if self.encoder_input_type == "diff":
             diff_inputs: List[List[int]] = [example.diff_input_ids for example in examples]
-            return self._process_diff(diff_inputs)
+            results = self._process_inputs(diff_inputs)
         elif self.encoder_input_type == "history":
             history_inputs: List[List[List[int]]] = [example.history_input_ids for example in examples]
-            return self._process_history(history_inputs)
+            results = self._process_history(history_inputs)
         else:
-            raise ValueError("Unknown encoder input type. Currently supported are `diff` and `history`.")
+            raise ValueError("Unknown encoder input type")
+
+        if self.process_retrieved:
+            if all(
+                example.retrieved_msg_input_ids is not None and example.retrieved_diff_input_ids is not None
+                for example in examples
+            ):
+                retrieved_diff_inputs: List[List[int]] = [example.retrieved_diff_input_ids for example in examples]  # type: ignore[misc]
+                retrieved_diff_results = self._process_inputs(retrieved_diff_inputs)
+                retrieved_msg_input_ids: List[List[int]] = [example.retrieved_msg_input_ids for example in examples]  # type: ignore[misc]
+                retrieved_msg_results = self._process_inputs(retrieved_msg_input_ids, are_messages=True)
+                return results, retrieved_diff_results, retrieved_msg_results
+            else:
+                logging.warning("Collator is configured to process retrieved data, " "but it is not present in input.")
+        return results, (None, None), (None, None)

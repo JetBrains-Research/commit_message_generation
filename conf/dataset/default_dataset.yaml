@@ -12,6 +12,8 @@ preprocessor_conf:
   configuration: default
   default:
     chunksize: 4096
+  race:
+    chunksize: 4096
 
 train_dataloader_conf:
   batch_size: 16

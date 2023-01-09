@@ -1,16 +1,23 @@
 import logging
 from collections import defaultdict
 from math import log
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import pandas as pd
 import pytorch_lightning as pl
+import torch
 import wandb
 from omegaconf import DictConfig
 from torch.optim import AdamW
 from transformers import PreTrainedTokenizerFast, get_linear_schedule_with_warmup
 
-from src.model.configurations import BaseModel, DecoderWrapper, EncoderDecoderWrapper
+from src.model.configurations import (
+    BaseModel,
+    DecoderWrapper,
+    EncoderDecoderWrapper,
+    RACEWrapper,
+    Seq2SeqWrapper,
+)
 from src.utils import Batch, BatchTest, BatchTrain, EvaluationMetrics
 
 
@@ -40,7 +47,7 @@ class CMCModule(pl.LightningModule):
         self,
         diff_tokenizer: PreTrainedTokenizerFast,
         msg_tokenizer: PreTrainedTokenizerFast,
-        model_configuration: str,
+        model_configuration: Literal["encoder_decoder", "decoder", "seq2seq", "race"],
         preds_artifact_name: Optional[str] = None,
         preds_artifact_type: Optional[str] = None,
         preds_table_name: Optional[str] = None,
@@ -70,10 +77,12 @@ class CMCModule(pl.LightningModule):
             )
         elif model_configuration == "decoder":
             self.model = DecoderWrapper(tokenizer=msg_tokenizer, **model_kwargs)
+        elif model_configuration == "seq2seq":
+            self.model = Seq2SeqWrapper(tokenizer=msg_tokenizer, **model_kwargs)
+        elif model_configuration == "race":
+            self.model = RACEWrapper(tokenizer=msg_tokenizer, **model_kwargs)
         else:
-            raise ValueError(
-                f'Configuration {model_configuration} is not supported, please use one of "encoder_decoder" or "decoder"'
-            )
+            raise ValueError(f"Configuration {model_configuration} is not supported")
 
         self._num_epochs = num_epochs
         self._num_batches = num_batches
@@ -93,10 +102,11 @@ class CMCModule(pl.LightningModule):
 
         # will be logged to W&B
         self.table_data: Dict[str, List[str]] = defaultdict(list)
+
         self.val_metrics = EvaluationMetrics(
             do_strings=False,
             do_tensors=True,
-            shift=not isinstance(self.model, EncoderDecoderWrapper),
+            shift=isinstance(self.model, DecoderWrapper),
             prefix="val",
         )
 
@@ -143,21 +153,14 @@ class CMCModule(pl.LightningModule):
     def validation_epoch_end(self, outputs):  # type: ignore[override]
         self.log_dict(self.val_metrics.compute(), on_step=False, on_epoch=True, logger=True)
 
-    def test_step(self, batch: BatchTest, *args, **kwargs):  # type: ignore[override]
-        gen_sequences = self.generate(batch)
-        # leave only generated part (crop context)
-        gen_sequences = gen_sequences[:, batch.decoder_input_ids.shape[1] :]
-
-        # decode tokenized sequences
-        decoded_source = self.decode_src(batch.encoder_input_ids, skip_special_tokens=True)[0]
-        decoded_preds = self.decode_trg(gen_sequences, skip_special_tokens=True)[0]
+    def _process_generated(self, batch: BatchTest, predictions: torch.Tensor):
+        decoded_preds = self.decode_trg(predictions, skip_special_tokens=True)[0]
         decoded_context = self.decode_trg(batch.decoder_input_ids, skip_special_tokens=False)[0]
 
-        # remove prefix from generated sequences to compute metrics without it
-        decoded_preds = [pred[len(prefix) :] for pred, prefix in zip(decoded_preds, batch.prefixes)]
+        decoded_source = []
+        if not isinstance(self.model, DecoderWrapper):
+            decoded_source = self.decode_src(batch.encoder_input_ids, skip_special_tokens=True)[0]
 
-        # separate history from corresponding message and get rid of special tokens
-        # TODO: looks ugly
         history = []
         for i in range(len(decoded_context)):
             decoded_context[i] = (
@@ -176,27 +179,45 @@ class CMCModule(pl.LightningModule):
             else:
                 history.append("")
 
+        return {
+            "Diff": decoded_source,
+            "History": history,
+            "Context": decoded_context,
+            "Prefix": batch.prefixes,
+            "Prediction": decoded_preds,
+            "Target": [target.replace("[NL]", "\n") for target in batch.targets],
+        }
+
+    def test_step(self, batch: BatchTest, *args, **kwargs):  # type: ignore[override]
+        predictions = self.generate(batch)
+        # leave only generated part (crop context)
+        predictions = predictions[:, batch.decoder_input_ids.shape[1] :]
+
+        # decode & postprocess data
+        string_results = self._process_generated(batch, predictions)
+
         # add data to a little table with examples
-        self.table_data["Diff"].extend(decoded_source)
-        self.table_data["History"].extend(history)
-        self.table_data["Context"].extend(decoded_context)
-        self.table_data["Prefix"].extend(batch.prefixes)
-        self.table_data["Prediction"].extend(decoded_preds)
-        self.table_data["Target"].extend([target.replace("[NL]", "\n") for target in batch.targets])
+        for key in string_results:
+            self.table_data[key].extend(string_results[key])
 
     def test_epoch_end(self, *args, **kwargs):
-        if isinstance(self.logger, pl.loggers.WandbLogger):
-            self.logger.log_table("test_examples", dataframe=pd.DataFrame.from_dict(self.table_data))
+        preds = pd.DataFrame.from_dict({k: v for k, v in self.table_data.items() if v})
 
-            # upload predictions to wandb as artifact
+        # is W&B is used, upload predictions as table and as artifact
+        if isinstance(self.logger, pl.loggers.WandbLogger):
+            self.logger.log_table("test_examples", dataframe=preds)
+
             if self._preds_artifact_name and self._preds_artifact_type and self._preds_table_name:
                 artifact = wandb.Artifact(
                     self._preds_artifact_name,
                     type=self._preds_artifact_type,
                     metadata={"tags": self.logger.experiment.tags if self.logger.experiment.tags else None},
                 )
-                artifact.add(wandb.Table(dataframe=pd.DataFrame.from_dict(self.table_data)), self._preds_table_name)
+                artifact.add(wandb.Table(dataframe=preds), self._preds_table_name)
                 self.logger.experiment.log_artifact(artifact, aliases=self._preds_table_name)
+
+        # save predictions to disk
+        preds.to_json(f"{self._preds_artifact_name}_{self._preds_table_name}.json", orient="records", lines=True)
 
     def configure_optimizers(self):
         if not self.learning_rate:
@@ -238,9 +259,9 @@ class CMCModule(pl.LightningModule):
         self, initial_batch_size: Optional[int] = None, initial_learning_rate: Optional[float] = None
     ) -> float:
         assert self._batch_size
+        # when LR is not passed explicitly, take formula from `Scaling Laws for Neural Language Models`
+        # and scale linearly with batch size (it was 512 in the paper)
         if not initial_learning_rate:
-            # take formula from `Scaling Laws for Neural Language Models` paper
-            # and scale linearly with batch size (it was 512 in the paper)
             initial_batch_size = 512
             initial_learning_rate = 0.003239 - 0.0001395 * log(self.model.num_parameters(exclude_embeddings=True))
         initial_learning_rate = initial_learning_rate * self._batch_size

@@ -54,7 +54,8 @@ def main(cfg: DictConfig) -> None:
         **cfg.model.dataset,
         local_rank=int(os.environ.get("LOCAL_RANK", 0)),
         world_size=world_size,
-        shift_labels=cfg.model.model_configuration == "encoder_decoder",
+        shift_labels=cfg.model.model_configuration != "decoder",
+        process_retrieved=cfg.model.model_configuration == "race",
     )
 
     dm.prepare_data()

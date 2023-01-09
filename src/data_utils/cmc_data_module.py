@@ -34,6 +34,7 @@ class CMCDataModule(pl.LightningDataModule):
         preprocessor_conf: DictConfig,
         line_sep: str = "[NL]",
         use_cache: bool = False,
+        process_retrieved: bool = False,
         train_dataloader_conf: Optional[DictConfig] = None,
         val_dataloader_conf: Optional[DictConfig] = None,
         test_dataloader_conf: Optional[DictConfig] = None,
@@ -54,6 +55,7 @@ class CMCDataModule(pl.LightningDataModule):
         self._encoder_context_max_len = encoder_context_max_len
         self._line_sep = line_sep
         self._use_cache = use_cache
+        self._process_retrieved = process_retrieved
 
         self.diff_tokenizer, self.msg_tokenizer = CMCDataModule._load_tokenizers(
             msg_tokenizer_name_or_path=msg_tokenizer_name_or_path,
@@ -69,16 +71,29 @@ class CMCDataModule(pl.LightningDataModule):
             raise ValueError('Currently, only "default" preprocessor configuration is supported.')
 
         self.data_collator_train = DataCollatorTrain(
-            diff_tokenizer=self.diff_tokenizer,
-            msg_tokenizer=self.msg_tokenizer,
+            diff_bos_token_id=self.diff_tokenizer.bos_token_id,
+            diff_eos_token_id=self.diff_tokenizer.eos_token_id,
+            diff_pad_token_id=self.diff_tokenizer.pad_token_id,
+            msg_bos_token_id=self.msg_tokenizer.bos_token_id,
+            msg_eos_token_id=self.msg_tokenizer.eos_token_id,
+            msg_pad_token_id=self.msg_tokenizer.pad_token_id,
+            msg_sep_token_id=self.msg_tokenizer.sep_token_id,
             encoder_input_type=encoder_input_type,
             encoder_context_max_len=encoder_context_max_len,
             decoder_context_max_len=decoder_context_max_len,
             with_history=train_with_history,
+            process_retrieved=process_retrieved,
             shift_labels=shift_labels,
             testing=testing,
         )
         self.data_collator_test = DataCollatorTest(
+            diff_bos_token_id=self.diff_tokenizer.bos_token_id,
+            diff_eos_token_id=self.diff_tokenizer.eos_token_id,
+            diff_pad_token_id=self.diff_tokenizer.pad_token_id,
+            msg_bos_token_id=self.msg_tokenizer.bos_token_id,
+            msg_eos_token_id=self.msg_tokenizer.eos_token_id,
+            msg_pad_token_id=self.msg_tokenizer.pad_token_id,
+            msg_sep_token_id=self.msg_tokenizer.sep_token_id,
             diff_tokenizer=self.diff_tokenizer,
             msg_tokenizer=self.msg_tokenizer,
             encoder_input_type=encoder_input_type,
@@ -86,6 +101,7 @@ class CMCDataModule(pl.LightningDataModule):
             decoder_context_max_len=decoder_context_max_len,
             with_history=generate_with_history,
             context_ratio=context_ratio,
+            process_retrieved=process_retrieved,
             testing=testing,
         )
 
@@ -138,6 +154,8 @@ class CMCDataModule(pl.LightningDataModule):
             for part in ["train", "val", "test"]:
                 assert f"{part}_processed.jsonl" in os.listdir(self._data_path)
                 assert f"{part}_history.json" in os.listdir(self._data_path)
+                if self._process_retrieved:
+                    assert f"retrieved_{part}_processed.jsonl" in os.listdir(self._data_path)
         else:
             for part in ["train", "val", "test"]:
                 self._preprocessor.process(
@@ -147,6 +165,13 @@ class CMCDataModule(pl.LightningDataModule):
                     message_kwargs={},
                     diff_kwargs={"max_len": self._encoder_context_max_len, "line_sep": self._line_sep},
                 )
+                if self._process_retrieved:
+                    self._preprocessor.process_retrieved(
+                        data_dir=self._data_path,
+                        retrieved_dir=f"{self._dataset_root}/retrieval",
+                        part=part,
+                    )
+
             self._use_cache = True
 
     def setup(self, stage=None):
@@ -154,12 +179,18 @@ class CMCDataModule(pl.LightningDataModule):
             self.train = CMCDatasetWithHistory.load_data(
                 history_path=os.path.join(self._data_path, "train_history.json"),
                 data_path=os.path.join(self._data_path, "train_shuffled.jsonl"),
+                retrieved_data_path=os.path.join(self._data_path, "retrieved_train_shuffled.jsonl")
+                if self._process_retrieved
+                else None,
                 rank=self._local_rank,
                 world_size=self._world_size,
             )
             self.val = CMCDatasetWithHistory.load_data(
                 history_path=os.path.join(self._data_path, "val_history.json"),
                 data_path=os.path.join(self._data_path, "val_processed.jsonl"),
+                retrieved_data_path=os.path.join(self._data_path, "retrieved_val_processed.jsonl")
+                if self._process_retrieved
+                else None,
                 rank=self._local_rank,
                 world_size=self._world_size,
             )
@@ -168,6 +199,9 @@ class CMCDataModule(pl.LightningDataModule):
             self.test = CMCDatasetWithHistory.load_data(
                 history_path=os.path.join(self._data_path, "test_history.json"),
                 data_path=os.path.join(self._data_path, "test_processed.jsonl"),
+                retrieved_data_path=os.path.join(self._data_path, "retrieved_test_processed.jsonl")
+                if self._process_retrieved
+                else None,
                 rank=self._local_rank,
                 world_size=self._world_size,
             )
@@ -176,6 +210,9 @@ class CMCDataModule(pl.LightningDataModule):
             self.test = CMCDatasetWithHistory.load_data(
                 history_path=os.path.join(self._data_path, "val_history.json"),
                 data_path=os.path.join(self._data_path, "val_processed.jsonl"),
+                retrieved_data_path=os.path.join(self._data_path, "retrieved_val_processed.jsonl")
+                if self._process_retrieved
+                else None,
                 rank=self._local_rank,
                 world_size=self._world_size,
             )

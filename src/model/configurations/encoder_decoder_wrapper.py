@@ -16,13 +16,12 @@ from src.utils import Batch, BatchTest, PrefixAllowedTokens, remove_layers_from_
 
 
 class EncoderDecoderWrapper(BaseModel):
-    """This class serves as a wrapper of Transformer model for
-    commit message completion task.
+    """This class serves as a wrapper of Transformer-based models for commit message completion task.
+
+    More specifically, this class relies on EncoderDecoderModel from HuggingFace Transformers.
 
     It is possible to either use pretrained models for initializing encoder/decoder
     or initialize from scratch.
-
-    More specifically, this class relies on EncoderDecoderModel from HuggingFace Transformers.
 
     Args:
         diff_tokenizer: Tokenizer for source sequences (diffs)
