@@ -4,6 +4,10 @@ from .base_preprocessor import BasePreprocessor
 
 
 class DefaultPreprocessor(BasePreprocessor):
+    def _preprocess_diff(self, diff: str, line_sep: str, **kwargs) -> str:
+        """Return given diff without any changes."""
+        return diff
+
     def _preprocess_mods(self, mods: List[Dict[str, str]], line_sep: str = "[NL]", **kwargs) -> str:
         """
         Transforms a list of all files modifications made in a commit into a single string representation.
@@ -33,7 +37,7 @@ class DefaultPreprocessor(BasePreprocessor):
                 file_diff = f"copy from {mod['old_path']}{line_sep}copy to {mod['new_path']}"
             else:
                 file_diff = f"{mod['new_path']}"
-            diff += file_diff + line_sep + mod["diff"] + line_sep
+            diff += file_diff + line_sep + self._preprocess_diff(mod["diff"], line_sep=line_sep)
 
         return diff
 

@@ -1,0 +1,13 @@
+model_configuration: seq2seq
+
+name_or_path: microsoft/codereviewer
+
+dataset:
+  preprocessor_conf:
+    configuration: codereviewer
+  diffs_tok_dir: codereviewer
+  msgs_tok_dir: codereviewer
+  diff_tokenizer_name_or_path: microsoft/codereviewer
+  msg_tokenizer_name_or_path: microsoft/codereviewer
+  encoder_context_max_len: 512
+  decoder_context_max_len: 512

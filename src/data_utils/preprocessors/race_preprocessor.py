@@ -12,6 +12,8 @@ class RACEPreprocessor(BasePreprocessor):
 
         for line in diff.split(line_sep):
             line = line.strip()
+            if not line:
+                continue
             if line.startswith("+"):
                 new_lines.extend(line.split(" "))
             elif line.startswith("-"):

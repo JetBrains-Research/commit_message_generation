@@ -6,9 +6,14 @@ from typing import Optional
 import hydra
 import pytorch_lightning as pl
 from omegaconf import DictConfig
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizerFast
 
-from src.data_utils.preprocessors import BasePreprocessor, DefaultPreprocessor
+from src.data_utils.preprocessors import (
+    BasePreprocessor,
+    CodeReviewerPreprocessor,
+    DefaultPreprocessor,
+    RACEPreprocessor,
+)
 
 from .cmc_dataset_w_history import CMCDatasetWithHistory
 from .data_collators import DataCollatorTest, DataCollatorTrain
@@ -57,14 +62,23 @@ class CMCDataModule(pl.LightningDataModule):
         self._use_cache = use_cache
         self._process_retrieved = process_retrieved
 
-        self.diff_tokenizer, self.msg_tokenizer = CMCDataModule._load_tokenizers(
+        self.diff_tokenizer, self.msg_tokenizer = self._load_tokenizers(
             msg_tokenizer_name_or_path=msg_tokenizer_name_or_path,
             diff_tokenizer_name_or_path=diff_tokenizer_name_or_path,
+            configuration=preprocessor_conf.configuration,
         )
 
         self._preprocessor: BasePreprocessor
         if preprocessor_conf.configuration == "default":
             self._preprocessor = DefaultPreprocessor(
+                diff_tokenizer=self.diff_tokenizer, msg_tokenizer=self.msg_tokenizer, **preprocessor_conf.default
+            )
+        elif preprocessor_conf.configuration == "race":
+            self._preprocessor = RACEPreprocessor(
+                diff_tokenizer=self.diff_tokenizer, msg_tokenizer=self.msg_tokenizer, **preprocessor_conf.default
+            )
+        elif preprocessor_conf.configuration == "codereviewer":
+            self._preprocessor = CodeReviewerPreprocessor(
                 diff_tokenizer=self.diff_tokenizer, msg_tokenizer=self.msg_tokenizer, **preprocessor_conf.default
             )
         else:
@@ -114,18 +128,42 @@ class CMCDataModule(pl.LightningDataModule):
         self.val = None
         self.test = None
 
-    @staticmethod
-    def _load_tokenizers(msg_tokenizer_name_or_path: str, diff_tokenizer_name_or_path: Optional[str]):
+    def _add_special_tokens(self, tokenizer: PreTrainedTokenizerFast, configuration: str) -> PreTrainedTokenizerFast:
+        tokenizer.add_special_tokens({"additional_special_tokens": ["[NL]"]})  # type: ignore[attr-defined]
+        if not tokenizer.sep_token:  # type: ignore[attr-defined]
+            tokenizer.add_special_tokens({"sep_token": "[SEP]"})  # type: ignore[attr-defined]
+        if not tokenizer.pad_token:  # type: ignore[attr-defined]
+            tokenizer.add_special_tokens({"pad_token": "[PAD]"})  # type: ignore[attr-defined]
+
+        if configuration == "codereviewer":
+            tokenizer.add_special_tokens({"additional_special_tokens": ["<add>", "<del>", "<keep>"]})  # type: ignore[attr-defined]
+        elif configuration == "race":
+            tokenizer.add_special_tokens(  # type: ignore[attr-defined]
+                {
+                    "additional_special_tokens": [
+                        "<KEEP>",
+                        "<KEEP_END>",
+                        "<INSERT>",
+                        "<INSERT_END>",
+                        "<DELETE>",
+                        "<DELETE_END>",
+                        "<REPLACE_OLD>",
+                        "<REPLACE_NEW>",
+                        "<REPLACE_END>",
+                    ]
+                }
+            )
+        return tokenizer
+
+    def _load_tokenizers(
+        self, msg_tokenizer_name_or_path: str, diff_tokenizer_name_or_path: Optional[str], configuration: str
+    ):
         try:
             msg_tokenizer = AutoTokenizer.from_pretrained(msg_tokenizer_name_or_path)
         except ValueError:
             msg_tokenizer = AutoTokenizer.from_pretrained(hydra.utils.to_absolute_path(msg_tokenizer_name_or_path))
 
-        msg_tokenizer.add_special_tokens({"additional_special_tokens": ["[NL]"]})
-        if not msg_tokenizer.sep_token:
-            msg_tokenizer.add_special_tokens({"sep_token": "[SEP]"})
-        if not msg_tokenizer.pad_token:
-            msg_tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+        msg_tokenizer = self._add_special_tokens(msg_tokenizer, configuration)
 
         if not diff_tokenizer_name_or_path:
             logging.warning("Diff tokenizer is not set, using message tokenizer as a default")
@@ -139,12 +177,7 @@ class CMCDataModule(pl.LightningDataModule):
                 diff_tokenizer = AutoTokenizer.from_pretrained(
                     hydra.utils.to_absolute_path(diff_tokenizer_name_or_path)
                 )
-
-            diff_tokenizer.add_special_tokens({"additional_special_tokens": ["[NL]", "[LONG]"]})
-            if not diff_tokenizer.sep_token:
-                diff_tokenizer.add_special_tokens({"sep_token": "[SEP]"})
-            if not diff_tokenizer.pad_token:
-                diff_tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+            diff_tokenizer = self._add_special_tokens(diff_tokenizer, configuration)
 
         return diff_tokenizer, msg_tokenizer
 
