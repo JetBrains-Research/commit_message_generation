@@ -9,7 +9,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from src.data_utils import CMCDataModule
 from src.model import CMCModule
-from src.utils import WandbOrganizer
+from src.utils import WandbOrganizer, prepare_dataset_cfg
 
 nltk.download("omw-1.4")
 nltk.download("wordnet")
@@ -22,14 +22,13 @@ def main(cfg: DictConfig) -> None:
     # -----------------------
     pl.seed_everything(42)
 
-    print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
-
     if cfg.model.dataset.diff_tokenizer_name_or_path == cfg.model.dataset.msg_tokenizer_name_or_path:
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+    cfg.dataset = prepare_dataset_cfg(cfg.dataset, model_dataset_cfg=cfg.model.dataset)
+
     dm = CMCDataModule(
         **cfg.dataset,
-        **cfg.model.dataset,
         use_cache=True,
         local_rank=int(os.environ.get("LOCAL_RANK", 0)),
         world_size=1,

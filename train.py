@@ -1,3 +1,4 @@
+import logging
 import os
 
 import hydra
@@ -10,7 +11,7 @@ from wandb import Artifact
 
 from src.data_utils import CMCDataModule
 from src.model import CMCModule
-from src.utils import WandbOrganizer
+from src.utils import WandbOrganizer, prepare_dataset_cfg
 
 nltk.download("wordnet")
 
@@ -21,8 +22,6 @@ def main(cfg: DictConfig) -> None:
     # -        init         -
     # -----------------------
     pl.seed_everything(42)
-
-    print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg, resolve=True)}")
 
     world_size = None
     if cfg.trainer.accelerator == "cpu":
@@ -46,12 +45,12 @@ def main(cfg: DictConfig) -> None:
     if world_size is None:
         raise ValueError("Unknown format for number of gpus")
 
-    print(f"Local rank: {int(os.environ.get('LOCAL_RANK', 0))}")
-    print(f"World size: {world_size}")
+    logging.info(f"Local rank: {int(os.environ.get('LOCAL_RANK', 0))}")
+    logging.info(f"World size: {world_size}")
 
+    cfg.dataset = prepare_dataset_cfg(cfg.dataset, model_dataset_cfg=cfg.model.dataset)
     dm = CMCDataModule(
         **cfg.dataset,
-        **cfg.model.dataset,
         local_rank=int(os.environ.get("LOCAL_RANK", 0)),
         world_size=world_size,
         shift_labels=cfg.model.model_configuration != "decoder",

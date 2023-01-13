@@ -3,6 +3,8 @@ model_configuration: race
 name_or_path: Salesforce/codet5-small
 
 dataset:
+  preprocessor_conf:
+    configuration: race
   diffs_tok_dir: codet5-small
   msgs_tok_dir: codet5-small
   diff_tokenizer_name_or_path: Salesforce/codet5-small
