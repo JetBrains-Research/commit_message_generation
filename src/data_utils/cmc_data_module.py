@@ -23,8 +23,6 @@ class CMCDataModule(pl.LightningDataModule):
     def __init__(
         self,
         dataset_root: str,
-        diffs_tok_dir: str,
-        msgs_tok_dir: str,
         encoder_input_type: str,
         encoder_context_max_len: int,
         decoder_context_max_len: int,
@@ -48,6 +46,21 @@ class CMCDataModule(pl.LightningDataModule):
         super().__init__()
 
         self._dataset_root = hydra.utils.to_absolute_path(dataset_root)
+
+        if not msg_tokenizer_name_or_path:
+            msgs_tok_dir = ""
+        elif "/" in msg_tokenizer_name_or_path:
+            msgs_tok_dir = msg_tokenizer_name_or_path.split("/")[-1]
+        else:
+            msgs_tok_dir = msg_tokenizer_name_or_path
+
+        if not diff_tokenizer_name_or_path:
+            diffs_tok_dir = msgs_tok_dir
+        elif "/" in diff_tokenizer_name_or_path:
+            diffs_tok_dir = diff_tokenizer_name_or_path.split("/")[-1]
+        else:
+            diffs_tok_dir = diff_tokenizer_name_or_path
+
         self._data_path = os.path.join(
             self._dataset_root,
             "-".join([diffs_tok_dir, str(encoder_context_max_len), msgs_tok_dir, preprocessor_conf.configuration]),

@@ -1,13 +1,11 @@
 model_configuration: race
 
-name_or_path: Salesforce/codet5-small
+name_or_path: Salesforce/codet5-base
 
 dataset:
   preprocessor_conf:
     configuration: race
-  diffs_tok_dir: codet5-small
-  msgs_tok_dir: codet5-small
-  diff_tokenizer_name_or_path: Salesforce/codet5-small
-  msg_tokenizer_name_or_path: Salesforce/codet5-small
+  diff_tokenizer_name_or_path: Salesforce/codet5-base
+  msg_tokenizer_name_or_path: Salesforce/codet5-base
   encoder_context_max_len: 512
   decoder_context_max_len: 512

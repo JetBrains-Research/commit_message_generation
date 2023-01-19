@@ -7,8 +7,6 @@ tie_encoder_decoder: true
 tie_word_embeddings: true
 
 dataset:
-  diffs_tok_dir: distilgpt2
-  msgs_tok_dir: distilgpt2
   diff_tokenizer_name_or_path: distilgpt2
   msg_tokenizer_name_or_path: distilgpt2
   encoder_context_max_len: 512

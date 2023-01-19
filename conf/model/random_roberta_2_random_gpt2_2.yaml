@@ -10,8 +10,6 @@ tie_encoder_decoder: false
 tie_word_embeddings: false
 
 dataset:
-  diffs_tok_dir: byte_level
-  msgs_tok_dir: byte_level
   diff_tokenizer_name_or_path: raw_data/multilang/byte_level
   msg_tokenizer_name_or_path: raw_data/multilang/byte_level
   encoder_context_max_len: 512

@@ -5,7 +5,11 @@ import hydra
 import nltk
 import pytorch_lightning as pl
 from omegaconf import DictConfig, ListConfig, OmegaConf
-from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+from pytorch_lightning.callbacks import (
+    EarlyStopping,
+    LearningRateMonitor,
+    ModelCheckpoint,
+)
 from pytorch_lightning.utilities.device_parser import num_cuda_devices
 from wandb import Artifact
 
@@ -107,10 +111,13 @@ def main(cfg: DictConfig) -> None:
         monitor="val_MRR_top5",
         mode="max",
     )
+    early_stopping_callback = EarlyStopping(monitor="val_loss", mode="min", verbose=True)
 
     # trainer
     trainer = pl.Trainer(
-        **cfg.trainer, logger=trainer_logger if use_wandb else True, callbacks=[lr_logger, checkpoint_callback]
+        **cfg.trainer,
+        logger=trainer_logger if use_wandb else True,
+        callbacks=[lr_logger, checkpoint_callback, early_stopping_callback],
     )
 
     # -----------------------
