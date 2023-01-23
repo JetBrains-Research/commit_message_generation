@@ -14,10 +14,6 @@ def prepare_dataset_cfg(dataset_cfg: DictConfig, model_dataset_cfg: DictConfig) 
         logging.info(f"{model_dataset_cfg.preprocessor_conf.configuration} preprocessing will be used")
         dataset_cfg.preprocessor_conf.configuration = model_dataset_cfg.preprocessor_conf.configuration
 
-    for key in ["diffs_tok_dir", "msgs_tok_dir"]:
-        assert key in model_dataset_cfg
-        dataset_cfg[key] = model_dataset_cfg[key]
-
     for key in [
         "diff_tokenizer_name_or_path",
         "msg_tokenizer_name_or_path",

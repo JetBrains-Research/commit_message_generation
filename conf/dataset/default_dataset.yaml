@@ -8,11 +8,9 @@ train_with_history: true
 
 encoder_input_type: diff
 
-diffs_tok_dir: placeholder    # should be provided in model config
 diff_tokenizer_name_or_path:  # can be provided in model config
 encoder_context_max_len: 512  # can be provided in model config
 
-msgs_tok_dir: placeholder     # should be provided in model config
 msg_tokenizer_name_or_path:   # can be provided in model config
 decoder_context_max_len: 512  # can be provided in model config
 

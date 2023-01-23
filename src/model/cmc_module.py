@@ -1,4 +1,5 @@
 import logging
+import os
 from collections import defaultdict
 from math import log
 from typing import Any, Dict, List, Literal, Optional
@@ -58,6 +59,7 @@ class CMCModule(pl.LightningModule):
         num_batches: Optional[int] = None,
         num_epochs: Optional[int] = None,
         num_gpus: Optional[int] = None,
+        save_epoch: int = 9,
         generation_kwargs: DictConfig = DictConfig({}),
         **model_kwargs,
     ):
@@ -84,6 +86,7 @@ class CMCModule(pl.LightningModule):
         else:
             raise ValueError(f"Configuration {model_configuration} is not supported")
 
+        self._save_epoch = save_epoch
         self._num_epochs = num_epochs
         self._num_batches = num_batches
         self._batch_size = batch_size
@@ -219,6 +222,13 @@ class CMCModule(pl.LightningModule):
         # save predictions to disk
         preds.to_json(f"{self._preds_artifact_name}_{self._preds_table_name}.json", orient="records", lines=True)
 
+    def on_train_epoch_end(self) -> None:
+        if self.trainer.current_epoch == self._save_epoch and isinstance(self.model, Seq2SeqWrapper):
+            logging.info(f"Reached epoch {self._save_epoch}! Saving model checkpoint for further use in RACE...")
+            os.makedirs(f"epoch_{self._save_epoch}_checkpoint", exist_ok=True)
+            self.model.model.save_pretrainedf("epoch_{self._save_epoch}_checkpoint")
+            self.model._tokenizer.save_pretrained(f"epoch_{self._save_epoch}_checkpoint")
+
     def configure_optimizers(self):
         if not self.learning_rate:
             logging.warning("Learning rate is not set, proceeding with default value 1e-3")
@@ -264,7 +274,9 @@ class CMCModule(pl.LightningModule):
         if not initial_learning_rate:
             initial_batch_size = 512
             initial_learning_rate = 0.003239 - 0.0001395 * log(self.model.num_parameters(exclude_embeddings=True))
-        initial_learning_rate = initial_learning_rate * self._batch_size
+
         if initial_batch_size:
+            initial_learning_rate = initial_learning_rate * self._batch_size
             return initial_learning_rate / initial_batch_size
+
         return initial_learning_rate
