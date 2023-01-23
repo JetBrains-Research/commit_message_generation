@@ -226,7 +226,7 @@ class CMCModule(pl.LightningModule):
         if self.trainer.current_epoch == self._save_epoch and isinstance(self.model, Seq2SeqWrapper):
             logging.info(f"Reached epoch {self._save_epoch}! Saving model checkpoint for further use in RACE...")
             os.makedirs(f"epoch_{self._save_epoch}_checkpoint", exist_ok=True)
-            self.model.model.save_pretrainedf("epoch_{self._save_epoch}_checkpoint")
+            self.model.model.save_pretrained("epoch_{self._save_epoch}_checkpoint")
             self.model._tokenizer.save_pretrained(f"epoch_{self._save_epoch}_checkpoint")
 
     def configure_optimizers(self):
