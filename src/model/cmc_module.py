@@ -234,7 +234,7 @@ class CMCModule(pl.LightningModule):
             logging.warning("Learning rate is not set, proceeding with default value 1e-3")
             self.learning_rate = 1e-3
 
-        if not self.weight_decay:
+        if self.weight_decay is None:
             logging.warning("Weight decay is not set, proceeding with default value 1e-2")
             self.weight_decay = 1e-2
 
