@@ -16,13 +16,12 @@ from src.utils import Batch, BatchTest, PrefixAllowedTokens, remove_layers_from_
 
 
 class EncoderDecoderWrapper(BaseModel):
-    """This class serves as a wrapper of seq2seq Transformer model for
-    commit message completion task.
+    """This class serves as a wrapper of Transformer-based models for commit message completion task.
+
+    More specifically, this class relies on EncoderDecoderModel from HuggingFace Transformers.
 
     It is possible to either use pretrained models for initializing encoder/decoder
     or initialize from scratch.
-
-    More specifically, this class relies on EncoderDecoderModel from HuggingFace Transformers.
 
     Args:
         diff_tokenizer: Tokenizer for source sequences (diffs)
@@ -146,8 +145,10 @@ class EncoderDecoderWrapper(BaseModel):
         if name_or_path:
             if encoder_or_decoder == "encoder":
                 model = AutoModel.from_pretrained(name_or_path)
+                model.resize_token_embeddings(len(self._diff_tokenizer))  # type: ignore[arg-type]
             else:
                 model = AutoModelForCausalLM.from_pretrained(name_or_path, is_decoder=True, add_cross_attention=True)
+                model.resize_token_embeddings(len(self._msg_tokenizer))  # type: ignore[arg-type]
             # remove layers if necessary
             if num_layers is not None:
                 if model.config.model_type in ["bert", "roberta", "gpt2"]:

@@ -21,6 +21,7 @@ class DecoderWrapper(BaseModel):
         super().__init__()
         self._tokenizer = tokenizer
         self.model = AutoModelForCausalLM.from_pretrained(decoder_name_or_path)
+        self.model.resize_token_embeddings(len(self._tokenizer))  # type: ignore[arg-type]
 
     def forward(self, batch: Batch):
         return self.model(
@@ -39,6 +40,7 @@ class DecoderWrapper(BaseModel):
             attention_mask=batch.decoder_attention_mask,
             prefix_allowed_tokens_fn=prefix_fn,
             eos_token_id=self._tokenizer.eos_token_id,  # type: ignore[attr-defined]
+            pad_token_id=self._tokenizer.pad_token_id,  # type: ignore[attr-defined]
             **generation_kwargs,
         )
 

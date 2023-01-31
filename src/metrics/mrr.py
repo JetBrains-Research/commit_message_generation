@@ -6,6 +6,9 @@ class MRR(Metric):
     """Mean Reciprocal Rank (MRR)@k metric. In contrast with accuracy, it takes a position of correct prediction among
     top k into account."""
 
+    # https://devblog.pytorchlightning.ai/torchmetrics-v0-9-faster-forward-d595bb321e6d
+    full_state_update: bool = False
+
     def __init__(self, top_k: int = 5, ignore_index: int = -100, shift: bool = True, dist_sync_on_step=False) -> None:
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 

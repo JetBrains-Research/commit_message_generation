@@ -1,16 +1,30 @@
 import logging
+import os
 from collections import defaultdict
 from math import log
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import pytorch_lightning as pl
+import torch
 import wandb
-from omegaconf import DictConfig
 from torch.optim import AdamW
 from transformers import PreTrainedTokenizerFast, get_linear_schedule_with_warmup
 
-from src.model.configurations import BaseModel, DecoderWrapper, EncoderDecoderWrapper
+from conf import (
+    BaseDecoderConfig,
+    BaseEncoderDecoderConfig,
+    BaseModelConfig,
+    BaseRACEConfig,
+    BaseSeq2SeqConfig,
+)
+from src.model.configurations import (
+    BaseModel,
+    DecoderWrapper,
+    EncoderDecoderWrapper,
+    RACEWrapper,
+    Seq2SeqWrapper,
+)
 from src.utils import Batch, BatchTest, BatchTrain, EvaluationMetrics
 
 
@@ -38,21 +52,23 @@ class CMCModule(pl.LightningModule):
 
     def __init__(
         self,
+        model_cfg: BaseModelConfig,
         diff_tokenizer: PreTrainedTokenizerFast,
         msg_tokenizer: PreTrainedTokenizerFast,
-        model_configuration: str,
+        save_on_epoch: Optional[int] = None,
         preds_artifact_name: Optional[str] = None,
         preds_artifact_type: Optional[str] = None,
         preds_table_name: Optional[str] = None,
         learning_rate: Optional[float] = None,
+        initial_batch_size: Optional[int] = None,
         weight_decay: Optional[float] = None,
         num_warmup_steps: Optional[int] = None,
         batch_size: Optional[int] = None,
         num_batches: Optional[int] = None,
         num_epochs: Optional[int] = None,
         num_gpus: Optional[int] = None,
-        generation_kwargs: DictConfig = DictConfig({}),
-        **model_kwargs,
+        generation_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs,
     ):
         super().__init__()
 
@@ -64,23 +80,43 @@ class CMCModule(pl.LightningModule):
         self._preds_table_name = preds_table_name
 
         self.model: BaseModel
-        if model_configuration == "encoder_decoder":
+        if model_cfg.configuration == "encoder_decoder":
+            model_cfg = BaseEncoderDecoderConfig(**model_cfg)  # type: ignore[arg-type]
             self.model = EncoderDecoderWrapper(
-                diff_tokenizer=diff_tokenizer, msg_tokenizer=msg_tokenizer, **model_kwargs
+                diff_tokenizer=diff_tokenizer,
+                msg_tokenizer=msg_tokenizer,
+                encoder_context_max_len=model_cfg.encoder_context_max_len,
+                decoder_context_max_len=model_cfg.decoder_context_max_len,
+                encoder_name_or_path=model_cfg.encoder_name_or_path,
+                decoder_name_or_path=model_cfg.decoder_name_or_path,
+                num_layers_encoder=model_cfg.num_layers_encoder,
+                num_layers_decoder=model_cfg.num_layers_decoder,
+                encoder_model_type=model_cfg.encoder_model_type,
+                decoder_model_type=model_cfg.decoder_model_type,
+                tie_encoder_decoder=model_cfg.tie_encoder_decoder,
+                tie_word_embeddings=model_cfg.tie_word_embeddings,
             )
-        elif model_configuration == "decoder":
-            self.model = DecoderWrapper(tokenizer=msg_tokenizer, **model_kwargs)
+        elif model_cfg.configuration == "decoder":
+            model_cfg = BaseDecoderConfig(**model_cfg)  # type: ignore[arg-type]
+            self.model = DecoderWrapper(tokenizer=msg_tokenizer, decoder_name_or_path=model_cfg.decoder_name_or_path)
+        elif model_cfg.configuration == "seq2seq":
+            model_cfg = BaseSeq2SeqConfig(**model_cfg)  # type: ignore[arg-type]
+            self.model = Seq2SeqWrapper(tokenizer=msg_tokenizer, name_or_path=model_cfg.name_or_path)
+        elif model_cfg.configuration == "race":
+            model_cfg = BaseRACEConfig(**model_cfg)  # type: ignore[arg-type]
+            self.model = RACEWrapper(tokenizer=msg_tokenizer, name_or_path=model_cfg.name_or_path)
         else:
-            raise ValueError(
-                f'Configuration {model_configuration} is not supported, please use one of "encoder_decoder" or "decoder"'
-            )
+            raise ValueError(f"Current configuration ({model_cfg.configuration}) is not supported")
 
+        self._save_on_epoch = save_on_epoch
         self._num_epochs = num_epochs
         self._num_batches = num_batches
         self._batch_size = batch_size
         self._num_gpus = num_gpus
 
-        self.learning_rate = self.adjust_learning_rate(initial_learning_rate=learning_rate)
+        self.learning_rate = self.adjust_learning_rate(
+            initial_learning_rate=learning_rate, initial_batch_size=initial_batch_size
+        )
         self.weight_decay = weight_decay
         self.num_warmup_steps = num_warmup_steps
 
@@ -93,10 +129,11 @@ class CMCModule(pl.LightningModule):
 
         # will be logged to W&B
         self.table_data: Dict[str, List[str]] = defaultdict(list)
+
         self.val_metrics = EvaluationMetrics(
             do_strings=False,
             do_tensors=True,
-            shift=not isinstance(self.model, EncoderDecoderWrapper),
+            shift=isinstance(self.model, DecoderWrapper),
             prefix="val",
         )
 
@@ -143,21 +180,14 @@ class CMCModule(pl.LightningModule):
     def validation_epoch_end(self, outputs):  # type: ignore[override]
         self.log_dict(self.val_metrics.compute(), on_step=False, on_epoch=True, logger=True)
 
-    def test_step(self, batch: BatchTest, *args, **kwargs):  # type: ignore[override]
-        gen_sequences = self.generate(batch)
-        # leave only generated part (crop context)
-        gen_sequences = gen_sequences[:, batch.decoder_input_ids.shape[1] :]
-
-        # decode tokenized sequences
-        decoded_source = self.decode_src(batch.encoder_input_ids, skip_special_tokens=True)[0]
-        decoded_preds = self.decode_trg(gen_sequences, skip_special_tokens=True)[0]
+    def _process_generated(self, batch: BatchTest, predictions: torch.Tensor):
+        decoded_preds = self.decode_trg(predictions, skip_special_tokens=True)[0]
         decoded_context = self.decode_trg(batch.decoder_input_ids, skip_special_tokens=False)[0]
 
-        # remove prefix from generated sequences to compute metrics without it
-        decoded_preds = [pred[len(prefix) :] for pred, prefix in zip(decoded_preds, batch.prefixes)]
+        decoded_source = []
+        if not isinstance(self.model, DecoderWrapper):
+            decoded_source = self.decode_src(batch.encoder_input_ids, skip_special_tokens=True)[0]
 
-        # separate history from corresponding message and get rid of special tokens
-        # TODO: looks ugly
         history = []
         for i in range(len(decoded_context)):
             decoded_context[i] = (
@@ -176,34 +206,63 @@ class CMCModule(pl.LightningModule):
             else:
                 history.append("")
 
+        return {
+            "Diff": decoded_source,
+            "History": history,
+            "Context": decoded_context,
+            "Prefix": batch.prefixes,
+            "Prediction": decoded_preds,
+            "Target": [target.replace("[NL]", "\n") for target in batch.targets],
+        }
+
+    def test_step(self, batch: BatchTest, *args, **kwargs):  # type: ignore[override]
+        predictions = self.generate(batch)
+        # leave only generated part (crop context)
+        predictions = predictions[:, batch.decoder_input_ids.shape[1] :]
+
+        # decode & postprocess data
+        string_results = self._process_generated(batch, predictions)
+
         # add data to a little table with examples
-        self.table_data["Diff"].extend(decoded_source)
-        self.table_data["History"].extend(history)
-        self.table_data["Context"].extend(decoded_context)
-        self.table_data["Prefix"].extend(batch.prefixes)
-        self.table_data["Prediction"].extend(decoded_preds)
-        self.table_data["Target"].extend([target.replace("[NL]", "\n") for target in batch.targets])
+        for key in string_results:
+            self.table_data[key].extend(string_results[key])
 
     def test_epoch_end(self, *args, **kwargs):
-        if isinstance(self.logger, pl.loggers.WandbLogger):
-            self.logger.log_table("test_examples", dataframe=pd.DataFrame.from_dict(self.table_data))
+        preds = pd.DataFrame.from_dict({k: v for k, v in self.table_data.items() if v})
 
-            # upload predictions to wandb as artifact
+        # is W&B is used, upload predictions as table and as artifact
+        if isinstance(self.logger, pl.loggers.WandbLogger):
+            self.logger.log_table("test_examples", dataframe=preds)
+
             if self._preds_artifact_name and self._preds_artifact_type and self._preds_table_name:
                 artifact = wandb.Artifact(
                     self._preds_artifact_name,
                     type=self._preds_artifact_type,
                     metadata={"tags": self.logger.experiment.tags if self.logger.experiment.tags else None},
                 )
-                artifact.add(wandb.Table(dataframe=pd.DataFrame.from_dict(self.table_data)), self._preds_table_name)
+                artifact.add(wandb.Table(dataframe=preds), self._preds_table_name)
                 self.logger.experiment.log_artifact(artifact, aliases=self._preds_table_name)
+
+        # save predictions to disk
+        preds.to_json(f"{self._preds_artifact_name}_{self._preds_table_name}.json", orient="records", lines=True)
+
+    def on_train_epoch_end(self) -> None:
+        if (
+            self._save_on_epoch
+            and self.trainer.current_epoch == self._save_on_epoch
+            and isinstance(self.model, Seq2SeqWrapper)
+        ):
+            logging.info(f"Reached epoch {self._save_on_epoch}! Saving model checkpoint for further use in RACE...")
+            os.makedirs(f"epoch_{self._save_on_epoch}_checkpoint", exist_ok=True)
+            self.model.model.save_pretrained(f"epoch_{self._save_on_epoch}_checkpoint")
+            self.model._tokenizer.save_pretrained(f"epoch_{self._save_on_epoch}_checkpoint")
 
     def configure_optimizers(self):
         if not self.learning_rate:
             logging.warning("Learning rate is not set, proceeding with default value 1e-3")
             self.learning_rate = 1e-3
 
-        if not self.weight_decay:
+        if self.weight_decay is None:
             logging.warning("Weight decay is not set, proceeding with default value 1e-2")
             self.weight_decay = 1e-2
 
@@ -238,12 +297,14 @@ class CMCModule(pl.LightningModule):
         self, initial_batch_size: Optional[int] = None, initial_learning_rate: Optional[float] = None
     ) -> float:
         assert self._batch_size
+        # when LR is not passed explicitly, take formula from `Scaling Laws for Neural Language Models`
+        # and scale linearly with batch size (it was 512 in the paper)
         if not initial_learning_rate:
-            # take formula from `Scaling Laws for Neural Language Models` paper
-            # and scale linearly with batch size (it was 512 in the paper)
             initial_batch_size = 512
             initial_learning_rate = 0.003239 - 0.0001395 * log(self.model.num_parameters(exclude_embeddings=True))
-        initial_learning_rate = initial_learning_rate * self._batch_size
+
         if initial_batch_size:
+            initial_learning_rate = initial_learning_rate * self._batch_size
             return initial_learning_rate / initial_batch_size
+
         return initial_learning_rate

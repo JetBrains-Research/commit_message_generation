@@ -2,7 +2,7 @@ import pytest
 import torch
 from transformers import AutoTokenizer
 
-from src.data_utils.data_collator import DataCollatorTest
+from src.data_utils.data_collators import DataCollatorTest
 from src.utils import SingleExample
 
 
@@ -43,6 +43,13 @@ def test_decoder_input_with_history(msgs, histories, default_tokenizers):
     for context_ratio in [0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1.0]:
 
         data_collator = DataCollatorTest(
+            diff_bos_token_id=encoder_tok.bos_token_id,
+            diff_eos_token_id=encoder_tok.eos_token_id,
+            diff_pad_token_id=encoder_tok.pad_token_id,
+            msg_bos_token_id=decoder_tok.bos_token_id,
+            msg_eos_token_id=decoder_tok.eos_token_id,
+            msg_pad_token_id=decoder_tok.pad_token_id,
+            msg_sep_token_id=decoder_tok.sep_token_id,
             diff_tokenizer=encoder_tok,
             msg_tokenizer=decoder_tok,
             decoder_context_max_len=256,
@@ -51,6 +58,7 @@ def test_decoder_input_with_history(msgs, histories, default_tokenizers):
             encoder_input_type="diff",
             encoder_context_max_len=None,
             testing=None,
+            process_retrieved=False,
         )
         decoder_input_ids, decoder_attention_mask, targets, prefixes = data_collator._process_decoder_input(inputs)
 
@@ -92,6 +100,13 @@ def test_decoder_input_without_history(default_tokenizers):
 
         for encoder_input_type in ["diff", "history"]:
             data_collator = DataCollatorTest(
+                diff_bos_token_id=encoder_tok.bos_token_id,
+                diff_eos_token_id=encoder_tok.eos_token_id,
+                diff_pad_token_id=encoder_tok.pad_token_id,
+                msg_bos_token_id=decoder_tok.bos_token_id,
+                msg_eos_token_id=decoder_tok.eos_token_id,
+                msg_pad_token_id=decoder_tok.pad_token_id,
+                msg_sep_token_id=decoder_tok.sep_token_id,
                 diff_tokenizer=encoder_tok,
                 msg_tokenizer=decoder_tok,
                 decoder_context_max_len=256,
@@ -102,6 +117,7 @@ def test_decoder_input_without_history(default_tokenizers):
                 context_ratio=context_ratio,
                 encoder_context_max_len=None,
                 testing=None,
+                process_retrieved=False,
             )
         decoder_input_ids, decoder_attention_mask, targets, prefixes = data_collator._process_decoder_input(inputs)
 
@@ -123,6 +139,13 @@ def test_process_msg_gen(default_tokenizers):
     encoder_tok, decoder_tok = default_tokenizers
 
     data_collator = DataCollatorTest(
+        diff_bos_token_id=encoder_tok.bos_token_id,
+        diff_eos_token_id=encoder_tok.eos_token_id,
+        diff_pad_token_id=encoder_tok.pad_token_id,
+        msg_bos_token_id=decoder_tok.bos_token_id,
+        msg_eos_token_id=decoder_tok.eos_token_id,
+        msg_pad_token_id=decoder_tok.pad_token_id,
+        msg_sep_token_id=decoder_tok.sep_token_id,
         diff_tokenizer=encoder_tok,
         msg_tokenizer=decoder_tok,
         encoder_context_max_len=None,
@@ -131,6 +154,7 @@ def test_process_msg_gen(default_tokenizers):
         testing=None,
         encoder_input_type=None,
         with_history=None,
+        process_retrieved=False,
     )
 
     message = "Simple message example"

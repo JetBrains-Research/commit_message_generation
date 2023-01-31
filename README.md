@@ -1,272 +1,138 @@
-# Commit messages completion ~~(and generation)~~
+# Commit message completion ~~(and generation)~~
 
 ![GitHub](https://img.shields.io/github/license/saridormi/commit_message_generation?style=for-the-badge)
 
-This repository contains code for training and evaluation of Transformer-based models for commit messages completion
+This repository contains code for training and evaluation of Transformer-based models for commit message completion
 task.
 
-## Models checkpoints and dataset
+## Requirements
 
-> TODO: later we'll share information about available models checkpoints and dataset
-
-## Usage
-
-> **OS:** Linux
-
-To use this project, follow these steps:
-
-1. **Clone repo**
-    ```
-    git clone https://github.com/saridormi/commit_message_generation.git
-    ```
-2. **Install dependencies**
-
-   This project has the following prerequisites:
-    * Python
+* :snake: Python
+* :floppy_disk: Dependencies
     * Neural networks frameworks: [PyTorch](https://pytorch.org/)
-      , [🤗 Transformers](https://huggingface.co/transformers/)
-      and [PyTorch Lightning](https://www.pytorchlightning.ai/)
+        , [🤗 Transformers](https://huggingface.co/transformers/)
+        and [PyTorch Lightning](https://www.pytorchlightning.ai/)
     * Configuration: [Hydra](https://hydra.cc/)
     * Experiments tracking: [Weights & Biases](https://wandb.ai/site)
     * Metrics: [TorchMetrics](https://torchmetrics.readthedocs.io/en/stable/)
       , [🤗 Datasets](https://huggingface.co/docs/datasets/)
       and other packages necessary for specific metrics implementations
-    * Lint & unit tests: [mypy](https://github.com/python/mypy), [Black](https://black.readthedocs.io/en/stable/), [isort](https://pycqa.github.io/isort/)
-      , [pytest](https://docs.pytest.org/en/7.1.x/)
+    * Lint & unit tests: [mypy](https://github.com/python/mypy), [Black](https://black.readthedocs.io/en/stable/), [isort](https://pycqa.github.io/isort/), [pytest](https://docs.pytest.org/en/7.1.x/)
 
-   You can install Python packages with [pip](https://pip.pypa.io/en/stable/):
-    ```
-    pip install -r requirements.txt
-    ```
+You can install Python packages with [pip](https://pip.pypa.io/en/stable/):`pip install -r requirements.txt`
+     
+## Usage
 
-3. **Prepare data**
+### Step 1: Prepare raw data
 
-   You can use script from [this repo](https://github.com/saridormi/commits_dataset) for data preparation.
+> :construction: At some point, we plan to publish our dataset of commits. Until then, and if you wish to utilize this project 
+> for other data, refer to this section.
 
-    <details>
-    <summary>:yellow_heart: click here for more information on data format</summary>
+> :star2: The data for this project was obtained via [commits_dataset](https://github.com/saridormi/commits_dataset) repo. 
 
-   This projects expects input data to be already tokenized. Each dataset part (e.g. train, val, test) should be stored
-   in two files: `part.json` and `part_history.json`.
+<details>
+<summary>:yellow_heart: click here for more information on required data format</summary>
 
-    * `part.json`
+This project expects all dataset parts to be stored in a separate JSONLines files:
+```
+ ├── ...  # data directory
+ │   ├── train.jsonl
+ │   ├── val.jsonl
+ │   └── test.jsonl
+ └── ...
+```
 
-      It is a JSON Lines file. Each row is a dictionary with the following keys: `diff_input_ids`, `pos_in_history`
-      , `author`.
+In our case, each input example is commit. Specifically, the following keys are expected in each row:
 
-        * `diff_input_ids`: A tokenized representation of diff from current commit, basically, a list of tokens.
-        * `pos_in_history`: An integer denoting what position current commit has in the commit history of its author.
-        * `author`: An unique id for author of current commit.
+* `author`: Unique identifier for the author of commit.
+* `pos_in_history`: Commit's position in the history of its author (if commits are in chronological order, it can be obtained by grouping commits by authors and saving serial number in its group for each commit).
+* `message`: Commit message.
+* `mods`: A list of modification made in a commit. Each modification should contain the following keys:
+  * `change_type`: Type of modification (string, one of `MODIFY`, `ADD`, `DELETE`, `RENAME`, `COPY`, `UNKNOWN`).
+  * `old_path`: Path to file before the commit (`None` when `change_type` is `ADD`).
+  * `new_path`: Path to file after the commit (`None` when `change_type` is `DELETE`).
+  * `diff`: Output of the `git diff` command for this specific file.
 
-    * `part_history.json`
+</details>
 
-      It is a JSON file. It contains a dictionary where each key is an unique author id and a corresponding value is the
-      sequence of tokenized representation of commit messages from the author in chronological order.
+### Step 2: Choose configuration
 
-  </details>
+#### Model architecture
 
-4. **Configure training and/or evaluation**
+This project supports the following models:
 
-    * Configuration for training is defined at [`conf/train_config.yaml`](conf/train_config.yaml)
+* [Transformer Decoder](src/model/configurations/decoder_wrapper.py)
+  * Refer to [:hugs: documentation for AutoModelForCausalLM](https://huggingface.co/docs/transformers/model_doc/auto#transformers.AutoModelForCausalLM)
+* [Transformer with pretrained encoders/decoders](src/model/configurations/encoder_decoder_wrapper.py)
+  * Refer to [:hugs: documentation for EncoderDecoderModel](https://huggingface.co/docs/transformers/model_doc/encoder-decoder)
+  
+* [Pretrained Seq2Seq Transformer](src/model/configurations/seq2seq_wrapper.py)
+  * Refer to [:hugs: documentation for AutoModelForSeq2SeqLM](https://huggingface.co/docs/transformers/model_doc/auto#transformers.AutoModelForSeq2SeqLM)
 
-       <details>
-       <summary>:yellow_heart: click here for more information on training config format</summary>
+* [RACE](src/model/configurations/race_wrapper.py) 
+  * [:scroll: RACE: Retrieval-Augmented Commit Message Generation](https://arxiv.org/abs/2203.02700v3)
 
-      Basically, config looks like that:
+For details refer to classes provided in [`src/model/configurations`](src/model/configurations) or base configs provided in [`conf/model/base_configs.py`](conf/model/base_configs.py).
 
-       ```
-       dataset:
-         kwarg: ...
-       model:
-         kwarg: ...
-       wandb_logger:
-         kwarg: ...
-       trainer:
-         kwarg: ...
-      ```
+You can find specific configs for the following models in [`conf/model/configs.py`](conf/model/configs.py):
+* distilGPT-2
+* randomly initialized Transformer
+* CodeT5 from [:scroll: CodeT5: Identifier-aware Unified Pre-trained Encoder-Decoder Models for Code Understanding and Generation](https://arxiv.org/abs/2109.00859)
+* CodeReviewer from [:scroll: Automating Code Review Activities by Large-Scale Pre-training](https://arxiv.org/abs/2203.09095)
+* RACE + T5 from [:scroll: RACE: Retrieval-Augmented Commit Message Generation](https://arxiv.org/abs/2203.02700v3)
 
-      See more information about possible options below.
+#### Input type
 
-        * `dataset` defines everything data-related. 
-        
-            You can check [corresponding DataModule class](src/data_utils/cmc_data_module.py) for full list of parameters.
-            
-            Part of data configuration is related to specific model (e.g. tokenizer paths) and it is defined in model config!
-            All other options are defined in separate config, e.g. [`conf/dataset/default_dataset.yaml`](conf/dataset/default_dataset.yaml):
+This project explores two kinds of input for commit message completion task: diff and commit message history. 
 
-            * `testing`: True to generate noise of maximum allowed context length instead of using real data, False otherwise (used for bach size-tuning purposes).
-            * `context_ratio`: Relevant for generation: ratio of characters of target message that would be passed to model context. Float, should be in (0,1) range.
-            * `train_with_history`: True if you want to use commit message history during training, False otherwise.
-            * `generate_with_history`: True if you want to use commit message history during generation, False otherwise.
-            * `encoder_input_type`: What type of input will be passed to encoder. Currently, `history` and `diff` are supported.
-            * `train_dataloader_conf` and etc. are passed to corresponding DataLoaders *(
-              see [PyTorch docs](https://pytorch.org/docs/1.7.0/data.html#torch.utils.data.DataLoader) for additional
-              information)*.
+* For decoder, there is only one supported option: concatenate commit message history with current commit message and pass to context.
 
-        * `model` defines everything model-related.
+* For seq2seq models, there are three supported options:
+  * *Diff-only:* pass diff to encoder, pass current message to decoder.
+  * *History-only:* pass history to encoder, pass current message to decoder.
+  * *Diff + history:* pass diff to encoder, pass commit message history concatenated with current message to decoder.
 
-            Only optimizer-related model parameters are defined at [`conf/train_config.yaml`](conf/train_config.yaml):
-            * `learning_rate`: well, learning rate! But note that: 
-                * [`get_linear_schedule_with_warmup`](https://huggingface.co/docs/transformers/main_classes/optimizer_schedules#transformers.get_linear_schedule_with_warmup) is used, so this learning rate value is maximum that it is reached after `num_warmup_steps` steps
-                * this learning rate value will be multiplied by batch size
-            * `weight_decay`: Float, will be passed to AdamW optimizer.
-            * `num_warmup_steps`: Int, number of warmup steps for scheduler.
-            
-            Other parameters are defined in a separate model config. Currently, we have two supported model configurations: encoder-decoder Transformer and decoder-only Transformer.
-            
-            * There is an example available for **decoder-only Transformer**: [`distilgpt2`](conf/model/distilgpt2.yaml). 
-              Check out [corresponding class](src/model/configurations/decoder_wrapper.py) for information on parameters.
-          
-            * There are two examples available for **encoder-decoder Transformer**: [`random_roberta_2_random_gpt2_2`](conf/model/random_roberta_2_random_gpt2_2.yaml) and [`distilgpt2_distilgpt2_shared`](conf/model/distilgpt2_distilgpt2_shared.yaml).
-              Check out [corresponding class](src/model/configurations/encoder_decoder_wrapper.py) for information on parameters.
+### Step 3: Train
 
-        * `wandb_logger` defines everything logging-related.
-            
-            You can set `wandb_logger` to False to avoid using W&B, then Tensorboard (default option in Lightning) will be used.
+1. Define configuration for training at [`conf/train_config.py`](conf/train_config.py).
+2. Choose one of available model configs or add your own.
+3. Note that you have to define missing parameters from [`InputConfig`](conf/data/input_config.py). You can do it via CLI or just rewrite them. Below is the example how to define parameters via CLI.
 
-            * `project`: Name of W&B project.
-            * `save_model_as_artifact`: True to upload model checkpoint to W&B after training.
+To launch training of model defined as `XXXModelConfig` and registered via `ConfigStore.store(name="XXX", group="model", node=XXXModelConfig)`, run the following command:
+```
+python train.py +model=XXX ++input.train_with_history=X ++input.encoder_input_type=X
+```
 
-        * `trainer` defines everything trainer-related.
+### Step 4: Evaluate
 
-          All options from here are passed to Trainer as kwargs *(see [Lightning docs](https://pytorch-lightning.readthedocs.io/en/stable/common/trainer.html) for additional information)*.
-      </details>
+#### Step 4.1: Generating predictions
 
-    * Configuration for generating predictions for the test set is defined
-      at [`conf/eval_config.yaml`](conf/eval_config.yaml)
+1. Define configuration for evaluation at [`conf/eval_config.py`](conf/eval_config.py).
 
-      <details>
-      <summary>:yellow_heart: click here for more information on evaluation config format</summary>
+2. Note that you have to either provide local path to checkpoint in `ckpt_path` or use W&B artifact.
 
-      Basically, config looks like that:
+   In the latter case, artifact name will be inferred from model configuration. Choose one of available model configs or add your own. 
 
-      ```
-      stage: ...
-      
-      dataset:
-        kwarg: ... 
-      
-      wandb_logger:
-        kwarg: ...
-      
-      generation_kwargs:
-        kwargs: ...
-      
-      trainer:
-        kwarg: ...
-      
-      model:
-        kwarg: ...
-        
-      model_name: ...
-      
-      artifact:
-        kwarg: ...
+3. Note that you have to define all parameters from [`InputConfig`](conf/data/input_config.py). You can do it via CLI or just rewrite them. Below is the example how to define parameters via CLI.
 
-      ckpt_path: ...
-      ```
+To launch evaluation of model defined as `XXXModelConfig` and registered via `ConfigStore.store(name="XXX", group="model", node=XXXModelConfig)`, run the following command:
+```
+python eval.py +model=XXX ++input.train_with_history=X ++input.encoder_input_type=X ++input.generate_with_history=X ++input.context_ratio=X
+```
 
-      See more information about possible options below.
+#### Step 4.2: Compute metrics
 
-        * `stage` is set to `test` by default, it might be set to `sweep` to use validation set instead of test when
-          tuning hyperparameters with W&B sweep.
+1. Define configuration for metrics computation at [`conf/metrics_config.py`](conf/metrics_config.py).
 
-        * `dataset` defines everything data-related. 
-           
-          It is the same as in the train config, check the information above. 
+2. Note that you have to either provide local path to model predictions in `preds_path` or use W&B artifact and define the following parameters from [`ArtifactMetricsConfig`](conf/metrics_config.py): `name`, `version`. You can do it via CLI or just rewrite them. Below are the examples how to define parameters via CLI.
 
-        * `wandb_logger` defines everything logging-related.
 
-            You can set `wandb_logger` to False to avoid using W&B, then Tensorboard (default option in Lightning) will be used.
+To launch metrics computation for local predictions:
+```
+python compute_metrics.py ++preds_path=XXX
+```
 
-            * `project`: Name of W&B project.
-        
-        * `generation_kwargs` defines parameters for generation.
-
-            Check [HuggingFace's `generate` documentation](https://huggingface.co/docs/transformers/v4.24.0/en/main_classes/text_generation#transformers.generation_utils.GenerationMixin.generate) for more information
-
-        Next, you can either:
-        * use fine-tuned model
-          * load from W&B artifact
-            * define artifact parameters under `model_artifact` key
-            * define `model_name` key (or define model configuration under `model` key, and `model_name` will be constructed automatically)
-          * load from local path
-           * provide local path under `ckpt_path` key
-           * define `model_name` key (or define model configuration under `model` key, and `model_name` will be constructed automatically)
-        * initialize random/pretrained model
-          * define model configuration under `model` key (it is the same as in the train config, check the information above)
-      </details>
-
-    * Configuration for computing metrics is defined at [`conf/metrics_config.yaml`](conf/metrics_config.yaml)
-
-      <details>
-      <summary>:yellow_heart: click here for more information on metrics config format</summary>
-
-      Basically, config looks like that:
-
-      ```
-      wandb:
-        kwarg: ...
-        artifact: 
-          kwargs: ...
-      
-      input_file: ...
-      max_n_tokens: ...
-      
-      language: ...
-      only_short_sequences: ...
-      only_long_sequences: ...
-      ```
-
-      See more information about possible options below.
-
-        * `wandb` defines everything W&B-related
-
-          Firstly, there is an option to use model predictions stored as W&B artifact table. Define the configuration under `artifact` key:
-            * `project`: W&B project.
-            * `name`:  Artifact name.
-            * `version`: Artifact version (or alias).
-            * `table_name`: Name of file with prediction in the artifact (by default, it is assumed to be the same as artifact alias).
-
-          Secondly, there is an option to log metrics to W&B. The following options define the
-          configuration:
-            * `project`: W&B project name
-
-        * `input_file`
-
-          An alternative to W&B: if you have model predictions stored as `.csv` file locally, provide the path here.
-
-        * `max_n_tokens`
-
-          Metrics are computed both for full predictions and references and for their prefixes of first `i` tokens,
-          where `i` goes from `1` to `max_n_tokens + 1`.
-      
-        Next, we also support a couple of filters:
-        * `language`: Set to False to evaluate on full test set, set to programming language name to evaluate only on examples on this language.
-        * `only_short_sequences`: Set to False to evaluate on full test set, set to True to evaluate only on examples with <= 512 tokens in diffs.
-        * `only_long_sequences`: Set to False to evaluate on full test set, set to True to evaluate only on examples with > 512 tokens in diffs.
-      </details>
-
-5. **Train**
-
-   To train a model, define configuration at [`conf/train_config.yaml`](conf/train_config.yaml) and run the following
-   command:
-    ```
-    python train.py
-    ```
-
-6. **Evaluate**
-
-   To generate predictions for the test set, define configuration at [`conf/eval_config.yaml`](conf/eval_config.yaml)
-   and run the following command:
-
-    ```
-    python eval.py
-    ```
-
-   To compute metrics, define configuration at [`conf/metrics_config.yaml`](conf/metrics_config.yaml) and run the
-   following command:
-
-    ```
-    python compute_metrics.py
-    ```
+To launch metrics computation for W&B artifact with predictions:
+```
+python compute_metrics.py ++logger.artifact_config.name=XXX ++logger.artifact_config.version=XXX
+```

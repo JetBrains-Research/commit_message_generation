@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 import torch
 from torchmetrics import MetricCollection
+from torchmetrics.utilities import check_forward_full_state_property
 
 from src.metrics import Accuracy
 
@@ -82,3 +83,23 @@ def test_different_batch_sizes(metrics_collection):
     assert np.allclose(
         [total["accuracy@1"].item(), total["accuracy@2"].item()], [0.5 / 4, (1 + 2 / 3) / 4], rtol=1e-05, atol=1e-08
     )
+
+
+def test_full_state_update():
+    scores = torch.tensor(
+        [
+            [[0.5, 0, 0.3], [1.0, -100, -200], [0.5, 0, 0.3], [-1, -1, -1]],
+            [[0.5, 0, 0.3], [1.0, -100, -200], [0.5, 0, 0.3], [-1, -1, -1]],
+            [[0.5, 0, 0.3], [1.0, -100, -200], [0.5, 0, 0.3], [-1, -1, -1]],
+            [[0.5, 0, 0.3], [1.0, -100, -200], [0.5, 0, 0.3], [-1, -1, -1]],
+        ],
+        dtype=torch.float,
+    )
+    labels = torch.tensor([[-1, 0, 2, -100], [-1, 1, 1, -100], [-1, 2, 1, 3], [-1, 1, 2, -100]], dtype=torch.long)
+
+    for top_k in list(range(1, 4)):
+        check_forward_full_state_property(
+            Accuracy,
+            init_args=dict(top_k=top_k, ignore_index=-100),
+            input_args={"predictions": scores, "references": labels},
+        )
