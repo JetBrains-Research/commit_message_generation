@@ -62,24 +62,24 @@ In our case, each input example is commit. Specifically, the following keys are 
 This project supports the following models:
 
 * [Transformer Decoder](src/model/configurations/decoder_wrapper.py)
-  * Refer to [:hugging-face: documentation for AutoModelForCausalLM](https://huggingface.co/docs/transformers/model_doc/auto#transformers.AutoModelForCausalLM)
+  * Refer to [:hugs: documentation for AutoModelForCausalLM](https://huggingface.co/docs/transformers/model_doc/auto#transformers.AutoModelForCausalLM)
 * [Transformer with pretrained encoders/decoders](src/model/configurations/encoder_decoder_wrapper.py)
-  * Refer to [:hugging-face: documentation for EncoderDecoderModel](https://huggingface.co/docs/transformers/model_doc/encoder-decoder)
+  * Refer to [:hugs: documentation for EncoderDecoderModel](https://huggingface.co/docs/transformers/model_doc/encoder-decoder)
   
 * [Pretrained Seq2Seq Transformer](src/model/configurations/seq2seq_wrapper.py)
-  * Refer to [:hugging-face: documentation for AutoModelForSeq2SeqLM](https://huggingface.co/docs/transformers/model_doc/auto#transformers.AutoModelForSeq2SeqLM)
+  * Refer to [:hugs: documentation for AutoModelForSeq2SeqLM](https://huggingface.co/docs/transformers/model_doc/auto#transformers.AutoModelForSeq2SeqLM)
 
 * [RACE](src/model/configurations/race_wrapper.py) 
-  * [:paper: RACE: Retrieval-Augmented Commit Message Generation](https://arxiv.org/abs/2203.02700v3)
+  * [:scroll: RACE: Retrieval-Augmented Commit Message Generation](https://arxiv.org/abs/2203.02700v3)
 
 For details refer to classes provided in [`src/model/configurations`](src/model/configurations) or base configs provided in [`conf/model/base_configs.py`](conf/model/base_configs.py).
 
 You can find specific configs for the following models in [`conf/model/configs.py`](conf/model/configs.py):
 * distilGPT-2
 * randomly initialized Transformer
-* CodeT5 from [:paper: CodeT5: Identifier-aware Unified Pre-trained Encoder-Decoder Models for Code Understanding and Generation](https://arxiv.org/abs/2109.00859)
-* CodeReviewer from [:paper: Automating Code Review Activities by Large-Scale Pre-training](https://arxiv.org/abs/2203.09095)
-* RACE + T5 from [:paper: RACE: Retrieval-Augmented Commit Message Generation](https://arxiv.org/abs/2203.02700v3)
+* CodeT5 from [:scroll: CodeT5: Identifier-aware Unified Pre-trained Encoder-Decoder Models for Code Understanding and Generation](https://arxiv.org/abs/2109.00859)
+* CodeReviewer from [:scroll: Automating Code Review Activities by Large-Scale Pre-training](https://arxiv.org/abs/2203.09095)
+* RACE + T5 from [:scroll: RACE: Retrieval-Augmented Commit Message Generation](https://arxiv.org/abs/2203.02700v3)
 
 #### Input type
 
