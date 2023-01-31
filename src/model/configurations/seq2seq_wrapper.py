@@ -10,6 +10,10 @@ class Seq2SeqWrapper(BaseModel):
     """This class serves as a wrapper of Transformer-based models for commit message completion task.
 
     More specifically, this class relies on pretrained seq2seq models from HuggingFace Transformers.
+
+    Args:
+        name_or_path: Name on HuggingFace hub or path to pretrained checkpoint.
+        tokenizer: Tokenizer for the checkpoint (it's initialized earlier to add special tokens when necessary).
     """
 
     def __init__(self, tokenizer, name_or_path, **kwargs):

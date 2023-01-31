@@ -19,9 +19,9 @@ class DataCollatorTrain(BaseCollatorUtils):
 
     - Format without history: `[BOS] message [EOS]`
 
-    Args:
-        shift_labels: True to mimic transformers' EncoderDecoderModel ids/labels construction, False otherwise
-         (pass False for all other model classes).
+    Attributes:
+        shift_labels: True to mimic transformers' seq2seq models ids/labels construction logic, False otherwise
+         (pass False for decoder class).
     """
 
     shift_labels: bool
@@ -29,7 +29,8 @@ class DataCollatorTrain(BaseCollatorUtils):
     def _shift_for_encoder_decoder(
         self, ids: List[List[int]], labels: List[List[int]]
     ) -> Tuple[List[List[int]], List[List[int]]]:
-        """This method mimics transformers logic of ids and labels for EncoderDecoderModel.
+        """This method mimics transformers logic of ids and labels for EncoderDecoderModel
+        (or T5ForConditionalGeneration).
 
         Starting from transformers v4.12, loss is now calculated in EncoderDecoderModel, not in decoder class.
         Also, decoder input ids are created automatically based on labels: labels are shifted and -100 is replaced
@@ -41,12 +42,17 @@ class DataCollatorTrain(BaseCollatorUtils):
 
     def _process_decoder_input(self, examples: List[SingleExample]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
+        Prepares decoder input for train/validation:
+          * aggregates messages from history when configured accordingly
+          * concatenates history with current message
+          * constructs labels
+          * pads, converts to tensors
 
         Args:
-            examples:
+            examples: A list of inputs for current batch.
 
         Returns:
-
+            Tuple of three tensors: input ids, attention masks, labels.
         """
         message_inputs: List[List[int]] = [example.msg_input_ids for example in examples]
         history_inputs: List[List[List[int]]] = [example.history_input_ids for example in examples]
@@ -83,8 +89,6 @@ class DataCollatorTrain(BaseCollatorUtils):
             all_msg_labels.append(cur_labels_tensor)
 
         msg_max_len = max(len(tensor) for tensor in all_msg_ids)
-
-        # NOTE: left side padding on generation!! https://github.com/huggingface/transformers/issues/3021
         all_msg_ids = [
             self._pad_tensor(
                 tensor,

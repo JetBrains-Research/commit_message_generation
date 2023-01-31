@@ -7,7 +7,12 @@ from .utils.race import RACE
 
 
 class RACEWrapper(BaseModel):
-    """This class serves as a wrapper of RACE model for commit message completion task."""
+    """This class serves as a wrapper of RACE model for commit message completion task.
+
+    Args:
+        name_or_path: Name on HuggingFace hub or path to pretrained checkpoint.
+        tokenizer: Tokenizer for the checkpoint (it's initialized earlier to add special tokens when necessary).
+    """
 
     def __init__(self, tokenizer, name_or_path, **kwargs):
         super().__init__()

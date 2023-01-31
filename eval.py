@@ -5,107 +5,108 @@ import hydra
 import nltk
 import pytorch_lightning as pl
 import wandb
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 
+from conf import BaseDecoderConfig, BaseRACEConfig, EvalConfig
 from src.data_utils import CMCDataModule
 from src.model import CMCModule
-from src.utils import WandbOrganizer, prepare_dataset_cfg
+from src.utils import WandbOrganizer
 
 nltk.download("omw-1.4")
 nltk.download("wordnet")
 
 
-@hydra.main(config_path="conf", config_name="eval_config")
-def main(cfg: DictConfig) -> None:
+@hydra.main(version_base="1.1", config_path="conf", config_name="eval_config")
+def main(cfg: EvalConfig) -> None:
     # -----------------------
     #          init         -
     # -----------------------
     pl.seed_everything(42)
 
-    if cfg.model.dataset.diff_tokenizer_name_or_path == cfg.model.dataset.msg_tokenizer_name_or_path:
+    if cfg.model.diff_tokenizer_name_or_path == cfg.model.msg_tokenizer_name_or_path:
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-    cfg.dataset = prepare_dataset_cfg(cfg.dataset, model_dataset_cfg=cfg.model.dataset)
-
     dm = CMCDataModule(
-        **cfg.dataset,
-        use_cache=True,
+        dataset_cfg=cfg.dataset,
+        model_cfg=cfg.model,
+        input_cfg=cfg.input,
         local_rank=int(os.environ.get("LOCAL_RANK", 0)),
         world_size=1,
-        shift_labels=cfg.model.model_configuration != "decoder",
-        process_retrieved=cfg.model.model_configuration == "race",
+        shift_labels=cfg.model.configuration != "decoder",
+        process_retrieved=cfg.model.configuration == "race",
     )
     dm.prepare_data()
     dm.setup(stage=cfg.stage)
 
-    if "wandb_logger" in cfg:
+    if cfg.logger.use_wandb:
         wandb.Table.MAX_ROWS = 50000
-        use_wandb = True
         trainer_logger = pl.loggers.WandbLogger(
-            name=f"context_ratio_{cfg.dataset.context_ratio}_{('with-history' if cfg.dataset.generate_with_history else 'without-history')}",
-            project=cfg.wandb_logger.project,
+            name=f"context_ratio_{cfg.input.context_ratio}_{('with-history' if cfg.input.generate_with_history else 'without-history')}",
+            project=cfg.logger.project,
             config=OmegaConf.to_container(cfg, resolve=True),
             job_type="eval",
         )
-    else:
-        use_wandb = False
 
-    if "model_name" not in cfg or not cfg.model_name:
-        cfg.model_name = WandbOrganizer.get_run_name(cfg.model, cfg.dataset)
+    run_name = WandbOrganizer.get_run_name(
+        cfg.model,
+        encoder_input_type=cfg.input.encoder_input_type,
+        train_with_history=cfg.input.train_with_history,
+    )
 
-    if "model_artifact" in cfg:
-        assert isinstance(trainer_logger, pl.loggers.WandbLogger)
-        artifact_name = f"{cfg.model_artifact.project}/{cfg.model_name}:{cfg.model_artifact.version}"
+    if cfg.logger.use_wandb and cfg.logger.load_artifact:
+        artifact_name = f"{cfg.logger.artifact_config.project}/{run_name}:{cfg.logger.artifact_config.version}"
         artifact = trainer_logger.experiment.use_artifact(artifact_name)
         if "tags" in artifact.metadata:
-            trainer_logger.experiment.tags = artifact.metadata["tags"] + WandbOrganizer.get_tags_generate(cfg.dataset)
+            trainer_logger.experiment.tags = artifact.metadata["tags"] + WandbOrganizer.get_tags_generate(
+                generate_with_history=cfg.input.generate_with_history, context_ratio=cfg.input.context_ratio
+            )
 
-        artifact.get_path(cfg.model_artifact.artifact_path).download(
-            root=hydra.utils.to_absolute_path(f"{cfg.model_artifact.local_path}/{cfg.model_name}")
+        artifact.get_path(cfg.logger.artifact_config.artifact_path).download(
+            root=hydra.utils.to_absolute_path(f"{cfg.logger.artifact_config.local_path}/{run_name}")
         )
 
         cfg.ckpt_path = os.path.join(
-            hydra.utils.to_absolute_path(f"{cfg.model_artifact.local_path}/{cfg.model_name}"),
-            cfg.model_artifact.artifact_path,
+            hydra.utils.to_absolute_path(f"{cfg.logger.artifact_config.local_path}/{run_name}"),
+            cfg.logger.artifact_config.artifact_path,
         )
 
-    preds_table_tags = [f"context-ratio_{cfg.dataset.context_ratio}"]
-    if cfg.model.model_configuration == "encoder_decoder" and cfg.dataset.encoder_input_type == "diff":
-        if cfg.dataset.generate_with_history:
+    preds_table_tags = [f"context-ratio_{cfg.input.context_ratio}"]
+    if cfg.input.encoder_input_type == "diff":
+        if cfg.input.generate_with_history:
             preds_table_tags.append("with-history")
         else:
             preds_table_tags.append("without-history")
     preds_table_name = "_".join(preds_table_tags)
 
-    if "ckpt_path" in cfg:
+    if cfg.ckpt_path:
         # initialize from fine-tuned checkpoint
         PATH = os.path.join(hydra.utils.get_original_cwd(), cfg.ckpt_path)
         print("Checkpoint path\n", PATH, "\n")
 
         model = CMCModule.load_from_checkpoint(
             PATH,
-            **cfg.model,
+            model_cfg=cfg.model,
             diff_tokenizer=dm.diff_tokenizer,
             msg_tokenizer=dm.msg_tokenizer,
-            generation_kwargs=cfg.generation_kwargs,
-            preds_artifact_name=f"{cfg.model_name}_preds",
+            generation_kwargs=cfg.generation,  # type: ignore[arg-type]
+            preds_artifact_name=f"{run_name}_preds",
             preds_artifact_type="multilang preds",
             preds_table_name=preds_table_name,
         )
     else:
-        logging.info("Training from scratch")
+        logging.info("Using zero-shot model")
         # use zero-shot pretrained model or even random model
         model = CMCModule(
-            **cfg.model,
+            model_cfg=cfg.model,
             diff_tokenizer=dm.diff_tokenizer,
             msg_tokenizer=dm.msg_tokenizer,
-            generation_kwargs=cfg.generation_kwargs,
-            preds_artifact_name=f"{cfg.model_name}_preds",
+            generation_kwargs=cfg.generation,  # type: ignore[arg-type]
+            preds_artifact_name=f"{run_name}_preds",
             preds_artifact_type="multilang preds",
             preds_table_name=preds_table_name,
         )
 
-    trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger if use_wandb else True)
+    trainer = pl.Trainer(**cfg.trainer, logger=trainer_logger if cfg.logger.use_wandb else True)  # type: ignore[arg-type]
 
     # -----------------------
     #          test         -

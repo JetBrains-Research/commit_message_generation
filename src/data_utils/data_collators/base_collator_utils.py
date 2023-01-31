@@ -9,14 +9,17 @@ from src.utils import SingleExample
 
 @dataclass
 class BaseCollatorUtils:
-    """Base class for utilities both for training and evaluations collators (e.g. processing encoder input).
+    """Base class for utilities both for training and evaluation collators (e.g. processing encoder input).
 
-    Args:
+    Attributes:
+        msg_*_token_id: Corresponding special token for message tokenizer.
+        diff_*_token_id: Corresponding special token for diff tokenizer.
         encoder_context_max_len: Maximum allowed number of tokens in encoder context.
         decoder_context_max_len: Maximum allowed number of tokens in decoder context.
         with_history: True to add history to decoder input, False otherwise.
         encoder_input_type: Should be one of `history`, `diff`, corresponding data will be used
           to construct encoder input.
+        process_retrieved: Whether retrieved examples are expected as input or not.
         testing: True to generate tensors of maximum possible shape with random numbers instead of actually processing
          input data  (used to quickly test whether current batch size fits in GPU memory).
     """

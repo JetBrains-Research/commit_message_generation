@@ -15,14 +15,15 @@ class DataCollatorTest(BaseCollatorUtils):
 
     There is an option to add message history to decoder context
     (but if history is used as encoder input, it will be ignored).
-    Also, we try to mimic completion workflow by adding X% of characters of each message
+
+    Also, we can emulate completion workflow by adding X% of characters of each message
     to decoder context.
 
     - Format with history: `[BOS] history_1 [SEP] ... history_k [SEP] X% characters of message`
 
     - Format without history: `[BOS] X% characters of message`
 
-    Args:
+    Attributes:
         context_ratio: (context_ratio * 100)% of characters of each message will
          be added to decoder context (should be a float between 0.0 and 1.0).
         max_new_tokens: A maximum number of generated tokens during generation. History is added in a way that
@@ -81,6 +82,25 @@ class DataCollatorTest(BaseCollatorUtils):
     def _process_decoder_input(
         self, examples: List[SingleExample]
     ) -> Tuple[torch.Tensor, torch.Tensor, List[str], List[str]]:
+        """
+        Process the input examples into decoder input on evaluation stage.
+
+        The input examples are processed as follows:
+            * The message input ids and history input ids for each example are extracted.
+            * Messages are processed for generation according to context ratio configuration.
+            * History messages are added to the input based on the configuration.
+            * Inputs are padded to the maximum length in the batch and converted to tensors.
+
+        Args:
+            examples: A list of input examples to process.
+
+        Returns:
+            A tuple containing:
+                A tensor of shape (batch_size, seq_len) representing the input ids for the decoder.
+                A tensor of shape (batch_size, seq_len) representing the attention masks for the decoder.
+                A list of target strings for each example.
+                A list of prefix strings for each example.
+        """
         message_inputs: List[List[int]] = [example.msg_input_ids for example in examples]
         history_inputs: List[List[List[int]]] = [example.history_input_ids for example in examples]
 

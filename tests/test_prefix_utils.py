@@ -1,7 +1,9 @@
 import pytest
 import torch
+from omegaconf import OmegaConf
 from transformers import AutoTokenizer
 
+from conf import BaseEncoderDecoderConfig
 from src.model import CMCModule
 from src.utils import BatchTest, PrefixAllowedTokens
 
@@ -10,14 +12,24 @@ torch.manual_seed(42)
 
 @pytest.fixture
 def default_setting():
+    conf = OmegaConf.structured(
+        BaseEncoderDecoderConfig(
+            configuration="encoder_decoder",
+            encoder_name_or_path="distilbert-base-uncased",
+            decoder_name_or_path="distilgpt2",
+            encoder_context_max_len=512,
+            decoder_context_max_len=256,
+            diff_tokenizer_name_or_path="distilbert-base-uncased",
+            msg_tokenizer_name_or_path="distilgpt2",
+            tie_word_embeddings=False,
+            tie_encoder_decoder=False,
+        )
+    )
+
     model = CMCModule(
-        model_configuration="encoder_decoder",
+        model_cfg=conf,
         diff_tokenizer=AutoTokenizer.from_pretrained("distilbert-base-uncased"),
         msg_tokenizer=AutoTokenizer.from_pretrained("distilgpt2"),
-        encoder_name_or_path="distilbert-base-uncased",
-        decoder_name_or_path="distilgpt2",
-        encoder_context_max_len=512,
-        decoder_context_max_len=256,
         batch_size=1,
     )
     return model, {"num_beams": 4, "num_return_sequences": 4}

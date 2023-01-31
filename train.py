@@ -4,7 +4,7 @@ import os
 import hydra
 import nltk
 import pytorch_lightning as pl
-from omegaconf import DictConfig, ListConfig, OmegaConf
+from omegaconf import OmegaConf
 from pytorch_lightning.callbacks import (
     EarlyStopping,
     LearningRateMonitor,
@@ -13,15 +13,16 @@ from pytorch_lightning.callbacks import (
 from pytorch_lightning.utilities.device_parser import num_cuda_devices
 from wandb import Artifact
 
+from conf import BaseDecoderConfig, BaseRACEConfig, TrainConfig
 from src.data_utils import CMCDataModule
 from src.model import CMCModule
-from src.utils import WandbOrganizer, prepare_dataset_cfg
+from src.utils import WandbOrganizer
 
 nltk.download("wordnet")
 
 
-@hydra.main(config_path="conf", config_name="train_config")
-def main(cfg: DictConfig) -> None:
+@hydra.main(version_base="1.1", config_path="conf", config_name="train_config")
+def main(cfg: TrainConfig) -> None:
     # -----------------------
     # -        init         -
     # -----------------------
@@ -43,7 +44,7 @@ def main(cfg: DictConfig) -> None:
                 world_size = num_cuda_devices()  # all available gpus
             else:
                 world_size = len(cfg.trainer.devices.split(","))  # a list of specific gpus separated by ','
-        elif isinstance(cfg.trainer.devices, ListConfig):
+        elif isinstance(cfg.trainer.devices, list):
             world_size = len(cfg.trainer.devices)  # a list of specific gpus
 
     if world_size is None:
@@ -52,13 +53,14 @@ def main(cfg: DictConfig) -> None:
     logging.info(f"Local rank: {int(os.environ.get('LOCAL_RANK', 0))}")
     logging.info(f"World size: {world_size}")
 
-    cfg.dataset = prepare_dataset_cfg(cfg.dataset, model_dataset_cfg=cfg.model.dataset)
     dm = CMCDataModule(
-        **cfg.dataset,
+        dataset_cfg=cfg.dataset,
+        model_cfg=cfg.model,
+        input_cfg=cfg.input,
         local_rank=int(os.environ.get("LOCAL_RANK", 0)),
         world_size=world_size,
-        shift_labels=cfg.model.model_configuration != "decoder",
-        process_retrieved=cfg.model.model_configuration == "race",
+        shift_labels=cfg.model.configuration != "decoder",
+        process_retrieved=cfg.model.configuration == "race",
     )
 
     dm.prepare_data()
@@ -67,45 +69,54 @@ def main(cfg: DictConfig) -> None:
     batch_size = cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.accumulate_grad_batches * world_size
     num_train_batches = dm.train.len // batch_size  # type: ignore[attr-defined]
 
-    if "limit_train_batches" in cfg.trainer:
+    if cfg.trainer.limit_train_batches:
         num_train_batches = min(
             cfg.trainer.limit_train_batches // cfg.trainer.accumulate_grad_batches, num_train_batches
         )
 
     # main module with model logic
     model = CMCModule(
-        **cfg.model,
+        model_cfg=cfg.model,
         diff_tokenizer=dm.diff_tokenizer,
         msg_tokenizer=dm.msg_tokenizer,
-        encoder_context_max_len=cfg.model.dataset.encoder_context_max_len,
-        decoder_context_max_len=cfg.model.dataset.decoder_context_max_len,
-        save_epoch=(cfg.trainer.max_epochs // 2) - 1,
+        learning_rate=cfg.optimizer.learning_rate,
+        initial_batch_size=cfg.optimizer.initial_batch_size,
+        weight_decay=cfg.optimizer.weight_decay,
+        num_warmup_steps=cfg.optimizer.num_warmup_steps,
+        save_on_epoch=(cfg.trainer.max_epochs // 2) - 1,
         batch_size=batch_size,
         num_gpus=world_size,
         num_epochs=cfg.trainer.max_epochs,
         num_batches=num_train_batches,
     )
+    cfg.optimizer.learning_rate = model.learning_rate
 
-    cfg.model.learning_rate = model.learning_rate
+    run_name = WandbOrganizer.get_run_name(
+        cfg.model,
+        encoder_input_type=cfg.input.encoder_input_type,
+        train_with_history=cfg.input.train_with_history,
+    )
+    run_tags = WandbOrganizer.get_tags_train(
+        cfg.model,
+        encoder_input_type=cfg.input.encoder_input_type,
+        train_with_history=cfg.input.train_with_history,
+    )
 
     # logger
-    if "wandb_logger" in cfg:
-        use_wandb = True
+    if cfg.logger.use_wandb:
         trainer_logger = pl.loggers.WandbLogger(
-            name=WandbOrganizer.get_run_name(cfg.model, cfg.dataset),
-            project=cfg.wandb_logger.project,
+            name=run_name,
+            project=cfg.logger.project,
             config=OmegaConf.to_container(cfg, resolve=True),
-            tags=WandbOrganizer.get_tags_train(cfg.model, cfg.dataset),
+            tags=run_tags,
             job_type="train",
         )
         trainer_logger.watch(model, log="gradients", log_freq=250)
-    else:
-        use_wandb = False
 
     # callbacks
     lr_logger = LearningRateMonitor(logging_interval="step")
     checkpoint_callback = ModelCheckpoint(
-        dirpath=f"{WandbOrganizer.get_run_name(cfg.model, cfg.dataset)}_checkpoint",
+        dirpath=f"{run_name}_checkpoint",
         save_top_k=1,
         save_last=True,
         verbose=True,
@@ -116,8 +127,8 @@ def main(cfg: DictConfig) -> None:
 
     # trainer
     trainer = pl.Trainer(
-        **cfg.trainer,
-        logger=trainer_logger if use_wandb else True,
+        **cfg.trainer,  # type: ignore[arg-type]
+        logger=trainer_logger if cfg.logger.use_wandb else True,
         callbacks=[lr_logger, checkpoint_callback, early_stopping_callback],
     )
 
@@ -129,17 +140,13 @@ def main(cfg: DictConfig) -> None:
     # -----------------------
     #   save ckpt to wandb  -
     # -----------------------
-    if (
-        trainer_logger
-        and isinstance(trainer_logger, pl.loggers.WandbLogger)
-        and cfg.wandb_logger.save_model_as_artifact
-    ):
+    if trainer_logger and isinstance(trainer_logger, pl.loggers.WandbLogger) and cfg.logger.save_artifact:
         artifact = Artifact(
-            name=WandbOrganizer.get_run_name(cfg.model, cfg.dataset),
+            name=run_name,
             type="model",
-            metadata={"tags": WandbOrganizer.get_tags_train(cfg.model, cfg.dataset)},
+            metadata={"tags": run_tags},
         )
-        artifact.add_dir(f"{WandbOrganizer.get_run_name(cfg.model, cfg.dataset)}_checkpoint")
+        artifact.add_dir(f"{run_name}_checkpoint")
         trainer_logger.experiment.log_artifact(artifact)
 
 
