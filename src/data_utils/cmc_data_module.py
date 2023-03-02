@@ -144,7 +144,6 @@ class CMCDataModule(pl.LightningDataModule):
         self.test = None
 
     def _add_special_tokens(self, tokenizer: PreTrainedTokenizerFast, configuration: str) -> PreTrainedTokenizerFast:
-        tokenizer.add_special_tokens({"additional_special_tokens": ["[NL]"]})  # type: ignore[attr-defined]
         if not tokenizer.sep_token:  # type: ignore[attr-defined]
             tokenizer.add_special_tokens({"sep_token": "[SEP]"})  # type: ignore[attr-defined]
         if not tokenizer.pad_token:  # type: ignore[attr-defined]

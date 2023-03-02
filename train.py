@@ -67,7 +67,7 @@ def main(cfg: TrainConfig) -> None:
     dm.setup(stage="fit")
 
     batch_size = cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.accumulate_grad_batches * world_size
-    num_train_batches = dm.train.len // batch_size  # type: ignore[attr-defined]
+    num_train_batches = len(dm.train) // batch_size  # type: ignore[attr-defined, arg-type]
 
     if cfg.trainer.limit_train_batches:
         num_train_batches = min(

@@ -42,10 +42,9 @@ This project expects all dataset parts to be stored in a separate JSONLines file
  └── ...
 ```
 
-In our case, each input example is commit. Specifically, the following keys are expected in each row:
+In our case, each input example is commit. Also note that commits from each author should be in chronological order. Specifically, the following keys are expected in each row:
 
 * `author`: Unique identifier for the author of commit.
-* `pos_in_history`: Commit's position in the history of its author (if commits are in chronological order, it can be obtained by grouping commits by authors and saving serial number in its group for each commit).
 * `message`: Commit message.
 * `mods`: A list of modification made in a commit. Each modification should contain the following keys:
   * `change_type`: Type of modification (string, one of `MODIFY`, `ADD`, `DELETE`, `RENAME`, `COPY`, `UNKNOWN`).

@@ -29,8 +29,8 @@ from src.utils import Batch, BatchTest, BatchTrain, EvaluationMetrics
 
 
 class CMCModule(pl.LightningModule):
-    """This class is used for training and evaluation of various Transformer-based model for
-    commit message completion task.
+    """This class is used for training and evaluation of various Transformer-based models for
+    a commit message completion task.
 
     Args:
         diff_tokenizer: Tokenizer for source sequences (diffs)
@@ -195,7 +195,6 @@ class CMCModule(pl.LightningModule):
                 .replace(self._msg_tokenizer.pad_token, "")  # type: ignore[attr-defined]
                 .replace(self._msg_tokenizer.bos_token, "")  # type: ignore[attr-defined]
                 .replace(self._msg_tokenizer.eos_token, "")  # type: ignore[attr-defined]
-                .replace("[NL]", "\n")
             )
             if self._msg_tokenizer.sep_token in decoded_context[i]:  # type: ignore[attr-defined]
                 cur_history = "\n".join(
@@ -212,7 +211,7 @@ class CMCModule(pl.LightningModule):
             "Context": decoded_context,
             "Prefix": batch.prefixes,
             "Prediction": decoded_preds,
-            "Target": [target.replace("[NL]", "\n") for target in batch.targets],
+            "Target": batch.targets,
         }
 
     def test_step(self, batch: BatchTest, *args, **kwargs):  # type: ignore[override]

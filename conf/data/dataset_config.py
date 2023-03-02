@@ -33,7 +33,7 @@ class DatasetConfig:
     preprocessor_chunksize: int = 4096
     testing: bool = False
     use_cache: bool = False
-    line_sep: str = "[NL]"
+    line_sep: str = "\n"
     train_dataloader_conf: DataLoaderConfig = DataLoaderConfig(batch_size=16, num_workers=4)
     val_dataloader_conf: DataLoaderConfig = DataLoaderConfig(batch_size=16, num_workers=4)
     test_dataloader_conf: DataLoaderConfig = DataLoaderConfig(batch_size=1, num_workers=1)

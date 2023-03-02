@@ -1,5 +1,5 @@
 import json
-import os
+import logging
 from typing import Any, Callable, Dict, Generator, Iterator, List, Optional
 
 import torch
@@ -42,9 +42,9 @@ class CMCDatasetWithHistory(IterableDataset):
         self._world_size: int
         self._process_rank: int
 
-    @property
-    def len(self):
+    def __len__(self):
         if self._len is None:
+            logging.info("Calculating length of input file")
             with open(self._filename, "r") as f:
                 self._len = sum(1 for _ in f)
         return self._len

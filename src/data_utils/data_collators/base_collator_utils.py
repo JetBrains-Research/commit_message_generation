@@ -21,7 +21,7 @@ class BaseCollatorUtils:
           to construct encoder input.
         process_retrieved: Whether retrieved examples are expected as input or not.
         testing: True to generate tensors of maximum possible shape with random numbers instead of actually processing
-         input data  (used to quickly test whether current batch size fits in GPU memory).
+         input data (used to quickly test whether current batch size fits in GPU memory).
     """
 
     msg_bos_token_id: int
@@ -126,14 +126,14 @@ class BaseCollatorUtils:
         """
         This helper method processes either diffs or messsages as encoder input.
 
-        It truncates the inputs to maximum allowed length.
+        It truncates the inputs to the maximum allowed length.
 
         It also adds all required special tokens: format is [BOS] input [EOS].
 
         Finally, it is responsible for padding to maximum length in batch and conversion to torch.Tensor.
 
         Args:
-            inputs: A list of tokenized examples from current batch.
+            inputs: A list of tokenized examples from the current batch.
 
         Returns:
             input_ids for encoder, attention_mask for encoder

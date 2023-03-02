@@ -1,8 +1,10 @@
 import json
+import linecache
 import logging
 import os
 import random
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from linecache import getline
 from typing import Any, Dict, List, Optional
 
@@ -29,6 +31,7 @@ class BasePreprocessor(ABC):
         self._diff_tokenizer = diff_tokenizer
         self._msg_tokenizer = msg_tokenizer
         self._chunksize = chunksize if chunksize else 4096
+        self._num_commits: Dict[int, int] = defaultdict(int)
 
     @abstractmethod
     def _preprocess_mods(self, mods: List[Dict[str, str]], **kwargs) -> str:
@@ -55,11 +58,11 @@ class BasePreprocessor(ABC):
 
     def _process_history(self, input_path: str, output_path: str) -> None:
         """
-        Aggregates commit message history for each author in given file.
+        Aggregates commit message history for each author in a given file.
 
         Input file should be in JSONL format and contain keys "author" and "msg_input_ids".
         Also, messages from each author are expected to be in chronological order
-        (it won't break anything, but logically result would be incorrect).
+        (it won't break anything, but logically the result would be incorrect).
 
         Output is a JSON file with authors ids as keys and lists of their messages as values.
 
@@ -74,10 +77,28 @@ class BasePreprocessor(ABC):
                 assert "msg_input_ids" in row
                 data.append({"author": int(row["author"]), "msg_input_ids": row["msg_input_ids"]})
         df = pd.DataFrame(data)
-        history = df[["author", "msg_input_ids"]].groupby("author").agg(list)["msg_input_ids"].to_dict()
-        history = {int(key): history[key] for key in history}
+        history_records = (
+            df.groupby("author").agg(msg_input_ids=("msg_input_ids", list)).reset_index().to_dict(orient="records")
+        )
+        history = {row["author"]: row["msg_input_ids"] for row in history_records}
         with open(output_path, "w") as f:
             json.dump(history, f)
+
+    def _get_pos_in_history(self, authors: List[int]) -> List[int]:
+        """Builds correct position in history for each commit when iterating over input data
+        in chunks.
+
+        Args:
+            authors: A list of authors for commits from the current chunk.
+
+        Returns:
+            A list of positions in the corresponding author's history for each commit from the chunk.
+        """
+        positions_in_history = []
+        for author in authors:
+            self._num_commits[author] += 1
+            positions_in_history.append(self._num_commits[author] - 1)
+        return positions_in_history
 
     def _process_chunk(
         self, chunk: pd.DataFrame, message_kwargs: Dict[str, Any], diff_kwargs: Dict[str, Any]
@@ -103,7 +124,29 @@ class BasePreprocessor(ABC):
         chunk["mods"] = [self._preprocess_mods(example, **diff_kwargs) for _, example in chunk["mods"].items()]
         chunk["msg_input_ids"] = self._tokenize_messages(chunk["message"].tolist())
         chunk["diff_input_ids"] = self._tokenize_diffs(chunk["mods"].tolist(), max_len=diff_kwargs["max_len"])
+        chunk["pos_in_history"] = self._get_pos_in_history(chunk["author"].tolist())
         return chunk
+
+    def _shuffle(self, input_path: str, output_path: str) -> None:
+        """Shuffles a file.
+
+        To support moderately large files, it works by shuffling a list of line idxs
+        and then utilizing `linecache` to write specific lines in a new order.
+
+        Args:
+            input_path: Path to input file.
+            output_path: Path to output file.
+        """
+        random.seed(42)
+        logging.info("Calculating number of lines")
+        with open(input_path) as f:
+            num_lines = sum(1 for _ in f)
+        logging.info("Shuffling line idxs")
+        idxs = [i + 1 for i in range(num_lines)]  # start rows idxs with 1, since linecache starts with 1
+        random.shuffle(idxs)
+        with open(output_path, "w") as f:
+            for i in tqdm(idxs, f"Writing shuffled lines for {input_path}..."):
+                f.write(linecache.getline(input_path, i))
 
     def process(
         self, input_dir: str, data_dir: str, part: str, message_kwargs: Dict[str, Any], diff_kwargs: Dict[str, Any]
@@ -136,7 +179,16 @@ class BasePreprocessor(ABC):
             with jsonlines.open(processed_path, "a") as writer:
                 writer.write_all(
                     processed_chunk[
-                        ["author", "pos_in_history", "message", "msg_input_ids", "diff_input_ids", "id"]
+                        [
+                            "author",
+                            "message",
+                            "msg_input_ids",
+                            "diff_input_ids",
+                            "hash",
+                            "repo",
+                            "language",
+                            "pos_in_history",
+                        ]
                     ].to_dict(orient="records")
                 )
 
@@ -145,11 +197,7 @@ class BasePreprocessor(ABC):
 
         if part == "train":
             logging.info("Shuffling train")
-            with jsonlines.open(processed_path, "r") as reader:
-                data = [line for line in reader]
-            random.shuffle(data)
-            with jsonlines.open(os.path.join(data_dir, f"{part}_shuffled.jsonl"), "w") as writer:
-                writer.write_all(data)
+            self._shuffle(input_path=processed_path, output_path=os.path.join(data_dir, f"{part}_shuffled.jsonl"))
 
     def process_retrieved(self, retrieved_dir: str, data_dir: str, part: str) -> None:
         """
@@ -182,8 +230,7 @@ class BasePreprocessor(ABC):
 
         if part == "train":
             logging.info("Shuffling train")
-            with jsonlines.open(retrieved_output_fname, "r") as reader:
-                data = [line for line in reader]
-            random.shuffle(data)
-            with jsonlines.open(os.path.join(data_dir, f"retrieved_{part}_shuffled.jsonl"), "w") as writer:
-                writer.write_all(data)
+            self._shuffle(
+                input_path=retrieved_output_fname,
+                output_path=os.path.join(data_dir, f"retrieved_{part}_shuffled.jsonl"),
+            )
