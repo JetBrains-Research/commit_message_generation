@@ -196,30 +196,24 @@ class CMCDataModule(pl.LightningDataModule):
         return diff_tokenizer, msg_tokenizer
 
     def prepare_data(self) -> None:  # type: ignore[override]
-        if self._use_cache:
-            logging.info("Using preprocessed input")
-            for part in ["train", "val", "test"]:
-                assert f"{part}_processed.jsonl" in os.listdir(self._data_path)
-                assert f"{part}_history.json" in os.listdir(self._data_path)
-                if self._process_retrieved:
-                    assert f"retrieved_{part}_processed.jsonl" in os.listdir(self._data_path)
-        else:
-            for part in ["train", "val", "test"]:
-                self._preprocessor.process(
-                    input_dir=self._dataset_root,
+        for part in ["train", "val", "test"]:
+            self._preprocessor.process(
+                input_dir=self._dataset_root,
+                data_dir=self._data_path,
+                part=part,
+                message_kwargs={},
+                diff_kwargs={"max_len": self._encoder_context_max_len, "line_sep": self._line_sep},
+                use_cache=self._use_cache,
+            )
+            if self._process_retrieved:
+                self._preprocessor.process_retrieved(
                     data_dir=self._data_path,
+                    retrieved_dir=f"{self._dataset_root}/retrieval",
                     part=part,
-                    message_kwargs={},
-                    diff_kwargs={"max_len": self._encoder_context_max_len, "line_sep": self._line_sep},
+                    use_cache=self._use_cache,
                 )
-                if self._process_retrieved:
-                    self._preprocessor.process_retrieved(
-                        data_dir=self._data_path,
-                        retrieved_dir=f"{self._dataset_root}/retrieval",
-                        part=part,
-                    )
 
-            self._use_cache = True
+        self._use_cache = True
 
     def setup(self, stage=None):
         if stage == "fit" or stage is None:

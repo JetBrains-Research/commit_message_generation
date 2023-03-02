@@ -149,7 +149,13 @@ class BasePreprocessor(ABC):
                 f.write(linecache.getline(input_path, i))
 
     def process(
-        self, input_dir: str, data_dir: str, part: str, message_kwargs: Dict[str, Any], diff_kwargs: Dict[str, Any]
+        self,
+        input_dir: str,
+        data_dir: str,
+        part: str,
+        message_kwargs: Dict[str, Any],
+        diff_kwargs: Dict[str, Any],
+        use_cache: bool,
     ) -> None:
         """
         Main processing logic.
@@ -168,38 +174,43 @@ class BasePreprocessor(ABC):
         input_path = os.path.join(input_dir, f"{part}.jsonl")
         processed_path = os.path.join(data_dir, f"{part}_processed.jsonl")
 
-        if os.path.exists(processed_path):
-            logging.warning(f"Rewriting {processed_path}")
+        if use_cache and os.path.exists(processed_path):
+            logging.info(f"{processed_path} found, won't rewrite")
+        else:
             open(processed_path, "w").close()
-
-        logging.info(f"Processing {input_path} in chunks")
-        reader = pd.read_json(input_path, orient="records", lines=True, chunksize=self._chunksize)
-        for chunk in tqdm(reader, leave=False):
-            processed_chunk = self._process_chunk(chunk, message_kwargs, diff_kwargs)
-            with jsonlines.open(processed_path, "a") as writer:
-                writer.write_all(
-                    processed_chunk[
-                        [
-                            "author",
-                            "message",
-                            "msg_input_ids",
-                            "diff_input_ids",
-                            "hash",
-                            "repo",
-                            "language",
-                            "pos_in_history",
-                        ]
-                    ].to_dict(orient="records")
-                )
-
-        logging.info("Processing history")
-        self._process_history(input_path=processed_path, output_path=os.path.join(data_dir, f"{part}_history.json"))
+            logging.info(f"Processing {input_path} in chunks")
+            reader = pd.read_json(input_path, orient="records", lines=True, chunksize=self._chunksize)
+            for chunk in tqdm(reader, leave=False):
+                processed_chunk = self._process_chunk(chunk, message_kwargs, diff_kwargs)
+                with jsonlines.open(processed_path, "a") as writer:
+                    writer.write_all(
+                        processed_chunk[
+                            [
+                                "author",
+                                "message",
+                                "msg_input_ids",
+                                "diff_input_ids",
+                                "hash",
+                                "repo",
+                                "language",
+                                "pos_in_history",
+                            ]
+                        ].to_dict(orient="records")
+                    )
+        if use_cache and os.path.exists(os.path.join(data_dir, f"{part}_history.json")):
+            logging.info(f"{part}_history found, won't rewrite")
+        else:
+            logging.info("Processing history")
+            self._process_history(input_path=processed_path, output_path=os.path.join(data_dir, f"{part}_history.json"))
 
         if part == "train":
-            logging.info("Shuffling train")
-            self._shuffle(input_path=processed_path, output_path=os.path.join(data_dir, f"{part}_shuffled.jsonl"))
+            if use_cache and os.path.exists(os.path.join(data_dir, f"{part}_shuffled.jsonl")):
+                logging.info(f"{part}_shuffled found, won't rewrite")
+            else:
+                logging.info("Shuffling train")
+                self._shuffle(input_path=processed_path, output_path=os.path.join(data_dir, f"{part}_shuffled.jsonl"))
 
-    def process_retrieved(self, retrieved_dir: str, data_dir: str, part: str) -> None:
+    def process_retrieved(self, retrieved_dir: str, data_dir: str, part: str, use_cache: bool) -> None:
         """
         Retrieval processing logic. Should be called after `process`, as it relies on processed files.
 
@@ -219,18 +230,24 @@ class BasePreprocessor(ABC):
         retrieved_input_fname = os.path.join(retrieved_dir, f"{part}_predictions.jsonl")
         retrieved_output_fname = os.path.join(data_dir, f"retrieved_{part}_processed.jsonl")
 
-        logging.info(f"Processing {retrieved_input_fname}")
-        open(retrieved_output_fname, "w").close()
-        with jsonlines.open(retrieved_input_fname, "r") as reader:
-            for pred in reader:
-                retrieved_example = json.loads(getline(input_fname, pred["pos_in_file"] + 1).rstrip("\n"))
-                retrieved_example["distance"] = pred["distance"]
-                with jsonlines.open(retrieved_output_fname, "a") as writer:
-                    writer.write(retrieved_example)
+        if use_cache and os.path.exists(retrieved_output_fname):
+            logging.info(f"{retrieved_output_fname} found, won't rewrite")
+        else:
+            logging.info(f"Processing {retrieved_input_fname}")
+            open(retrieved_output_fname, "w").close()
+            with jsonlines.open(retrieved_input_fname, "r") as reader:
+                for pred in reader:
+                    retrieved_example = json.loads(getline(input_fname, pred["pos_in_file"] + 1).rstrip("\n"))
+                    retrieved_example["distance"] = pred["distance"]
+                    with jsonlines.open(retrieved_output_fname, "a") as writer:
+                        writer.write(retrieved_example)
 
         if part == "train":
-            logging.info("Shuffling train")
-            self._shuffle(
-                input_path=retrieved_output_fname,
-                output_path=os.path.join(data_dir, f"retrieved_{part}_shuffled.jsonl"),
-            )
+            if use_cache and os.path.exists(os.path.join(data_dir, f"retrieved_{part}_shuffled.jsonl")):
+                logging.info(f"retrieved_{part}_shuffled found, won't rewrite")
+            else:
+                logging.info("Shuffling train")
+                self._shuffle(
+                    input_path=retrieved_output_fname,
+                    output_path=os.path.join(data_dir, f"retrieved_{part}_shuffled.jsonl"),
+                )
