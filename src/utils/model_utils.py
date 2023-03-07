@@ -21,9 +21,6 @@ def get_decoder_start_token_id(model_cfg: BaseModelConfig) -> Optional[int]:
         return None
 
     config = AutoConfig.from_pretrained(name_or_path)
-    if "decoder_start_token_id" not in config:
-        return None
-
     return config.decoder_start_token_id
 
 
