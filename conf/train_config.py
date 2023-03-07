@@ -26,12 +26,14 @@ class OptimizerConfig:
         initial_batch_size: If given, learning rate will be recalculated as (given lr) * (actual bs) / (initial bs).
         weight_decay: Weight decay for AdamW.
         num_warmup_steps: Number of warmup steps for linear scheduler with warmup.
+        ratio_warmup_steps: Ratio of warmup steps for linear scheduler with warmup (so ratio_warmup_steps * total_steps will be used).
     """
 
     learning_rate: float = 1e-5
     initial_batch_size: Optional[int] = None
-    weight_decay: float = 0.0
-    num_warmup_steps: int = 100
+    weight_decay: float = 0.1
+    num_warmup_steps: Optional[int] = None
+    ratio_warmup_steps: Optional[float] = None
 
 
 @dataclass
@@ -46,7 +48,7 @@ class WandbTrainConfig:
 
     Args:
         use_wandb: Whether W&B will be used for logging or not.
-        project: Name of project this run will appear in.
+        project: Name of a project this run will appear in.
         save_artifact: True to load model checkpoints to W&B as artifacts, False otherwise.
     """
 
@@ -58,8 +60,13 @@ class WandbTrainConfig:
 @dataclass
 class TrainerTrainConfig:
     """
-    Configuration for pytorch_lightning.Trainer. All options will be passes to Trainer as kwargs.
-    (refer to docs: https://pytorch-lightning.readthedocs.io/en/stable/common/trainer.html)
+    Configuration for pytorch_lightning.Trainer. All options will be passed to Trainer as kwargs.
+
+    Refer to docs: https://pytorch-lightning.readthedocs.io/en/stable/common/trainer.html
+
+    Note:
+        Defined fields are just the most frequently use arguments. You can easily add new ones using Hydra's
+        override logic. E.g. `python train.py ++trainer.val_check_interval=0.25`
     """
 
     max_epochs: int = 5

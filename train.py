@@ -67,12 +67,6 @@ def main(cfg: TrainConfig) -> None:
     dm.setup(stage="fit")
 
     batch_size = cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.accumulate_grad_batches * world_size
-    num_train_batches = len(dm.train) // batch_size  # type: ignore[attr-defined, arg-type]
-
-    if cfg.trainer.limit_train_batches:
-        num_train_batches = min(
-            cfg.trainer.limit_train_batches // cfg.trainer.accumulate_grad_batches, num_train_batches
-        )
 
     # main module with model logic
     model = CMCModule(
@@ -83,11 +77,8 @@ def main(cfg: TrainConfig) -> None:
         initial_batch_size=cfg.optimizer.initial_batch_size,
         weight_decay=cfg.optimizer.weight_decay,
         num_warmup_steps=cfg.optimizer.num_warmup_steps,
-        save_on_epoch=(cfg.trainer.max_epochs // 2) - 1,
+        ratio_warmup_steps=cfg.optimizer.ratio_warmup_steps,
         batch_size=batch_size,
-        num_gpus=world_size,
-        num_epochs=cfg.trainer.max_epochs,
-        num_batches=num_train_batches,
     )
     cfg.optimizer.learning_rate = model.learning_rate
 
@@ -131,6 +122,11 @@ def main(cfg: TrainConfig) -> None:
         logger=trainer_logger if cfg.logger.use_wandb else True,
         callbacks=[lr_logger, checkpoint_callback, early_stopping_callback],
     )
+
+    # -----------------------
+    #  zero-shot validation -
+    # -----------------------
+    trainer.validate(model, dm)
 
     # -----------------------
     #         train         -

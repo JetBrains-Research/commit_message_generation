@@ -1,15 +1,16 @@
 import logging
-import os
 from collections import defaultdict
 from math import log
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
 import pytorch_lightning as pl
 import torch
 import wandb
+from torch.nn import LayerNorm
 from torch.optim import AdamW
 from transformers import PreTrainedTokenizerFast, get_linear_schedule_with_warmup
+from transformers.trainer_pt_utils import get_parameter_names
 
 from conf import (
     BaseDecoderConfig,
@@ -43,9 +44,6 @@ class CMCModule(pl.LightningModule):
         weight_decay: Decoupled weight decay to apply in AdamW.
         num_warmup_steps: Number of warmup steps for learning rate scheduler.
         batch_size: Number of examples in a single batch (used to scale LR).
-        num_epochs: Total number of epochs (used to calculate total number of steps for LR scheduler)
-        num_batches: Total number of batches in one epoch (used to calculate total number of steps for LR scheduler)
-        num_gpus: Total number of GPUs (used to calculate total number of steps for LR scheduler)
         generation_kwargs: kwargs for transformers.generation_utils.GenerationMixin.generate
         model_kwargs: All other kwargs will be passed to specific model class.
     """
@@ -55,7 +53,6 @@ class CMCModule(pl.LightningModule):
         model_cfg: BaseModelConfig,
         diff_tokenizer: PreTrainedTokenizerFast,
         msg_tokenizer: PreTrainedTokenizerFast,
-        save_on_epoch: Optional[int] = None,
         preds_artifact_name: Optional[str] = None,
         preds_artifact_type: Optional[str] = None,
         preds_table_name: Optional[str] = None,
@@ -63,10 +60,8 @@ class CMCModule(pl.LightningModule):
         initial_batch_size: Optional[int] = None,
         weight_decay: Optional[float] = None,
         num_warmup_steps: Optional[int] = None,
+        ratio_warmup_steps: Optional[float] = None,
         batch_size: Optional[int] = None,
-        num_batches: Optional[int] = None,
-        num_epochs: Optional[int] = None,
-        num_gpus: Optional[int] = None,
         generation_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
@@ -74,17 +69,55 @@ class CMCModule(pl.LightningModule):
 
         self._diff_tokenizer = diff_tokenizer
         self._msg_tokenizer = msg_tokenizer
+        self.model: BaseModel = self._init_model(model_cfg)
+
+        self.learning_rate = self.adjust_learning_rate(
+            batch_size=batch_size, initial_learning_rate=learning_rate, initial_batch_size=initial_batch_size
+        )
+        self.weight_decay = weight_decay
+        self.num_warmup_steps = num_warmup_steps
+        self.ratio_warmup_steps = ratio_warmup_steps
 
         self._preds_artifact_name = preds_artifact_name
         self._preds_artifact_type = preds_artifact_type
         self._preds_table_name = preds_table_name
 
-        self.model: BaseModel
+        self.generation_kwargs = generation_kwargs
+
+        self.save_hyperparameters(logger=False)
+
+        self.num_processed_tokens = 0.0
+        self.num_processed_examples = 0.0
+
+        # will be logged to W&B
+        self.table_data: Dict[str, List[str]] = defaultdict(list)
+        self.train_metrics = EvaluationMetrics(
+            do_strings=False,
+            do_tensors=True,
+            shift=isinstance(self.model, DecoderWrapper),
+            prefix="train",
+        )
+        self.val_metrics = EvaluationMetrics(
+            do_strings=False,
+            do_tensors=True,
+            shift=isinstance(self.model, DecoderWrapper),
+            prefix="val",
+        )
+
+    def _init_model(self, model_cfg: BaseModelConfig) -> BaseModel:
+        """Initializes a correct model type based on passed parameters.
+
+        Args:
+            model_cfg: Config with model parameters.
+
+        Returns:
+            Initialized model.
+        """
         if model_cfg.configuration == "encoder_decoder":
             model_cfg = BaseEncoderDecoderConfig(**model_cfg)  # type: ignore[arg-type]
-            self.model = EncoderDecoderWrapper(
-                diff_tokenizer=diff_tokenizer,
-                msg_tokenizer=msg_tokenizer,
+            return EncoderDecoderWrapper(
+                diff_tokenizer=self._diff_tokenizer,
+                msg_tokenizer=self._msg_tokenizer,
                 encoder_context_max_len=model_cfg.encoder_context_max_len,
                 decoder_context_max_len=model_cfg.decoder_context_max_len,
                 encoder_name_or_path=model_cfg.encoder_name_or_path,
@@ -98,44 +131,15 @@ class CMCModule(pl.LightningModule):
             )
         elif model_cfg.configuration == "decoder":
             model_cfg = BaseDecoderConfig(**model_cfg)  # type: ignore[arg-type]
-            self.model = DecoderWrapper(tokenizer=msg_tokenizer, decoder_name_or_path=model_cfg.decoder_name_or_path)
+            return DecoderWrapper(tokenizer=self._msg_tokenizer, decoder_name_or_path=model_cfg.decoder_name_or_path)
         elif model_cfg.configuration == "seq2seq":
             model_cfg = BaseSeq2SeqConfig(**model_cfg)  # type: ignore[arg-type]
-            self.model = Seq2SeqWrapper(tokenizer=msg_tokenizer, name_or_path=model_cfg.name_or_path)
+            return Seq2SeqWrapper(tokenizer=self._msg_tokenizer, name_or_path=model_cfg.name_or_path)
         elif model_cfg.configuration == "race":
             model_cfg = BaseRACEConfig(**model_cfg)  # type: ignore[arg-type]
-            self.model = RACEWrapper(tokenizer=msg_tokenizer, name_or_path=model_cfg.name_or_path)
-        else:
-            raise ValueError(f"Current configuration ({model_cfg.configuration}) is not supported")
+            return RACEWrapper(tokenizer=self._msg_tokenizer, name_or_path=model_cfg.name_or_path)
 
-        self._save_on_epoch = save_on_epoch
-        self._num_epochs = num_epochs
-        self._num_batches = num_batches
-        self._batch_size = batch_size
-        self._num_gpus = num_gpus
-
-        self.learning_rate = self.adjust_learning_rate(
-            initial_learning_rate=learning_rate, initial_batch_size=initial_batch_size
-        )
-        self.weight_decay = weight_decay
-        self.num_warmup_steps = num_warmup_steps
-
-        self.generation_kwargs = generation_kwargs
-
-        self.save_hyperparameters(logger=False)
-
-        self.num_processed_tokens = 0.0
-        self.num_processed_examples = 0.0
-
-        # will be logged to W&B
-        self.table_data: Dict[str, List[str]] = defaultdict(list)
-
-        self.val_metrics = EvaluationMetrics(
-            do_strings=False,
-            do_tensors=True,
-            shift=isinstance(self.model, DecoderWrapper),
-            prefix="val",
-        )
+        raise ValueError(f"Current configuration ({model_cfg.configuration}) is not supported")
 
     def forward(self, batch: Batch) -> Any:  # type: ignore[override]
         return self.model.forward(batch)
@@ -148,8 +152,14 @@ class CMCModule(pl.LightningModule):
     def training_step(self, batch: BatchTrain, *args, **kwargs):  # type: ignore[override]
         outputs = self(batch)
 
+        with torch.no_grad():
+            cur_metrics = self.train_metrics.add_batch(
+                predictions_tensor=outputs.logits, references_tensor=batch.labels
+            )
         self.num_processed_tokens += batch.encoder_attention_mask.sum().item()
         self.num_processed_examples += batch.encoder_attention_mask.shape[0]
+
+        self.log_dict(cur_metrics, on_step=True, on_epoch=False, logger=True)
         self.log(
             "train_loss",
             outputs.loss,
@@ -180,7 +190,16 @@ class CMCModule(pl.LightningModule):
     def validation_epoch_end(self, outputs):  # type: ignore[override]
         self.log_dict(self.val_metrics.compute(), on_step=False, on_epoch=True, logger=True)
 
-    def _process_generated(self, batch: BatchTest, predictions: torch.Tensor):
+    def _postprocess_generated(self, batch: BatchTest, predictions: torch.Tensor) -> Dict[str, List[str]]:
+        """Decodes predictions and inputs and postprocesses special tokens and history.
+
+        Args:
+            batch: Model inputs.
+            predictions: Model predictions.
+
+        Returns:
+            A dict with decoded sources/predictions.
+        """
         decoded_preds = self.decode_trg(predictions, skip_special_tokens=True)[0]
         decoded_context = self.decode_trg(batch.decoder_input_ids, skip_special_tokens=False)[0]
 
@@ -220,7 +239,7 @@ class CMCModule(pl.LightningModule):
         predictions = predictions[:, batch.decoder_input_ids.shape[1] :]
 
         # decode & postprocess data
-        string_results = self._process_generated(batch, predictions)
+        string_results = self._postprocess_generated(batch, predictions)
 
         # add data to a little table with examples
         for key in string_results:
@@ -245,19 +264,8 @@ class CMCModule(pl.LightningModule):
         # save predictions to disk
         preds.to_json(f"{self._preds_artifact_name}_{self._preds_table_name}.json", orient="records", lines=True)
 
-    def on_train_epoch_end(self) -> None:
-        if (
-            self._save_on_epoch
-            and self.trainer.current_epoch == self._save_on_epoch
-            and isinstance(self.model, Seq2SeqWrapper)
-        ):
-            logging.info(f"Reached epoch {self._save_on_epoch}! Saving model checkpoint for further use in RACE...")
-            os.makedirs(f"epoch_{self._save_on_epoch}_checkpoint", exist_ok=True)
-            self.model.model.save_pretrained(f"epoch_{self._save_on_epoch}_checkpoint")
-            self.model._tokenizer.save_pretrained(f"epoch_{self._save_on_epoch}_checkpoint")
-
     def configure_optimizers(self):
-        if not self.learning_rate:
+        if self.learning_rate is None:
             logging.warning("Learning rate is not set, proceeding with default value 1e-3")
             self.learning_rate = 1e-3
 
@@ -265,21 +273,45 @@ class CMCModule(pl.LightningModule):
             logging.warning("Weight decay is not set, proceeding with default value 1e-2")
             self.weight_decay = 1e-2
 
-        optimizer = AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
+        # reusing implementation from Huggingface Transformers to skip LayerNorm in weight decay
+        # https://github.com/huggingface/transformers/blob/v4.26.1/src/transformers/trainer.py#L1019
+        decay_parameters = get_parameter_names(self.model, [LayerNorm])
+        decay_parameters = [name for name in decay_parameters if "bias" not in name]
+        optimizer_grouped_parameters = [
+            {
+                "params": [p for n, p in self.model.named_parameters() if (n in decay_parameters and p.requires_grad)],
+                "weight_decay": self.weight_decay,
+            },
+            {
+                "params": [
+                    p for n, p in self.model.named_parameters() if (n not in decay_parameters and p.requires_grad)
+                ],
+                "weight_decay": 0.0,
+            },
+        ]
+        optimizer = AdamW(optimizer_grouped_parameters, lr=self.learning_rate)
 
-        if not (self._num_epochs and self._batch_size and self._num_batches and self._num_gpus):
-            logging.warning("Number of batches is not set, proceeding without warmup scheduler")
-            return optimizer
-
-        if not self.num_warmup_steps:
+        if self.num_warmup_steps is None and self.ratio_warmup_steps is None:
             logging.warning("Number of warmup steps is not set, proceeding without warmup scheduler")
             return optimizer
+
+        if self.ratio_warmup_steps is not None:
+            if self.num_warmup_steps is not None:
+                logging.warning(
+                    "Both `num_warmup_steps` and `ratio_warmup_steps` are defined. Will use `ratio_warmup_steps`."
+                )
+            num_warmup_steps = self.ratio_warmup_steps * self.trainer.estimated_stepping_batches
+            logging.info(
+                f"Warmup: {self.ratio_warmup_steps * 100:.2}% of total training steps ({self.trainer.estimated_stepping_batches})= {num_warmup_steps} steps"
+            )
+        else:
+            num_warmup_steps = self.num_warmup_steps
 
         scheduler = {
             "scheduler": get_linear_schedule_with_warmup(
                 optimizer,
-                num_warmup_steps=self.num_warmup_steps // self._num_gpus,
-                num_training_steps=self._num_epochs * self._num_batches,
+                num_warmup_steps=num_warmup_steps,
+                num_training_steps=self.trainer.estimated_stepping_batches,
             ),
             "interval": "step",
             "frequency": 1,
@@ -293,17 +325,20 @@ class CMCModule(pl.LightningModule):
         return tuple(self._msg_tokenizer.batch_decode(arg, **kwargs) for arg in args)
 
     def adjust_learning_rate(
-        self, initial_batch_size: Optional[int] = None, initial_learning_rate: Optional[float] = None
+        self,
+        batch_size: Optional[int],
+        initial_batch_size: Optional[int] = None,
+        initial_learning_rate: Optional[float] = None,
     ) -> float:
-        assert self._batch_size
-        # when LR is not passed explicitly, take formula from `Scaling Laws for Neural Language Models`
+
+        # when LR is not passed explicitly, take the formula from `Scaling Laws for Neural Language Models`
         # and scale linearly with batch size (it was 512 in the paper)
         if not initial_learning_rate:
             initial_batch_size = 512
             initial_learning_rate = 0.003239 - 0.0001395 * log(self.model.num_parameters(exclude_embeddings=True))
 
-        if initial_batch_size:
-            initial_learning_rate = initial_learning_rate * self._batch_size
-            return initial_learning_rate / initial_batch_size
+        # when given initial batch size, scale LR linearly
+        if initial_batch_size and batch_size:
+            return initial_learning_rate * batch_size / initial_batch_size
 
         return initial_learning_rate
