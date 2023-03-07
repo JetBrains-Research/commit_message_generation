@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from omegaconf import MISSING
+from transformers import AutoConfig
 
 
 @dataclass
@@ -24,6 +25,9 @@ class BaseModelConfig:
     msg_tokenizer_name_or_path: str = MISSING
     encoder_context_max_len: int = MISSING
     decoder_context_max_len: int = MISSING
+
+    def get_decoder_start_token_id(self) -> Optional[int]:
+        return None
 
 
 @dataclass
@@ -62,6 +66,10 @@ class BaseSeq2SeqConfig(BaseModelConfig):
     configuration: str = "seq2seq"
     name_or_path: str = MISSING
 
+    def get_decoder_start_token_id(self) -> int:
+        config = AutoConfig.from_pretrained(self.name_or_path)
+        return config.decoder_start_token_id
+
 
 @dataclass
 class BaseRACEConfig(BaseModelConfig):
@@ -72,3 +80,7 @@ class BaseRACEConfig(BaseModelConfig):
     configuration: str = "race"
     preprocessor_configuration: str = "race"
     name_or_path: str = MISSING
+
+    def get_decoder_start_token_id(self) -> int:
+        config = AutoConfig.from_pretrained(self.name_or_path)
+        return config.decoder_start_token_id

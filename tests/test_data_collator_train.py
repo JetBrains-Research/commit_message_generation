@@ -1,6 +1,6 @@
 import pytest
 import torch
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, T5Config, T5ForConditionalGeneration
 from transformers.models.encoder_decoder.modeling_encoder_decoder import (
     shift_tokens_right,
 )
@@ -44,6 +44,40 @@ def test_shift_encoder_decoder(default_tokenizers):
         torch.tensor([[ex for sublist in labels for ex in sublist]], dtype=torch.int64),
         decoder_start_token_id=decoder_tok.bos_token_id,
         pad_token_id=decoder_tok.pad_token_id,
+    )
+
+    assert [[ex for sublist in ids_ for ex in sublist]] == transformer_ids.tolist()
+    assert labels_ == labels
+
+
+def test_shift_t5(default_tokenizers):
+    encoder_tok, decoder_tok = default_tokenizers
+
+    t5_config = T5Config.from_pretrained("t5-small")
+
+    data_collator = DataCollatorTrain(
+        diff_bos_token_id=encoder_tok.bos_token_id,
+        diff_eos_token_id=encoder_tok.eos_token_id,
+        diff_pad_token_id=encoder_tok.pad_token_id,
+        msg_bos_token_id=decoder_tok.bos_token_id,
+        msg_eos_token_id=decoder_tok.eos_token_id,
+        msg_pad_token_id=decoder_tok.pad_token_id,
+        msg_sep_token_id=decoder_tok.sep_token_id,
+        decoder_context_max_len=None,
+        with_history=None,
+        shift_labels=None,
+        encoder_input_type=None,
+        encoder_context_max_len=None,
+        testing=None,
+        process_retrieved=False,
+        decoder_start_token_id=t5_config.decoder_start_token_id,
+    )
+    labels = [[decoder_tok.bos_token_id]] + [decoder_tok("some example").input_ids] + [[decoder_tok.eos_token_id]]
+    ids_, labels_ = data_collator._shift_for_encoder_decoder(ids=labels, labels=labels)
+
+    t5_model = T5ForConditionalGeneration.from_pretrained("t5-small")
+    transformer_ids = t5_model._shift_right(
+        torch.tensor([[ex for sublist in labels for ex in sublist]], dtype=torch.int64),
     )
 
     assert [[ex for sublist in ids_ for ex in sublist]] == transformer_ids.tolist()

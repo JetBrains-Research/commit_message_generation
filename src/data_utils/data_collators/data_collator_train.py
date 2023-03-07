@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 
@@ -25,6 +25,7 @@ class DataCollatorTrain(BaseCollatorUtils):
     """
 
     shift_labels: bool
+    decoder_start_token_id: Optional[int] = None
 
     def _shift_for_encoder_decoder(
         self, ids: List[List[int]], labels: List[List[int]]
@@ -37,7 +38,10 @@ class DataCollatorTrain(BaseCollatorUtils):
         with pad token. In our case, history ids are masked -100 in labels, but they are still
         meaningful ids. Therefore, we can't use the default approach.
         """
-        ids = [[self.msg_bos_token_id]] + ids[:-1]
+        if self.decoder_start_token_id is None:
+            ids = [[self.msg_bos_token_id]] + ids[:-1]
+        else:
+            ids = [[self.decoder_start_token_id]] + ids[:-1]
         return ids, labels
 
     def _process_decoder_input(self, examples: List[SingleExample]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:

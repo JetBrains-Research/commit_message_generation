@@ -1,7 +1,7 @@
 import logging
 import os
 from copy import deepcopy
-from typing import Optional
+from typing import Optional, Tuple
 
 import hydra
 import pytorch_lightning as pl
@@ -36,37 +36,20 @@ class CMCDataModule(pl.LightningDataModule):
 
         self._dataset_root = hydra.utils.to_absolute_path(dataset_cfg.dataset_root)
 
-        if not model_cfg.msg_tokenizer_name_or_path:
-            msgs_tok_dir = ""
-        elif "/" in model_cfg.msg_tokenizer_name_or_path:
-            msgs_tok_dir = model_cfg.msg_tokenizer_name_or_path.split("/")[-1]
-        else:
-            msgs_tok_dir = model_cfg.msg_tokenizer_name_or_path
-
-        if not model_cfg.diff_tokenizer_name_or_path:
-            diffs_tok_dir = msgs_tok_dir
-        elif "/" in model_cfg.diff_tokenizer_name_or_path:
-            diffs_tok_dir = model_cfg.diff_tokenizer_name_or_path.split("/")[-1]
-        else:
-            diffs_tok_dir = model_cfg.diff_tokenizer_name_or_path
-
-        self._data_path = os.path.join(
-            self._dataset_root,
-            "-".join(
-                [
-                    diffs_tok_dir,
-                    str(model_cfg.encoder_context_max_len),
-                    msgs_tok_dir,
-                    model_cfg.preprocessor_configuration,
-                ]
-            ),
+        self._data_path = self._create_path(
+            msg_tokenizer_name_or_path=model_cfg.msg_tokenizer_name_or_path,
+            diff_tokenizer_name_or_path=model_cfg.diff_tokenizer_name_or_path,
+            encoder_context_max_len=model_cfg.encoder_context_max_len,
+            preprocessor_configuration=model_cfg.preprocessor_configuration,
         )
-        os.makedirs(self._data_path, exist_ok=True)
 
         self._local_rank = local_rank
         self._world_size = world_size
 
         self._encoder_context_max_len = model_cfg.encoder_context_max_len
+        self._train_with_history = input_cfg.train_with_history
+        self._generate_with_history = input_cfg.generate_with_history
+
         self._line_sep = dataset_cfg.line_sep
         self._use_cache = dataset_cfg.use_cache
         self._process_retrieved = process_retrieved
@@ -77,61 +60,27 @@ class CMCDataModule(pl.LightningDataModule):
             configuration=model_cfg.preprocessor_configuration,
         )
 
-        self._preprocessor: BasePreprocessor
-        if model_cfg.preprocessor_configuration == "default":
-            self._preprocessor = DefaultPreprocessor(
-                diff_tokenizer=self.diff_tokenizer,
-                msg_tokenizer=self.msg_tokenizer,
-                chunksize=dataset_cfg.preprocessor_chunksize,
-            )
-        elif model_cfg.preprocessor_configuration == "race":
-            self._preprocessor = RACEPreprocessor(
-                diff_tokenizer=self.diff_tokenizer,
-                msg_tokenizer=self.msg_tokenizer,
-                chunksize=dataset_cfg.preprocessor_chunksize,
-            )
-        elif model_cfg.preprocessor_configuration == "codereviewer":
-            self._preprocessor = CodeReviewerPreprocessor(
-                diff_tokenizer=self.diff_tokenizer,
-                msg_tokenizer=self.msg_tokenizer,
-                chunksize=dataset_cfg.preprocessor_chunksize,
-            )
-        else:
-            raise ValueError("Current preprocessor configuration is not supported.")
+        self._preprocessor: BasePreprocessor = self._init_preprocessor(
+            preprocessor_configuration=model_cfg.preprocessor_configuration,
+            preprocessor_chunksize=dataset_cfg.preprocessor_chunksize,
+        )
 
-        self.data_collator_train = DataCollatorTrain(
-            diff_bos_token_id=self.diff_tokenizer.bos_token_id,
-            diff_eos_token_id=self.diff_tokenizer.eos_token_id,
-            diff_pad_token_id=self.diff_tokenizer.pad_token_id,
-            msg_bos_token_id=self.msg_tokenizer.bos_token_id,
-            msg_eos_token_id=self.msg_tokenizer.eos_token_id,
-            msg_pad_token_id=self.msg_tokenizer.pad_token_id,
-            msg_sep_token_id=self.msg_tokenizer.sep_token_id,
-            encoder_input_type=input_cfg.encoder_input_type,
-            encoder_context_max_len=model_cfg.encoder_context_max_len,
-            decoder_context_max_len=model_cfg.decoder_context_max_len,
-            with_history=input_cfg.train_with_history,
+        self.data_collator_train = self._init_collator_fit(
+            input_cfg=input_cfg,
+            model_cfg=model_cfg,
+            dataset_cfg=dataset_cfg,
             process_retrieved=process_retrieved,
             shift_labels=shift_labels,
-            testing=dataset_cfg.testing,
         )
-        self.data_collator_test = DataCollatorTest(
-            diff_bos_token_id=self.diff_tokenizer.bos_token_id,
-            diff_eos_token_id=self.diff_tokenizer.eos_token_id,
-            diff_pad_token_id=self.diff_tokenizer.pad_token_id,
-            msg_bos_token_id=self.msg_tokenizer.bos_token_id,
-            msg_eos_token_id=self.msg_tokenizer.eos_token_id,
-            msg_pad_token_id=self.msg_tokenizer.pad_token_id,
-            msg_sep_token_id=self.msg_tokenizer.sep_token_id,
-            diff_tokenizer=self.diff_tokenizer,
-            msg_tokenizer=self.msg_tokenizer,
-            encoder_input_type=input_cfg.encoder_input_type,
-            encoder_context_max_len=model_cfg.encoder_context_max_len,
-            decoder_context_max_len=model_cfg.decoder_context_max_len,
-            with_history=input_cfg.generate_with_history,
-            context_ratio=input_cfg.context_ratio,
+        self.data_collator_val = self._init_collator_fit(
+            input_cfg=input_cfg,
+            model_cfg=model_cfg,
+            dataset_cfg=dataset_cfg,
             process_retrieved=process_retrieved,
-            testing=dataset_cfg.testing,
+            shift_labels=shift_labels,
+        )
+        self.data_collator_test = self._init_collator_generate(
+            input_cfg=input_cfg, model_cfg=model_cfg, dataset_cfg=dataset_cfg, process_retrieved=process_retrieved
         )
 
         self.train_dataloader_conf = dataset_cfg.train_dataloader_conf
@@ -143,15 +92,136 @@ class CMCDataModule(pl.LightningDataModule):
         self.val = None
         self.test = None
 
-    def _add_special_tokens(self, tokenizer: PreTrainedTokenizerFast, configuration: str) -> PreTrainedTokenizerFast:
+    def _init_preprocessor(self, preprocessor_configuration: str, preprocessor_chunksize: int) -> BasePreprocessor:
+        """Initializes a correct preprocessor type based on passed configuration.
+
+        Args:
+            preprocessor_configuration: A type of preprocessor to initialize.
+            preprocessor_chunksize: A number of example in a single chunk during preprocessing.
+
+        Returns:
+            Initialized preprocessor.
+        """
+        if preprocessor_configuration == "default":
+            return DefaultPreprocessor(
+                diff_tokenizer=self.diff_tokenizer,
+                msg_tokenizer=self.msg_tokenizer,
+                chunksize=preprocessor_chunksize,
+            )
+        elif preprocessor_configuration == "race":
+            return RACEPreprocessor(
+                diff_tokenizer=self.diff_tokenizer,
+                msg_tokenizer=self.msg_tokenizer,
+                chunksize=preprocessor_chunksize,
+            )
+        elif preprocessor_configuration == "codereviewer":
+            return CodeReviewerPreprocessor(
+                diff_tokenizer=self.diff_tokenizer,
+                msg_tokenizer=self.msg_tokenizer,
+                chunksize=preprocessor_chunksize,
+            )
+        else:
+            raise ValueError(f"Current preprocessor configuration ({preprocessor_configuration}) is not supported.")
+
+    def _init_collator_fit(
+        self,
+        input_cfg: InputConfig,
+        model_cfg: BaseModelConfig,
+        dataset_cfg: DatasetConfig,
+        process_retrieved: bool,
+        shift_labels: bool,
+    ) -> DataCollatorTrain:
+        return DataCollatorTrain(
+            diff_bos_token_id=self.diff_tokenizer.bos_token_id,  # type: ignore[attr-defined]
+            diff_eos_token_id=self.diff_tokenizer.eos_token_id,  # type: ignore[attr-defined]
+            diff_pad_token_id=self.diff_tokenizer.pad_token_id,  # type: ignore[attr-defined]
+            msg_bos_token_id=self.msg_tokenizer.bos_token_id,  # type: ignore[attr-defined]
+            msg_eos_token_id=self.msg_tokenizer.eos_token_id,  # type: ignore[attr-defined]
+            msg_pad_token_id=self.msg_tokenizer.pad_token_id,  # type: ignore[attr-defined]
+            msg_sep_token_id=self.msg_tokenizer.sep_token_id,  # type: ignore[attr-defined]
+            encoder_input_type=input_cfg.encoder_input_type,
+            encoder_context_max_len=model_cfg.encoder_context_max_len,
+            decoder_context_max_len=model_cfg.decoder_context_max_len,
+            with_history=input_cfg.train_with_history,
+            process_retrieved=process_retrieved,
+            shift_labels=shift_labels,
+            testing=dataset_cfg.testing,
+            decoder_start_token_id=model_cfg.get_decoder_start_token_id(),
+        )
+
+    def _init_collator_generate(
+        self, input_cfg: InputConfig, model_cfg: BaseModelConfig, dataset_cfg: DatasetConfig, process_retrieved: bool
+    ) -> DataCollatorTest:
+        return DataCollatorTest(
+            diff_bos_token_id=self.diff_tokenizer.bos_token_id,  # type: ignore[attr-defined]
+            diff_eos_token_id=self.diff_tokenizer.eos_token_id,  # type: ignore[attr-defined]
+            diff_pad_token_id=self.diff_tokenizer.pad_token_id,  # type: ignore[attr-defined]
+            msg_bos_token_id=self.msg_tokenizer.bos_token_id,  # type: ignore[attr-defined]
+            msg_eos_token_id=self.msg_tokenizer.eos_token_id,  # type: ignore[attr-defined]
+            msg_pad_token_id=self.msg_tokenizer.pad_token_id,  # type: ignore[attr-defined]
+            msg_sep_token_id=self.msg_tokenizer.sep_token_id,  # type: ignore[attr-defined]
+            diff_tokenizer=self.diff_tokenizer,
+            msg_tokenizer=self.msg_tokenizer,
+            encoder_input_type=input_cfg.encoder_input_type,
+            encoder_context_max_len=model_cfg.encoder_context_max_len,
+            decoder_context_max_len=model_cfg.decoder_context_max_len,
+            with_history=input_cfg.generate_with_history,
+            context_ratio=input_cfg.context_ratio,
+            process_retrieved=process_retrieved,
+            testing=dataset_cfg.testing,
+        )
+
+    def _create_path(
+        self,
+        msg_tokenizer_name_or_path: str,
+        diff_tokenizer_name_or_path: Optional[str],
+        encoder_context_max_len: int,
+        preprocessor_configuration: str,
+    ) -> str:
+        """Builds a path to preprocessed data based on given configuration."""
+        if "/" in msg_tokenizer_name_or_path:
+            msgs_tok_dir = msg_tokenizer_name_or_path.split("/")[-1]
+        else:
+            msgs_tok_dir = msg_tokenizer_name_or_path
+
+        if not diff_tokenizer_name_or_path:
+            diffs_tok_dir = msgs_tok_dir
+        elif "/" in diff_tokenizer_name_or_path:
+            diffs_tok_dir = diff_tokenizer_name_or_path.split("/")[-1]
+        else:
+            diffs_tok_dir = diff_tokenizer_name_or_path
+
+        data_path = os.path.join(
+            self._dataset_root,
+            "-".join(
+                [
+                    diffs_tok_dir,
+                    str(encoder_context_max_len),
+                    msgs_tok_dir,
+                    preprocessor_configuration,
+                ]
+            ),
+        )
+        os.makedirs(data_path, exist_ok=True)
+        return data_path
+
+    def _add_special_tokens(
+        self, tokenizer: PreTrainedTokenizerFast, preprocessor_configuration: str
+    ) -> PreTrainedTokenizerFast:
+        """Adds special tokens to tokenizer based on preprocessor configuration.
+
+        * sep_token is necessary for correct history construction.
+        * pad_token is necessary for correct batch construction.
+        * Several models employ additional special tokens in diffs representation.
+        """
         if not tokenizer.sep_token:  # type: ignore[attr-defined]
             tokenizer.add_special_tokens({"sep_token": "[SEP]"})  # type: ignore[attr-defined]
         if not tokenizer.pad_token:  # type: ignore[attr-defined]
             tokenizer.add_special_tokens({"pad_token": "[PAD]"})  # type: ignore[attr-defined]
 
-        if configuration == "codereviewer":
+        if preprocessor_configuration == "codereviewer":
             tokenizer.add_special_tokens({"additional_special_tokens": ["<add>", "<del>", "<keep>"]})  # type: ignore[attr-defined]
-        elif configuration == "race":
+        elif preprocessor_configuration == "race":
             tokenizer.add_special_tokens(  # type: ignore[attr-defined]
                 {
                     "additional_special_tokens": [
@@ -171,7 +241,8 @@ class CMCDataModule(pl.LightningDataModule):
 
     def _load_tokenizers(
         self, msg_tokenizer_name_or_path: str, diff_tokenizer_name_or_path: Optional[str], configuration: str
-    ):
+    ) -> Tuple[PreTrainedTokenizerFast, PreTrainedTokenizerFast]:
+        """Initializes tokenizers and adds special tokens when necessary."""
         try:
             msg_tokenizer = AutoTokenizer.from_pretrained(msg_tokenizer_name_or_path)
         except ValueError:
@@ -195,8 +266,19 @@ class CMCDataModule(pl.LightningDataModule):
 
         return diff_tokenizer, msg_tokenizer
 
-    def prepare_data(self) -> None:  # type: ignore[override]
-        for part in ["train", "val", "test"]:
+    def prepare_data(self, stage: Optional[str] = None) -> None:  # type: ignore[override]
+        if stage is None:
+            parts = ["train", "val", "test"]
+        elif stage == "fit":
+            parts = ["train", "val"]
+        elif stage == "test":
+            parts = ["test"]
+        else:
+            raise ValueError(
+                "Unknown stage configuration. Pass `fit` to initialize train and val, `test` to initialize test and `None` to initialize everything."
+            )
+
+        for part in parts:
             self._preprocessor.process(
                 input_dir=self._dataset_root,
                 data_dir=self._data_path,
@@ -215,7 +297,7 @@ class CMCDataModule(pl.LightningDataModule):
 
         self._use_cache = True
 
-    def setup(self, stage=None):
+    def setup(self, stage: Optional[str] = None):
         if stage == "fit" or stage is None:
             self.train = CMCDatasetWithHistory.load_data(
                 history_path=os.path.join(self._data_path, "train_history.json"),
@@ -249,7 +331,7 @@ class CMCDataModule(pl.LightningDataModule):
                 world_size=self._world_size,
                 use_history=self._generate_with_history,
             )
-        if stage == "sweep":
+        if stage == "generation_sweep":
             # when tuning hyperparameters, run test logic but on validation data
             self.test = CMCDatasetWithHistory.load_data(
                 history_path=os.path.join(self._data_path, "val_history.json"),
