@@ -14,6 +14,7 @@ from src.data_utils.preprocessors import (
     DefaultPreprocessor,
     RACEPreprocessor,
 )
+from src.utils import get_decoder_start_token_id
 
 from .cmc_dataset_w_history import CMCDatasetWithHistory
 from .data_collators import DataCollatorTest, DataCollatorTrain
@@ -146,7 +147,7 @@ class CMCDataModule(pl.LightningDataModule):
             process_retrieved=process_retrieved,
             shift_labels=shift_labels,
             testing=dataset_cfg.testing,
-            decoder_start_token_id=model_cfg.get_decoder_start_token_id(),
+            decoder_start_token_id=get_decoder_start_token_id(model_cfg),
         )
 
     def _init_collator_generate(

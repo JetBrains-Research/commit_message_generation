@@ -1,7 +1,30 @@
 from copy import copy
-from typing import Union, no_type_check
+from typing import Optional, Union, no_type_check
 
-from transformers import GPT2LMHeadModel, RobertaForCausalLM, RobertaModel
+from transformers import AutoConfig, GPT2LMHeadModel, RobertaForCausalLM, RobertaModel
+
+from conf import BaseModelConfig, BaseRACEConfig, BaseSeq2SeqConfig
+
+
+def get_decoder_start_token_id(model_cfg: BaseModelConfig) -> Optional[int]:
+    if model_cfg.configuration == "encoder_decoder":
+        return None
+    elif model_cfg.configuration == "decoder":
+        return None
+    elif model_cfg.configuration == "seq2seq":
+        seq2seq_cfg = BaseSeq2SeqConfig(**model_cfg)  # type: ignore[arg-type]
+        name_or_path = seq2seq_cfg.name_or_path
+    elif model_cfg.configuration == "race":
+        race_cfg = BaseRACEConfig(**model_cfg)  # type: ignore[arg-type]
+        name_or_path = race_cfg.name_or_path
+    else:
+        return None
+
+    config = AutoConfig.from_pretrained(name_or_path)
+    if "decoder_start_token_id" not in config:
+        return None
+
+    return config.decoder_start_token_id
 
 
 @no_type_check  # a lot of attr-defined errors from transformers
