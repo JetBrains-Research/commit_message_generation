@@ -12,21 +12,21 @@ class CMCDatasetWithHistory(IterableDataset):
     def __init__(
         self,
         filename: str,
-        history: Dict[str, List[List[int]]],
         rank: int,
         world_size: int,
         retrieval_filename: Optional[str] = None,
+        history: Optional[Dict[str, List[List[int]]]] = None,
     ):
         """
-        Defines an iterable-style dataset for commit message completion task.
+        Defines an iterable-style dataset for a commit message completion task.
         This version expects input to be already tokenized and provides history for each commit.
 
         Args:
             filename: File to read diff, author ids and positions in history from.
-            history: Dictionary with full message history for each author.
-            rank: Rank of the process in DDP (must be 0 if you have single process).
-            world_size: Amount of processes in DDP (must be 1 if you have single process).
+            rank: Rank of the process in DDP (must be 0 if you have a single process).
+            world_size: Number of processes in DDP (must be 1 if you have a single process).
             retrieval_filename: File to read retrieved diffs and messages from (optional).
+            history: Dictionary with full message history for each author.
         """
 
         self._filename = filename
@@ -58,6 +58,36 @@ class CMCDatasetWithHistory(IterableDataset):
         dataset._process_rank = dataset._gpu_rank * dataset._num_workers + worker_info.id  # type: ignore[union-attr]
         dataset._world_size = dataset._gpu_world_size * dataset._num_workers
 
+    def _process_single_example(self, example: Dict[str, Any]) -> SingleExample:
+        """Process a single row from input file."""
+        diff_input_ids: List[int] = example["diff_input_ids"]
+        msg_input_ids: List[int] = example["msg_input_ids"]
+
+        history_input_ids = []
+        if self._history:
+            author: str = str(example["author"])
+            pos_in_history: int = example["pos_in_history"]
+            history_input_ids = self._history[str(author)][:pos_in_history]
+
+        return SingleExample(
+            diff_input_ids=diff_input_ids,
+            msg_input_ids=msg_input_ids,
+            history_input_ids=history_input_ids,
+        )
+
+    def _process_single_example_retrieval(
+        self, original_example: Dict[str, Any], retrieved_example: Dict[str, Any]
+    ) -> SingleExample:
+        """Process a single row from input file + a single row from retrieval file."""
+        processed_example = self._process_single_example(original_example)
+
+        retrieved_diff_input_ids: List[int] = retrieved_example["diff_input_ids"]
+        retrieved_msg_input_ids: List[int] = retrieved_example["msg_input_ids"]
+
+        processed_example.retrieved_diff_input_ids = retrieved_diff_input_ids
+        processed_example.retrieved_msg_input_ids = retrieved_msg_input_ids
+        return processed_example
+
     def _get_examples_generator(self) -> Generator[SingleExample, None, None]:
         """
         For multiprocessing support:
@@ -72,15 +102,7 @@ class CMCDatasetWithHistory(IterableDataset):
                 for i, line in enumerate(f):
                     if i % self._world_size == self._process_rank:
                         example: Dict[str, Any] = json.loads(line.strip())
-                        author: str = str(example["author"])
-                        diff_input_ids: List[int] = example["diff_input_ids"]
-                        pos_in_history: int = example["pos_in_history"]
-
-                        yield SingleExample(
-                            diff_input_ids=diff_input_ids,
-                            msg_input_ids=self._history[str(author)][pos_in_history],
-                            history_input_ids=self._history[str(author)][:pos_in_history],
-                        )
+                        yield self._process_single_example(example)
         else:
             with open(self._filename) as f:
                 with open(self._retrieval_filename) as f_retrieval:
@@ -89,21 +111,10 @@ class CMCDatasetWithHistory(IterableDataset):
                         assert i == i_retrieval
 
                         if i % self._world_size == self._process_rank:
-                            example: Dict[str, Any] = json.loads(line.strip())  # type: ignore[no-redef]
-                            author: str = str(example["author"])  # type: ignore[no-redef]
-                            diff_input_ids: List[int] = example["diff_input_ids"]  # type: ignore[no-redef]
-                            pos_in_history: int = example["pos_in_history"]  # type: ignore[no-redef]
-
-                            retrieval_example: Dict[str, Any] = json.loads(line_retrieval.strip())
-                            retrieved_diff_input_ids: List[int] = retrieval_example["diff_input_ids"]
-                            retrieved_msg_input_ids: List[int] = retrieval_example["msg_input_ids"]
-
-                            yield SingleExample(
-                                diff_input_ids=diff_input_ids,
-                                msg_input_ids=self._history[str(author)][pos_in_history],
-                                history_input_ids=self._history[str(author)][:pos_in_history],
-                                retrieved_diff_input_ids=retrieved_diff_input_ids,
-                                retrieved_msg_input_ids=retrieved_msg_input_ids,
+                            original_example: Dict[str, Any] = json.loads(line.strip())
+                            retrieved_example: Dict[str, Any] = json.loads(line_retrieval.strip())
+                            yield self._process_single_example_retrieval(
+                                original_example=original_example, retrieved_example=retrieved_example
                             )
 
     def __iter__(self) -> Iterator[SingleExample]:
@@ -133,6 +144,7 @@ class CMCDatasetWithHistory(IterableDataset):
         data_path: str,
         rank: int,
         world_size: int,
+        use_history: bool,
         retrieved_data_path: Optional[str] = None,
     ):
         """
@@ -141,13 +153,15 @@ class CMCDatasetWithHistory(IterableDataset):
         Args:
             history_path: Path to history file.
             data_path: Path to data file.
-            rank: Rank of the process in DDP (must be 0 if you have single process).
-            world_size: Amount of processes in DDP (must be 1 if you have single process).
+            rank: Rank of the process in DDP (must be 0 if you have a single process).
+            world_size: Number of processes in DDP (must be 1 if you have a single process).
+            use_history: True to use history in a dataset, False to stick with current messages only.
             retrieved_data_path: Path to retrieved file (optional).
         """
-
-        with open(history_path, "r") as infile:
-            history = json.load(infile)
+        history = None
+        if use_history:
+            with open(history_path, "r") as infile:
+                history = json.load(infile)
 
         return CMCDatasetWithHistory(
             filename=data_path,

@@ -225,6 +225,7 @@ class CMCDataModule(pl.LightningDataModule):
                 else None,
                 rank=self._local_rank,
                 world_size=self._world_size,
+                use_history=self._train_with_history,
             )
             self.val = CMCDatasetWithHistory.load_data(
                 history_path=os.path.join(self._data_path, "val_history.json"),
@@ -234,6 +235,7 @@ class CMCDataModule(pl.LightningDataModule):
                 else None,
                 rank=self._local_rank,
                 world_size=self._world_size,
+                use_history=self._generate_with_history,
             )
 
         if stage == "test" or stage is None:
@@ -245,6 +247,7 @@ class CMCDataModule(pl.LightningDataModule):
                 else None,
                 rank=self._local_rank,
                 world_size=self._world_size,
+                use_history=self._generate_with_history,
             )
         if stage == "sweep":
             # when tuning hyperparameters, run test logic but on validation data
@@ -256,6 +259,7 @@ class CMCDataModule(pl.LightningDataModule):
                 else None,
                 rank=self._local_rank,
                 world_size=self._world_size,
+                use_history=self._generate_with_history,
             )
 
     def train_dataloader(self):
