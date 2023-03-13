@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 import wandb
 from omegaconf import OmegaConf
 
-from conf import BaseDecoderConfig, BaseRACEConfig, EvalConfig
+from conf import EvalConfig
 from src.data_utils import CMCDataModule
 from src.model import CMCModule
 from src.utils import WandbOrganizer
@@ -35,7 +35,7 @@ def main(cfg: EvalConfig) -> None:
         shift_labels=cfg.model.configuration != "decoder",
         process_retrieved=cfg.model.configuration == "race",
     )
-    dm.prepare_data()
+    dm.prepare_data(stage="test")
     dm.setup(stage=cfg.stage)
 
     if cfg.logger.use_wandb:

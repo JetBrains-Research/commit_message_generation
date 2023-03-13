@@ -175,7 +175,7 @@ class BasePreprocessor(ABC):
         processed_path = os.path.join(data_dir, f"{part}_processed.jsonl")
 
         if use_cache and os.path.exists(processed_path):
-            logging.info(f"{processed_path} found, won't rewrite")
+            logging.info(f"{part}_processed.jsonl found, won't rewrite")
         else:
             open(processed_path, "w").close()
             logging.info(f"Processing {input_path} in chunks")
@@ -231,7 +231,7 @@ class BasePreprocessor(ABC):
         retrieved_output_fname = os.path.join(data_dir, f"retrieved_{part}_processed.jsonl")
 
         if use_cache and os.path.exists(retrieved_output_fname):
-            logging.info(f"{retrieved_output_fname} found, won't rewrite")
+            logging.info(f"retrieved_{part}_processed.jsonl found, won't rewrite")
         else:
             logging.info(f"Processing {retrieved_input_fname}")
             open(retrieved_output_fname, "w").close()

@@ -57,7 +57,7 @@ class CMCDataModule(pl.LightningDataModule):
         self._use_eval_downsample = dataset_cfg.use_eval_downsample
         self._use_train_downsample = False
         if dataset_cfg.stage == "sweep":
-            logging.info("Setup for sweep: will use a subset of dataset.")
+            logging.info("Setup for sweep: will use dataset subset for all parts.")
             self._use_eval_downsample = True
             self._use_train_downsample = True
 
@@ -274,12 +274,20 @@ class CMCDataModule(pl.LightningDataModule):
 
         return diff_tokenizer, msg_tokenizer
 
-    def prepare_data(self) -> None:  # type: ignore[override]
-        for part in ["train", "val", "test"]:
+    def prepare_data(self, stage: Optional[str] = None) -> None:  # type: ignore[override]
+        if stage == "fit":
+            parts = ["train", "val"]
+        elif stage == "test":
+            parts = ["test"]
+        else:
+            parts = ["train", "val", "test"]
+
+        for part in parts:
             input_dir = self._dataset_root
             data_dir = self._data_path
 
             if (part != "train" and self._use_eval_downsample) or (part == "train" and self._use_train_downsample):
+                logging.info(f"Will use dataset subset for {part}.")
                 input_dir = os.path.join(input_dir, "downsample")
                 data_dir = os.path.join(data_dir, "downsample")
 

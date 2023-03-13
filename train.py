@@ -63,7 +63,7 @@ def main(cfg: TrainConfig) -> None:
         process_retrieved=cfg.model.configuration == "race",
     )
 
-    dm.prepare_data()
+    dm.prepare_data(stage="fit")
     dm.setup(stage="fit")
 
     batch_size = cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.accumulate_grad_batches * world_size
