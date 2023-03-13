@@ -290,6 +290,8 @@ class CMCDataModule(pl.LightningDataModule):
                 logging.info(f"Will use dataset subset for {part}.")
                 input_dir = os.path.join(input_dir, "downsample")
                 data_dir = os.path.join(data_dir, "downsample")
+                os.makedirs(input_dir, exist_ok=True)
+                os.makedirs(data_dir, exist_ok=True)
 
             self._preprocessor.process(
                 input_dir=input_dir,
