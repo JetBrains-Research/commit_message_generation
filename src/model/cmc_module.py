@@ -1,7 +1,7 @@
 import logging
 from collections import defaultdict
 from math import log
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import pytorch_lightning as pl

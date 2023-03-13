@@ -54,6 +54,12 @@ class CMCDataModule(pl.LightningDataModule):
         self._line_sep = dataset_cfg.line_sep
         self._use_cache = dataset_cfg.use_cache
         self._process_retrieved = process_retrieved
+        self._use_eval_downsample = dataset_cfg.use_eval_downsample
+        self._use_train_downsample = False
+        if dataset_cfg.stage == "sweep":
+            logging.info("Setup for sweep: will use a subset of dataset.")
+            self._use_eval_downsample = True
+            self._use_train_downsample = True
 
         self.diff_tokenizer, self.msg_tokenizer = self._load_tokenizers(
             msg_tokenizer_name_or_path=model_cfg.msg_tokenizer_name_or_path,
@@ -203,6 +209,7 @@ class CMCDataModule(pl.LightningDataModule):
                 ]
             ),
         )
+
         os.makedirs(data_path, exist_ok=True)
         return data_path
 
@@ -267,22 +274,18 @@ class CMCDataModule(pl.LightningDataModule):
 
         return diff_tokenizer, msg_tokenizer
 
-    def prepare_data(self, stage: Optional[str] = None) -> None:  # type: ignore[override]
-        if stage is None:
-            parts = ["train", "val", "test"]
-        elif stage == "fit":
-            parts = ["train", "val"]
-        elif stage == "test":
-            parts = ["test"]
-        else:
-            raise ValueError(
-                "Unknown stage configuration. Pass `fit` to initialize train and val, `test` to initialize test and `None` to initialize everything."
-            )
+    def prepare_data(self) -> None:  # type: ignore[override]
+        for part in ["train", "val", "test"]:
+            input_dir = self._dataset_root
+            data_dir = self._data_path
 
-        for part in parts:
+            if (part != "train" and self._use_eval_downsample) or (part == "train" and self._use_train_downsample):
+                input_dir = os.path.join(input_dir, "downsample")
+                data_dir = os.path.join(data_dir, "downsample")
+
             self._preprocessor.process(
-                input_dir=self._dataset_root,
-                data_dir=self._data_path,
+                input_dir=input_dir,
+                data_dir=data_dir,
                 part=part,
                 message_kwargs={},
                 diff_kwargs={"max_len": self._encoder_context_max_len, "line_sep": self._line_sep},
@@ -291,7 +294,7 @@ class CMCDataModule(pl.LightningDataModule):
             if self._process_retrieved:
                 self._preprocessor.process_retrieved(
                     data_dir=self._data_path,
-                    retrieved_dir=f"{self._dataset_root}/retrieval",
+                    retrieved_dir=os.path.join(input_dir, "retrieval"),
                     part=part,
                     use_cache=self._use_cache,
                 )
@@ -299,11 +302,20 @@ class CMCDataModule(pl.LightningDataModule):
         self._use_cache = True
 
     def setup(self, stage: Optional[str] = None):
-        if stage == "fit" or stage is None:
+        if stage == "fit" or stage == "sweep" or stage is None:
+
             self.train = CMCDatasetWithHistory.load_data(
-                history_path=os.path.join(self._data_path, "train_history.json"),
-                data_path=os.path.join(self._data_path, "train_shuffled.jsonl"),
-                retrieved_data_path=os.path.join(self._data_path, "retrieved_train_shuffled.jsonl")
+                history_path=os.path.join(
+                    self._data_path, ("downsample" if self._use_train_downsample else ""), "train_history.json"
+                ),
+                data_path=os.path.join(
+                    self._data_path, ("downsample" if self._use_train_downsample else ""), "train_shuffled.jsonl"
+                ),
+                retrieved_data_path=os.path.join(
+                    self._data_path,
+                    ("downsample" if self._use_train_downsample else ""),
+                    "retrieved_train_shuffled.jsonl",
+                )
                 if self._process_retrieved
                 else None,
                 rank=self._local_rank,
@@ -311,33 +323,37 @@ class CMCDataModule(pl.LightningDataModule):
                 use_history=self._train_with_history,
             )
             self.val = CMCDatasetWithHistory.load_data(
-                history_path=os.path.join(self._data_path, "val_history.json"),
-                data_path=os.path.join(self._data_path, "val_processed.jsonl"),
-                retrieved_data_path=os.path.join(self._data_path, "retrieved_val_processed.jsonl")
+                history_path=os.path.join(
+                    self._data_path, ("downsample" if self._use_eval_downsample else ""), "val_history.json"
+                ),
+                data_path=os.path.join(
+                    self._data_path, ("downsample" if self._use_eval_downsample else ""), "val_processed.jsonl"
+                ),
+                retrieved_data_path=os.path.join(
+                    self._data_path,
+                    ("downsample" if self._use_eval_downsample else ""),
+                    "retrieved_val_processed.jsonl",
+                )
                 if self._process_retrieved
                 else None,
                 rank=self._local_rank,
                 world_size=self._world_size,
-                use_history=self._generate_with_history,
+                use_history=self._train_with_history,
             )
 
         if stage == "test" or stage is None:
             self.test = CMCDatasetWithHistory.load_data(
-                history_path=os.path.join(self._data_path, "test_history.json"),
-                data_path=os.path.join(self._data_path, "test_processed.jsonl"),
-                retrieved_data_path=os.path.join(self._data_path, "retrieved_test_processed.jsonl")
-                if self._process_retrieved
-                else None,
-                rank=self._local_rank,
-                world_size=self._world_size,
-                use_history=self._generate_with_history,
-            )
-        if stage == "generation_sweep":
-            # when tuning hyperparameters, run test logic but on validation data
-            self.test = CMCDatasetWithHistory.load_data(
-                history_path=os.path.join(self._data_path, "val_history.json"),
-                data_path=os.path.join(self._data_path, "val_processed.jsonl"),
-                retrieved_data_path=os.path.join(self._data_path, "retrieved_val_processed.jsonl")
+                history_path=os.path.join(
+                    self._data_path, ("downsample" if self._use_eval_downsample else ""), "test_history.json"
+                ),
+                data_path=os.path.join(
+                    self._data_path, ("downsample" if self._use_eval_downsample else ""), "test_processed.jsonl"
+                ),
+                retrieved_data_path=os.path.join(
+                    self._data_path,
+                    ("downsample" if self._use_eval_downsample else ""),
+                    "retrieved_test_processed.jsonl",
+                )
                 if self._process_retrieved
                 else None,
                 rank=self._local_rank,

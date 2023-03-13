@@ -1,0 +1,31 @@
+method: bayes
+
+metric:
+  goal: minimize
+  name: val_loss
+
+parameters:
+  stage:
+    distribution: constant
+    value: sweep
+  optimizer.learning_rate:
+    min: !!float 1e-5
+    max: !!float 1e-4
+  optimizer.weight_decay:
+    min: 0.0
+    max: 0.1
+  optimizer.ratio_warmup_steps:
+    min: 0.0
+    max: 0.05
+
+early_terminate:
+  type: "hyperband"
+  min_iter: 2
+
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_hyphens}
+
+program: train.py

@@ -1,4 +1,4 @@
-# a simple script that launches pipeline
+# a simple script that launches pipeline for all kinds of models
 # run to make sure that artifacts & everything else in W&B project is setup as intended
 echo "W&B username: $1"
 echo "Accelerator: $2 (should be one of 'gpu','cpu')"

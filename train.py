@@ -13,7 +13,7 @@ from pytorch_lightning.callbacks import (
 from pytorch_lightning.utilities.device_parser import num_cuda_devices
 from wandb import Artifact
 
-from conf import BaseDecoderConfig, BaseRACEConfig, TrainConfig
+from conf import TrainConfig
 from src.data_utils import CMCDataModule
 from src.model import CMCModule
 from src.utils import WandbOrganizer
@@ -136,7 +136,7 @@ def main(cfg: TrainConfig) -> None:
     # -----------------------
     #   save ckpt to wandb  -
     # -----------------------
-    if trainer_logger and isinstance(trainer_logger, pl.loggers.WandbLogger) and cfg.logger.save_artifact:
+    if cfg.logger.use_wandb and cfg.logger.save_artifact:
         artifact = Artifact(
             name=run_name,
             type="model",
