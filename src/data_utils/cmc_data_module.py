@@ -176,6 +176,7 @@ class CMCDataModule(pl.LightningDataModule):
             context_ratio=input_cfg.context_ratio,
             process_retrieved=process_retrieved,
             testing=dataset_cfg.testing,
+            decoder_start_token_id=get_decoder_start_token_id(model_cfg),
         )
 
     def _create_path(

@@ -35,6 +35,7 @@ class DataCollatorTest(BaseCollatorUtils):
     msg_tokenizer: PreTrainedTokenizerFast
     context_ratio: float
     max_new_tokens: int = 15  # TODO: make configurable
+    decoder_start_token_id: Optional[int] = None
 
     def _process_msg_gen(self, message_ids: List[int], context_len: Optional[int] = None) -> Tuple[List[int], str, str]:
         """Builds context and target for completion-style generation.
@@ -122,7 +123,11 @@ class DataCollatorTest(BaseCollatorUtils):
                     history_ids=history_ids,
                 )
 
-            cur_ids = [[self.msg_bos_token_id]] + cur_history_ids + [message_ids]
+            if self.decoder_start_token_id is None:
+                start_token_id = self.msg_bos_token_id
+            else:
+                start_token_id = self.decoder_start_token_id
+            cur_ids = [[start_token_id]] + cur_history_ids + [message_ids]
             cur_ids_tensor = torch.tensor([ex for sublist in cur_ids for ex in sublist], dtype=torch.int64)
             cur_mask_tensor = torch.ones_like(cur_ids_tensor)
 
