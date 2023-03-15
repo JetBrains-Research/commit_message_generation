@@ -244,7 +244,7 @@ class BasePreprocessor(ABC):
             logging.info("Processing history")
             self._process_history(input_path=processed_path, output_path=os.path.join(data_dir, f"{part}_history.json"))
         if add_history_to_inputs:
-            if use_cache and os.path.exists(os.path.join(data_dir, f"{part}_processed_history.json")):
+            if use_cache and os.path.exists(os.path.join(data_dir, f"{part}_processed_history.jsonl")):
                 logging.info(f"{part}_processed_history found, won't rewrite")
             else:
                 assert (
