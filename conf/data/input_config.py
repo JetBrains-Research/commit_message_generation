@@ -8,7 +8,7 @@ class InputConfig:
     """
     Input configuration.
 
-    Args:
+    Attributes:
         generate_with_history: `True` to concatenate commit message history with current commit message in decoder context during generation, `False` otherwise (ignored when `encoder_input_type` is `history`).
         train_with_history: `True` to concatenate commit message history with current commit message in decoder context during training, `False` otherwise (ignored when `encoder_input_type` is `history`).
         encoder_input_type: What type of input will be passed to encoder. Currently, `history` and `diff` are supported.

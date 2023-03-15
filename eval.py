@@ -35,7 +35,7 @@ def main(cfg: EvalConfig) -> None:
         shift_labels=cfg.model.configuration != "decoder",
         process_retrieved=cfg.model.configuration == "race",
     )
-    dm.prepare_data(stage="test")
+    dm.prepare_data()
     dm.setup(stage=cfg.stage)
 
     if cfg.logger.use_wandb:

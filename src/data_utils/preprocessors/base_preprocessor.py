@@ -219,7 +219,7 @@ class BasePreprocessor(ABC):
             logging.info(f"{part}_processed.jsonl found, won't rewrite")
         else:
             open(processed_path, "w").close()
-            logging.info(f"Processing {input_path} in chunks")
+            logging.info(f"Processing {part} in chunks")
             reader = pd.read_json(input_path, orient="records", lines=True, chunksize=self._chunksize)
             for chunk in tqdm(reader, leave=False):
                 processed_chunk = self._process_chunk(chunk, message_kwargs, diff_kwargs)
@@ -289,7 +289,7 @@ class BasePreprocessor(ABC):
         if use_cache and os.path.exists(retrieved_output_fname):
             logging.info(f"retrieved_{part}_processed.jsonl found, won't rewrite")
         else:
-            logging.info(f"Processing {retrieved_input_fname}")
+            logging.info(f"Processing retrieved examples for {part}")
             open(retrieved_output_fname, "w").close()
             with jsonlines.open(retrieved_input_fname, "r") as reader:
                 for pred in reader:

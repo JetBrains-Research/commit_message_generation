@@ -23,7 +23,7 @@ class ArtifactEvalConfig:
 
     Artifact name is not provided, because it's automatically retrieved from model and input configuration.
 
-    Args:
+    Attributes:
         project: W&B project.
         version: Version tag of W&B artifact.
         artifact_path: Path to model checkpoint in artifact.
@@ -45,7 +45,7 @@ class WandbEvalConfig:
       * (optional) load model checkpoint from W&B artifact
       * model predictions
 
-    Args:
+    Attributes:
         use_wandb: Whether W&B will be used for logging or not.
         project: Name of project this run will appear in.
         load_artifact: Whether model checkpoint should be loaded from W&B artifact or not.

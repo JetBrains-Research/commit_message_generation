@@ -74,14 +74,7 @@ class CMCDataModule(pl.LightningDataModule):
             preprocessor_chunksize=dataset_cfg.preprocessor_chunksize,
         )
 
-        self.data_collator_train = self._init_collator_fit(
-            input_cfg=input_cfg,
-            model_cfg=model_cfg,
-            dataset_cfg=dataset_cfg,
-            process_retrieved=process_retrieved,
-            shift_labels=shift_labels,
-        )
-        self.data_collator_val = self._init_collator_fit(
+        self.data_collator_fit = self._init_collator_fit(
             input_cfg=input_cfg,
             model_cfg=model_cfg,
             dataset_cfg=dataset_cfg,
@@ -277,15 +270,8 @@ class CMCDataModule(pl.LightningDataModule):
 
         return diff_tokenizer, msg_tokenizer
 
-    def prepare_data(self, stage: Optional[str] = None) -> None:  # type: ignore[override]
-        if stage == "fit":
-            parts = ["train", "val"]
-        elif stage == "test":
-            parts = ["test"]
-        else:
-            parts = ["train", "val", "test"]
-
-        for part in parts:
+    def prepare_data(self) -> None:  # type: ignore[override]
+        for part in ["train", "val", "test"]:
             input_dir = self._dataset_root
             data_dir = self._data_path
 
@@ -384,14 +370,14 @@ class CMCDataModule(pl.LightningDataModule):
         return self.train.get_dataloader(
             batch_size=self.train_dataloader_conf.batch_size,
             num_workers=self.train_dataloader_conf.num_workers,
-            collate_fn=self.data_collator_train,
+            collate_fn=self.data_collator_fit,
         )
 
     def val_dataloader(self):
         return self.val.get_dataloader(
             batch_size=self.val_dataloader_conf.batch_size,
             num_workers=self.val_dataloader_conf.num_workers,
-            collate_fn=self.data_collator_train,
+            collate_fn=self.data_collator_fit,
         )
 
     def test_dataloader(self):

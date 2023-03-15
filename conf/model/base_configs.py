@@ -9,7 +9,7 @@ class BaseModelConfig:
     """
     Basic model configuration.
 
-    Args:
+    Attributes:
         configuration: What model architecture to use. Should be one of `decoder`, `encoder_decoder`, `seq2seq`, `race`.
         preprocessor_configuration: What diff processing strategy to use. Should be one of `default`, `codereviewer`, `race`.
         diff_tokenizer_name_or_path: Local path or name on HuggingFace Hub for diff tokenizer.

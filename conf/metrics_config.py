@@ -13,7 +13,7 @@ class ArtifactMetricConfig:
     """
     Configuration for W&B artifact with model predictions.
 
-    Args:
+    Attributes:
         project: W&B project.
         name: Name of W&B artifact.
         version: Version tag of W&B artifact (it should also match the table name in artifact!)
@@ -35,7 +35,7 @@ class WandbMetricConfig:
       * (optional) load model predictions from W&B artifact
       * metrics
 
-    Args:
+    Attributes:
         use_wandb: Whether W&B will be used for logging or not.
         project: Name of project this run will appear in.
         load_artifact: Whether model predictions should be loaded from W&B artifact or not.
@@ -52,7 +52,7 @@ class FilterConfig:
     """
     Configuration for additional data filtering.
 
-    Args:
+    Attributes:
         language: Pass language name to only calculate metrics on commits on this language.
         only_short_sequences: True to only calculate metrics on commits with diffs < 512 tokens.
         only_long_sequences: True to only calculate metrics on commits with diffs > 512 tokens.
@@ -72,7 +72,7 @@ class MetricsConfig:
       * between full predictions and targets
       * between all prefixes of N tokens of predictions of targets
 
-    Args:
+    Attributes:
         preds_path: Local path to model predictions. Instead of this, you can also define configuration for loading artifact at WandbMetricConfig.
         max_n_tokens: Maximum number of tokens (for prefix-level metrics).
     """

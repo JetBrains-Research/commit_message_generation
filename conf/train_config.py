@@ -21,7 +21,7 @@ class OptimizerConfig:
     """
     Configuration for optimizer.
 
-    Args:
+    Attributes:
         learning_rate: Learning rate for AdamW.
         initial_batch_size: If given, learning rate will be recalculated as (given lr) * (actual bs) / (initial bs).
         weight_decay: Weight decay for AdamW.
@@ -46,7 +46,7 @@ class WandbTrainConfig:
       * gradients
       * (optionally) model checkpoints
 
-    Args:
+    Attributes:
         use_wandb: Whether W&B will be used for logging or not.
         project: Name of a project this run will appear in.
         save_artifact: True to load model checkpoints to W&B as artifacts, False otherwise.
