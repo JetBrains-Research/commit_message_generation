@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Callable, Dict, Generator, Iterator, List, Optional
+from typing import Any, Callable, Dict, Generator, Iterator, List, Literal, Optional
 
 import torch
 from torch.utils.data import DataLoader, IterableDataset
@@ -12,10 +12,11 @@ class CMCDatasetWithHistory(IterableDataset):
     def __init__(
         self,
         filename: str,
+        history_path: str,
+        history_mode: Literal["ram", "io"],
         rank: int,
         world_size: int,
         retrieval_filename: Optional[str] = None,
-        history: Optional[Dict[str, List[List[int]]]] = None,
     ):
         """
         Defines an iterable-style dataset for a commit message completion task.
@@ -26,12 +27,20 @@ class CMCDatasetWithHistory(IterableDataset):
             rank: Rank of the process in DDP (must be 0 if you have a single process).
             world_size: Number of processes in DDP (must be 1 if you have a single process).
             retrieval_filename: File to read retrieved diffs and messages from (optional).
-            history: Dictionary with full message history for each author.
+            history_path: Path to JSON with full message history for each author.
+            history_mode: If set to `io`, the history is expected to be already processed for each example in input file.
+             If set to `ram`, will work by loading it into memory and providing correct slices for each example based
+             on its author and its position in history.
         """
 
         self._filename = filename
         self._retrieval_filename = retrieval_filename
-        self._history = history
+
+        self._history_mode = history_mode
+        self._history: Optional[Dict[str, List[List[int]]]] = None
+        if history_mode == "ram":
+            with open(history_path, "r") as infile:
+                self._history = json.load(infile)
 
         self._len = None
 
@@ -64,10 +73,16 @@ class CMCDatasetWithHistory(IterableDataset):
         msg_input_ids: List[int] = example["msg_input_ids"]
 
         history_input_ids = []
-        if self._history:
+        if self._history_mode == "ram":
+            assert self._history, "Configured to load history into memory, but it wasn't defined."
             author: str = str(example["author"])
             pos_in_history: int = example["pos_in_history"]
             history_input_ids = self._history[str(author)][:pos_in_history]
+        elif self._history_mode == "io":
+            assert (
+                "history_input_ids" in example
+            ), "Configured to read history inputs from input file, but they aren't present."
+            history_input_ids = example["history_input_ids"]
 
         return SingleExample(
             diff_input_ids=diff_input_ids,
@@ -144,7 +159,7 @@ class CMCDatasetWithHistory(IterableDataset):
         data_path: str,
         rank: int,
         world_size: int,
-        use_history: bool,
+        history_mode: Literal["ram", "io"],
         retrieved_data_path: Optional[str] = None,
     ):
         """
@@ -158,15 +173,12 @@ class CMCDatasetWithHistory(IterableDataset):
             use_history: True to use history in a dataset, False to stick with current messages only.
             retrieved_data_path: Path to retrieved file (optional).
         """
-        history = None
-        if use_history:
-            with open(history_path, "r") as infile:
-                history = json.load(infile)
 
         return CMCDatasetWithHistory(
             filename=data_path,
             retrieval_filename=retrieved_data_path,
-            history=history,
+            history_path=history_path,
             rank=rank,
             world_size=world_size,
+            history_mode=history_mode,
         )

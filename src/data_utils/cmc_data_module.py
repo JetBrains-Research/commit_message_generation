@@ -48,6 +48,8 @@ class CMCDataModule(pl.LightningDataModule):
         self._world_size = world_size
 
         self._encoder_context_max_len = model_cfg.encoder_context_max_len
+        self._decoder_context_max_len = model_cfg.decoder_context_max_len
+        self._add_history_to_inputs = dataset_cfg.add_history_to_inputs
         self._train_with_history = input_cfg.train_with_history
         self._generate_with_history = input_cfg.generate_with_history
 
@@ -301,6 +303,8 @@ class CMCDataModule(pl.LightningDataModule):
                 message_kwargs={},
                 diff_kwargs={"max_len": self._encoder_context_max_len, "line_sep": self._line_sep},
                 use_cache=self._use_cache,
+                add_history_to_inputs=self._add_history_to_inputs,
+                decoder_context_max_length=self._decoder_context_max_len,
             )
             if self._process_retrieved:
                 self._preprocessor.process_retrieved(
@@ -331,14 +335,16 @@ class CMCDataModule(pl.LightningDataModule):
                 else None,
                 rank=self._local_rank,
                 world_size=self._world_size,
-                use_history=self._train_with_history,
+                history_mode="io" if self._add_history_to_inputs else "ram",
             )
             self.val = CMCDatasetWithHistory.load_data(
                 history_path=os.path.join(
                     self._data_path, ("downsample" if self._use_eval_downsample else ""), "val_history.json"
                 ),
                 data_path=os.path.join(
-                    self._data_path, ("downsample" if self._use_eval_downsample else ""), "val_processed.jsonl"
+                    self._data_path,
+                    ("downsample" if self._use_eval_downsample else ""),
+                    f"val_processed{'_history' if self._add_history_to_inputs else ''}.jsonl",
                 ),
                 retrieved_data_path=os.path.join(
                     self._data_path,
@@ -349,7 +355,7 @@ class CMCDataModule(pl.LightningDataModule):
                 else None,
                 rank=self._local_rank,
                 world_size=self._world_size,
-                use_history=self._train_with_history,
+                history_mode="io" if self._add_history_to_inputs else "ram",
             )
 
         if stage == "test" or stage is None:
@@ -358,7 +364,9 @@ class CMCDataModule(pl.LightningDataModule):
                     self._data_path, ("downsample" if self._use_eval_downsample else ""), "test_history.json"
                 ),
                 data_path=os.path.join(
-                    self._data_path, ("downsample" if self._use_eval_downsample else ""), "test_processed.jsonl"
+                    self._data_path,
+                    ("downsample" if self._use_eval_downsample else ""),
+                    f"test_processed{'_history' if self._add_history_to_inputs else ''}.jsonl",
                 ),
                 retrieved_data_path=os.path.join(
                     self._data_path,
@@ -369,7 +377,7 @@ class CMCDataModule(pl.LightningDataModule):
                 else None,
                 rank=self._local_rank,
                 world_size=self._world_size,
-                use_history=self._generate_with_history,
+                history_mode="io" if self._add_history_to_inputs else "ram",
             )
 
     def train_dataloader(self):

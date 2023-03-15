@@ -118,3 +118,66 @@ def test_process_history(tmp_path):
         assert history[f"{i}"] == [[i], [i + 100]]
     for i in range(10, 15):
         assert history[f"{i}"] == [[i + 100]]
+
+
+def test_add_history_to_inputs(tmp_path):
+    preprocessor = DefaultPreprocessor(diff_tokenizer=None, msg_tokenizer=None)  # tokenizers are not relevant
+
+    data = [{"msg_input_ids": f"msg{i}", "author": 0, "pos_in_history": i} for i in range(10)]
+    data += [{"msg_input_ids": f"msg{i + 100}", "author": 1, "pos_in_history": i} for i in range(10)]
+    with jsonlines.open(f"{tmp_path}/test.jsonl", "w") as writer:
+        writer.write_all(data)
+
+    history = {0: [f"msg{i}" for i in range(10)], 1: [f"msg{i + 100}" for i in range(10)]}
+    with open(f"{tmp_path}/test_history.json", "w") as f:
+        json.dump(history, f)
+
+    preprocessor._add_history_to_inputs(
+        input_path=f"{tmp_path}/test.jsonl",
+        history_path=f"{tmp_path}/test_history.json",
+        output_path=f"{tmp_path}/test_w_history.jsonl",
+        part="test",
+        decoder_context_max_length=100,
+    )
+    with jsonlines.open(f"{tmp_path}/test_w_history.jsonl", "r") as reader:
+        results = [line for line in reader]
+    assert all(
+        [
+            line["history_input_ids"] == [f"msg{i}" for i in range(line["pos_in_history"])]
+            for line in results
+            if line["author"] == 0
+        ]
+    )
+    assert all(
+        [
+            line["history_input_ids"] == [f"msg{i + 100}" for i in range(line["pos_in_history"])]
+            for line in results
+            if line["author"] == 1
+        ]
+    )
+
+    preprocessor._add_history_to_inputs(
+        input_path=f"{tmp_path}/test.jsonl",
+        history_path=f"{tmp_path}/test_history.json",
+        output_path=f"{tmp_path}/test_w_history.jsonl",
+        part="test",
+        decoder_context_max_length=16,
+    )
+    with jsonlines.open(f"{tmp_path}/test_w_history.jsonl", "r") as reader:
+        results = [line for line in reader]
+    assert all(
+        [
+            line["history_input_ids"]
+            == [f"msg{i}" for i in range(line["pos_in_history"] - 2, line["pos_in_history"]) if i >= 0]
+            for line in results
+            if line["author"] == 0
+        ]
+    )
+    assert all(
+        [
+            line["history_input_ids"]
+            == [f"msg{i + 100}" for i in range(line["pos_in_history"] - 1, line["pos_in_history"]) if i >= 0]
+            for line in results
+            if line["author"] == 1
+        ]
+    )

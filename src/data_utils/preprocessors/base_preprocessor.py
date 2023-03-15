@@ -84,6 +84,41 @@ class BasePreprocessor(ABC):
         with open(output_path, "w") as f:
             json.dump(history, f)
 
+    def _add_history_to_inputs(
+        self, input_path: str, history_path: str, output_path: str, decoder_context_max_length: int, part: str
+    ) -> None:
+        """Adds commit message history to each example in the input file and saves the results to the output file.
+
+        This approach uses more disk space but enables working with the dataset in a fully iterable fashion
+        without loading the history into RAM. To prevent excessive disk usage, the messages from history are added only
+        until the maximum decoder context length is achieved.
+
+        Args:
+            input_path: Path to file to read data from.
+            history_path: Path to file to read history from.
+            output_path: Path to file to save data with history inputs to.
+            decoder_context_max_length: Maximum allowed number of tokens in decoder context.
+            part: Current dataset part.
+        """
+        with open(history_path, "r") as f:
+            history = json.load(f)
+
+        open(output_path, "w").close()
+        with jsonlines.open(input_path, "r") as reader:
+            for line in tqdm(reader, desc=f"Aggregating history inputs for {part}"):
+                all_author_history: List[List[int]] = history[str(line["author"])][: line["pos_in_history"]]
+                relevant_author_history: List[List[int]] = []
+                cur_len = len(line["msg_input_ids"]) + 2
+                for history_msg in all_author_history[::-1]:
+                    if cur_len + len(history_msg) + 1 > decoder_context_max_length:
+                        break
+                    relevant_author_history.append(history_msg)
+                    cur_len += len(history_msg) + 1
+                line["history_input_ids"] = relevant_author_history[::-1]
+
+                with jsonlines.open(output_path, "a") as writer:
+                    writer.write(line)
+
     def _get_pos_in_history(self, authors: List[int]) -> List[int]:
         """Builds correct position in history for each commit when iterating over input data
         in chunks.
@@ -156,13 +191,16 @@ class BasePreprocessor(ABC):
         message_kwargs: Dict[str, Any],
         diff_kwargs: Dict[str, Any],
         use_cache: bool,
+        add_history_to_inputs: bool,
+        decoder_context_max_length: Optional[int] = None,
     ) -> None:
         """
         Main processing logic.
 
         1. Iterate over input file in chunks, process and tokenize messages and diffs, save to separate file.
         2. Aggregate history from processed file, save to separate file.
-        3. If processing train, shuffle processed file and save to yet another separate file.
+        3. If add_history_to_inputs is True, iterate through input file again and aggregate history inputs for each example.
+        4. If processing train, shuffle processed file and save to yet another separate file.
 
         Args:
             input_dir: Path to directory with input files.
@@ -170,6 +208,9 @@ class BasePreprocessor(ABC):
             part: Current dataset part.
             message_kwargs: Arbitrary keyword arguments for message processing.
             diff_kwargs: Arbitrary keyword arguments for diffs processing.
+            use_cache: True to use already processed files when possible, False otherwise.
+            add_history_to_inputs: True to add history inputs to each example in a processed file.
+            decoder_context_max_length: Should be provided when add_history_to_inputs is True.
         """
         input_path = os.path.join(input_dir, f"{part}.jsonl")
         processed_path = os.path.join(data_dir, f"{part}_processed.jsonl")
@@ -202,6 +243,21 @@ class BasePreprocessor(ABC):
         else:
             logging.info("Processing history")
             self._process_history(input_path=processed_path, output_path=os.path.join(data_dir, f"{part}_history.json"))
+        if add_history_to_inputs:
+            if use_cache and os.path.exists(os.path.join(data_dir, f"{part}_processed_history.json")):
+                logging.info(f"{part}_processed_history found, won't rewrite")
+            else:
+                assert (
+                    decoder_context_max_length is not None
+                ), "You have to define max context length to aggregate history in inputs."
+                self._add_history_to_inputs(
+                    input_path=processed_path,
+                    history_path=os.path.join(data_dir, f"{part}_history.json"),
+                    output_path=os.path.join(data_dir, f"{part}_processed_history.jsonl"),
+                    part=part,
+                    decoder_context_max_length=decoder_context_max_length,
+                )
+            processed_path = os.path.join(data_dir, f"{part}_processed_history.jsonl")
 
         if part == "train":
             if use_cache and os.path.exists(os.path.join(data_dir, f"{part}_shuffled.jsonl")):
