@@ -19,7 +19,9 @@ task.
       and other packages necessary for specific metrics implementations
     * Lint & unit tests: [mypy](https://github.com/python/mypy), [Black](https://black.readthedocs.io/en/stable/), [isort](https://pycqa.github.io/isort/), [pytest](https://docs.pytest.org/en/7.1.x/)
 
-You can install Python packages with [pip](https://pip.pypa.io/en/stable/):`pip install -r requirements.txt`
+This project provides dependencies for two Python dependency managers:
+* Poetry: [`poetry.lock`](poetry.lock), [`pyproject.toml`](pyproject.toml)
+* pip: [`requirements.txt`](requirements.txt) (obtained through `poetry export --with dev --output requirements.txt`)
      
 ## Usage
 

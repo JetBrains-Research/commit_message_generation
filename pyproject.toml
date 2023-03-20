@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "commit-message-generation"
+version = "0.0.1"
+description = ""
+authors = ["Alexandra Eliseeva <alexandra.eliseeva@jetbrains.com>"]
+readme = "README.md"
+packages = []
+
+[tool.poetry.dependencies]
+python = "^3.10"
+torch = "^2.0"
+pytorch-lightning = "^1.7"
+transformers = "^4.21"
+wandb = "^0.13"
+hydra-core = "~1.2"
+pandas = "*"
+jsonlines = "*"
+torchmetrics = "~0.9.3"
+datasets = "~2.4.0"
+nltk = "3.6.4"
+rouge_score = "0.0.4"
+sacrebleu = "2.0.0"
+rapidfuzz = "2.0.11"
+
+[tool.poetry.group.dev.dependencies]
+black = "^22.6.0"
+isort = "^5.10.1"
+mypy = "^0.971"
+pytest = "^7.1.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
