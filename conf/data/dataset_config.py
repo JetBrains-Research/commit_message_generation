@@ -25,6 +25,7 @@ class DatasetConfig:
         stage: Name of current stage, set to "sweep" to use correct logic for W&B sweep.
         add_history_to_inputs: True to save history for each input example,
          False to load history in RAM and build inputs on the fly.
+        use_train_downsample: True to use downsampled version of train set.
         use_eval_downsample: True to use downsampled versions of validation and test sets.
         testing: True to generate random numbers instead of actual data (used for tuning batch size).
         use_cache: True to look for preprocessed files, False to relaunch preprocessing even if preprocessed files are present.
@@ -38,6 +39,7 @@ class DatasetConfig:
     preprocessor_chunksize: int = 4096
     stage: Optional[str] = None
     add_history_to_inputs: bool = True
+    use_train_downsample: bool = False
     use_eval_downsample: bool = True
     testing: bool = False
     use_cache: bool = False

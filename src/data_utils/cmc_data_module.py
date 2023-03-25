@@ -56,12 +56,13 @@ class CMCDataModule(pl.LightningDataModule):
         self._line_sep = dataset_cfg.line_sep
         self._use_cache = dataset_cfg.use_cache
         self._process_retrieved = process_retrieved
+
+        self._use_train_downsample = dataset_cfg.use_train_downsample
         self._use_eval_downsample = dataset_cfg.use_eval_downsample
-        self._use_train_downsample = False
         if dataset_cfg.stage == "sweep":
             logging.info("Setup for sweep: will use dataset subset for all parts.")
-            self._use_eval_downsample = True
             self._use_train_downsample = True
+            self._use_eval_downsample = True
 
         self.diff_tokenizer, self.msg_tokenizer = self._load_tokenizers(
             msg_tokenizer_name_or_path=model_cfg.msg_tokenizer_name_or_path,
