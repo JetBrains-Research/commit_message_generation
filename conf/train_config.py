@@ -50,11 +50,13 @@ class WandbTrainConfig:
         use_wandb: Whether W&B will be used for logging or not.
         project: Name of a project this run will appear in.
         save_artifact: True to load model checkpoints to W&B as artifacts, False otherwise.
+        use_api_key: True to read an API key from a local file (expected to be stored in `wandb_api_key.txt`).
     """
 
     use_wandb: bool = True
     project: str = "commit_message_completion"
     save_artifact: bool = True
+    use_api_key: bool = False
 
 
 @dataclass

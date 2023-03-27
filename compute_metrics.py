@@ -1,6 +1,6 @@
 import logging
 from pprint import pprint
-
+import os
 import hydra
 import pandas as pd
 import wandb
@@ -34,6 +34,9 @@ def main(cfg: MetricsConfig):
     print(f"==== Using config ====\n{OmegaConf.to_yaml(cfg)}")
 
     if cfg.logger.use_wandb:
+        if cfg.logger.use_api_key:
+            with open(hydra.utils.to_absolute_path("wandb_api_key.txt"), "r") as f:
+                os.environ["WANDB_API_KEY"] = f.read().strip()
         wandb.Table.MAX_ROWS = 50000
         run: wandb.wandb_sdk.wandb_run.Run = wandb.init(
             project=cfg.logger.project,

@@ -95,6 +95,9 @@ def main(cfg: TrainConfig) -> None:
 
     # logger
     if cfg.logger.use_wandb:
+        if cfg.logger.use_api_key:
+            with open(hydra.utils.to_absolute_path("wandb_api_key.txt"), "r") as f:
+                os.environ["WANDB_API_KEY"] = f.read().strip()
         trainer_logger = pl.loggers.WandbLogger(
             name=run_name,
             project=cfg.logger.project,

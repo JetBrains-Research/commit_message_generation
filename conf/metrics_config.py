@@ -39,11 +39,13 @@ class WandbMetricConfig:
         use_wandb: Whether W&B will be used for logging or not.
         project: Name of project this run will appear in.
         load_artifact: Whether model predictions should be loaded from W&B artifact or not.
+        use_api_key: True to read an API key from a local file (expected to be stored in `wandb_api_key.txt`).
     """
 
     use_wandb: bool = True
     project: str = "commit_message_completion"
     load_artifact: bool = True
+    use_api_key: bool = False
     artifact_config: ArtifactMetricConfig = field(default_factory=ArtifactMetricConfig)
 
 
