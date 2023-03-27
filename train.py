@@ -49,21 +49,22 @@ def main(cfg: TrainConfig) -> None:
 
     if world_size is None:
         raise ValueError("Unknown format for number of gpus")
-
-    logging.info(f"Local rank: {int(os.environ.get('LOCAL_RANK', 0))}")
+    local_rank = int(os.environ.get("LOCAL_RANK", 0))
+    logging.info(f"Local rank: {local_rank}")
     logging.info(f"World size: {world_size}")
 
     dm = CMCDataModule(
         dataset_cfg=cfg.dataset,
         model_cfg=cfg.model,
         input_cfg=cfg.input,
-        local_rank=int(os.environ.get("LOCAL_RANK", 0)),
+        local_rank=local_rank,
         world_size=world_size,
         shift_labels=cfg.model.configuration != "decoder",
         process_retrieved=cfg.model.configuration == "race",
     )
 
-    dm.prepare_data()
+    if local_rank == 0:
+        dm.prepare_data()
     dm.setup(stage="fit")
 
     batch_size = cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.accumulate_grad_batches * world_size

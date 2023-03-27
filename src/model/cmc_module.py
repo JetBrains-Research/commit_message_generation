@@ -166,7 +166,6 @@ class CMCModule(pl.LightningModule):
             on_step=True,
             on_epoch=True,
             logger=True,
-            sync_dist=True,
             batch_size=len(batch.encoder_input_ids),
         )
         self.log("num_tokens", self.num_processed_tokens, on_step=True, on_epoch=False, logger=True)
@@ -188,7 +187,7 @@ class CMCModule(pl.LightningModule):
         return {"loss": outputs.loss}
 
     def validation_epoch_end(self, outputs):  # type: ignore[override]
-        self.log_dict(self.val_metrics.compute(), on_step=False, on_epoch=True, logger=True)
+        self.log_dict(self.val_metrics.compute(), on_step=False, on_epoch=True, logger=True, sync_dist=True)
 
     def _postprocess_generated(self, batch: BatchTest, predictions: torch.Tensor) -> Dict[str, List[str]]:
         """Decodes predictions and inputs and postprocesses special tokens and history.
