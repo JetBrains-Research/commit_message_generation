@@ -10,7 +10,7 @@ from src.utils import BatchTest, PrefixAllowedTokens
 torch.manual_seed(42)
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def default_setting():
     conf = OmegaConf.structured(
         BaseEncoderDecoderConfig(
@@ -83,7 +83,7 @@ def test_with_and_without_prefix_fn(default_setting, context, prefix, expected):
             encoder_attention_mask=torch.zeros_like(tokenized_context_w_prefix),
             decoder_input_ids=tokenized_context_w_prefix,
             decoder_attention_mask=torch.ones_like(tokenized_context_w_prefix),
-            prefixes=[],
+            prefixes=[""],
             targets=[],
             labels=None,
             retrieved_diff_input_ids=None,
@@ -117,7 +117,9 @@ def test_generation_empty_prefix(default_setting, context, prefix, generated):
     beam_sentence = context + generated
 
     tokenized_beam_sentence = model._msg_tokenizer(beam_sentence, return_tensors="pt").input_ids[0]
-    prefix_fn = PrefixAllowedTokens(prefix={0: ""}, context_len={0: 0}, tokenizer=model._msg_tokenizer)
+    prefix_fn = PrefixAllowedTokens(
+        prefix={0: ""}, context_len={0: 0}, tokenizer=model._msg_tokenizer, trie=model.vocab_trie
+    )
 
     allowed_tokens = model._msg_tokenizer.batch_decode(prefix_fn(0, sentence=tokenized_beam_sentence))
     assert len(allowed_tokens) == len(model._msg_tokenizer.get_vocab().keys())
@@ -140,7 +142,10 @@ def test_generation_start(default_setting, context, prefix, generated):
     tokenized_context = model._msg_tokenizer(context, return_tensors="pt").input_ids
     tokenized_beam_sentence = model._msg_tokenizer(beam_sentence, return_tensors="pt").input_ids[0]
     prefix_fn = PrefixAllowedTokens(
-        prefix={0: prefix}, context_len={0: tokenized_context.shape[1]}, tokenizer=model._msg_tokenizer
+        prefix={0: prefix},
+        context_len={0: tokenized_context.shape[1]},
+        tokenizer=model._msg_tokenizer,
+        trie=model.vocab_trie,
     )
 
     allowed_tokens = model._msg_tokenizer.batch_decode(prefix_fn(0, sentence=tokenized_beam_sentence))
@@ -166,7 +171,10 @@ def test_generation_prefix_part(default_setting, context, prefix, generated, rem
     tokenized_context = model._msg_tokenizer(context, return_tensors="pt").input_ids
     tokenized_beam_sentence = model._msg_tokenizer(beam_sentence, return_tensors="pt").input_ids[0]
     prefix_fn = PrefixAllowedTokens(
-        prefix={0: prefix}, context_len={0: tokenized_context.shape[1]}, tokenizer=model._msg_tokenizer
+        prefix={0: prefix},
+        context_len={0: tokenized_context.shape[1]},
+        tokenizer=model._msg_tokenizer,
+        trie=model.vocab_trie,
     )
 
     allowed_tokens = model._msg_tokenizer.batch_decode(prefix_fn(0, sentence=tokenized_beam_sentence))
@@ -189,7 +197,10 @@ def test_generation_whole_prefix(default_setting, context, prefix, generated):
     tokenized_context = model._msg_tokenizer(context, return_tensors="pt").input_ids
     tokenized_beam_sentence = model._msg_tokenizer(beam_sentence, return_tensors="pt").input_ids[0]
     prefix_fn = PrefixAllowedTokens(
-        prefix={0: prefix}, context_len={0: tokenized_context.shape[1]}, tokenizer=model._msg_tokenizer
+        prefix={0: prefix},
+        context_len={0: tokenized_context.shape[1]},
+        tokenizer=model._msg_tokenizer,
+        trie=model.vocab_trie,
     )
 
     allowed_tokens = model._msg_tokenizer.batch_decode(prefix_fn(0, sentence=tokenized_beam_sentence))

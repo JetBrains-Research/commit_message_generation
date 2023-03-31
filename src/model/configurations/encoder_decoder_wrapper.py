@@ -12,7 +12,7 @@ from transformers import (
 )
 
 from src.model.configurations import BaseModel
-from src.utils import Batch, BatchTest, PrefixAllowedTokens, remove_layers_from_model
+from src.utils import Batch, BatchTest, remove_layers_from_model
 
 
 class EncoderDecoderWrapper(BaseModel):
@@ -228,21 +228,11 @@ class EncoderDecoderWrapper(BaseModel):
         )
 
     def generate(self, batch: BatchTest, **generation_kwargs):
-        prefix_fn = PrefixAllowedTokens(
-            prefix={i: prefix for i, prefix in enumerate(batch.prefixes)},
-            context_len={i: len(msg) for i, msg in enumerate(batch.decoder_input_ids)},
-            tokenizer=self._msg_tokenizer,
-        )
-
         return self.model.generate(
             input_ids=batch.encoder_input_ids,
             attention_mask=batch.encoder_attention_mask,
             decoder_input_ids=batch.decoder_input_ids,
             decoder_attention_mask=batch.decoder_attention_mask,
-            prefix_allowed_tokens_fn=prefix_fn,
-            pad_token_id=self._msg_tokenizer.pad_token_id,  # type: ignore[attr-defined]
-            bos_token_id=self._msg_tokenizer.bos_token_id,  # type: ignore[attr-defined]
-            eos_token_id=self._msg_tokenizer.eos_token_id,  # type: ignore[attr-defined]
             **generation_kwargs,
         )
 

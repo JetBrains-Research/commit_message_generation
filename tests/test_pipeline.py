@@ -64,6 +64,7 @@ def test_eval_pipeline(tmp_path):
             "++input.encoder_input_type=diff "
             f"++input.train_with_history={use_history} "
             f"++input.generate_with_history={use_history} "
+            "++input.context_ratio=0.5 "
             "++trainer.accelerator=cpu "
             "++trainer.devices=1 "
             "++dataset.use_eval_downsample=false "

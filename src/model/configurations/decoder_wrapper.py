@@ -1,7 +1,7 @@
-from transformers import AutoModelForCausalLM, GPT2Tokenizer, PreTrainedTokenizerFast
+from transformers import AutoModelForCausalLM, PreTrainedTokenizerFast
 
 from src.model.configurations.base_model import BaseModel
-from src.utils import Batch, BatchTest, PrefixAllowedTokens
+from src.utils import Batch, BatchTest
 
 
 class DecoderWrapper(BaseModel):
@@ -29,18 +29,9 @@ class DecoderWrapper(BaseModel):
         )
 
     def generate(self, batch: BatchTest, **generation_kwargs):
-        prefix_fn = PrefixAllowedTokens(
-            prefix={i: prefix for i, prefix in enumerate(batch.prefixes)},
-            context_len={i: len(msg) for i, msg in enumerate(batch.decoder_input_ids)},
-            tokenizer=self._tokenizer,
-        )
-
         return self.model.generate(
             input_ids=batch.decoder_input_ids,
             attention_mask=batch.decoder_attention_mask,
-            prefix_allowed_tokens_fn=prefix_fn,
-            eos_token_id=self._tokenizer.eos_token_id,  # type: ignore[attr-defined]
-            pad_token_id=self._tokenizer.pad_token_id,  # type: ignore[attr-defined]
             **generation_kwargs,
         )
 

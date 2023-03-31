@@ -1,9 +1,8 @@
 import logging
-from collections import defaultdict
 from math import log
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
+import jsonlines
 import pytorch_lightning as pl
 import torch
 import wandb
@@ -26,7 +25,14 @@ from src.model.configurations import (
     RACEWrapper,
     Seq2SeqWrapper,
 )
-from src.utils import Batch, BatchTest, BatchTrain, EvaluationMetrics
+from src.utils import (
+    Batch,
+    BatchTest,
+    BatchTrain,
+    EvaluationMetrics,
+    PrefixAllowedTokens,
+    VocabPrefixTree,
+)
 
 
 class CMCModule(pl.LightningModule):
@@ -69,6 +75,9 @@ class CMCModule(pl.LightningModule):
 
         self._diff_tokenizer = diff_tokenizer
         self._msg_tokenizer = msg_tokenizer
+
+        self._vocab_trie = None
+
         self.model: BaseModel = self._init_model(model_cfg)
 
         self.learning_rate = self.adjust_learning_rate(
@@ -90,7 +99,7 @@ class CMCModule(pl.LightningModule):
         self.num_processed_examples = 0.0
 
         # will be logged to W&B
-        self.table_data: Dict[str, List[str]] = defaultdict(list)
+        self.preds: List[Dict[str, str]] = []
         self.train_metrics = EvaluationMetrics(
             do_strings=False,
             do_tensors=True,
@@ -141,13 +150,33 @@ class CMCModule(pl.LightningModule):
 
         raise ValueError(f"Current configuration ({model_cfg.configuration}) is not supported")
 
+    @property
+    def vocab_trie(self):
+        if self._vocab_trie is None:
+            self._vocab_trie = VocabPrefixTree(self._msg_tokenizer)
+        return self._vocab_trie
+
     def forward(self, batch: Batch) -> Any:  # type: ignore[override]
         return self.model.forward(batch)
 
     def generate(self, batch: BatchTest, **kwargs) -> Any:
         if not kwargs:
             kwargs = self.generation_kwargs  # type: ignore[assignment]
-        return self.model.generate(batch, **kwargs)
+
+        prefix_fn = PrefixAllowedTokens(
+            prefix={i: prefix for i, prefix in enumerate(batch.prefixes)},
+            context_len={i: len(msg) for i, msg in enumerate(batch.decoder_input_ids)},
+            trie=self.vocab_trie,
+            tokenizer=self._msg_tokenizer,
+        )
+        return self.model.generate(
+            batch,
+            **kwargs,
+            prefix_allowed_tokens_fn=prefix_fn,
+            pad_token_id=self._msg_tokenizer.pad_token_id,  # type: ignore[attr-defined]
+            bos_token_id=self._msg_tokenizer.bos_token_id,  # type: ignore[attr-defined]
+            eos_token_id=self._msg_tokenizer.eos_token_id,  # type: ignore[attr-defined]
+        )
 
     def training_step(self, batch: BatchTrain, *args, **kwargs):  # type: ignore[override]
         outputs = self(batch)
@@ -181,16 +210,15 @@ class CMCModule(pl.LightningModule):
             on_step=False,
             on_epoch=True,
             logger=True,
-            sync_dist=True,
             batch_size=len(batch.encoder_input_ids),
         )
         return {"loss": outputs.loss}
 
     def validation_epoch_end(self, outputs):  # type: ignore[override]
-        self.log_dict(self.val_metrics.compute(), on_step=False, on_epoch=True, logger=True, sync_dist=True)
+        self.log_dict(self.val_metrics.compute(), on_step=False, on_epoch=True, logger=True)
 
-    def _postprocess_generated(self, batch: BatchTest, predictions: torch.Tensor) -> Dict[str, List[str]]:
-        """Decodes predictions and inputs and postprocesses special tokens and history.
+    def _postprocess_generated(self, batch: BatchTest, predictions: torch.Tensor) -> List[Dict[str, str]]:
+        """Decodes predictions and context.
 
         Args:
             batch: Model inputs.
@@ -202,35 +230,22 @@ class CMCModule(pl.LightningModule):
         decoded_preds = self.decode_trg(predictions, skip_special_tokens=True)[0]
         decoded_context = self.decode_trg(batch.decoder_input_ids, skip_special_tokens=False)[0]
 
-        decoded_source = []
-        if not isinstance(self.model, DecoderWrapper):
-            decoded_source = self.decode_src(batch.encoder_input_ids, skip_special_tokens=True)[0]
+        return [
+            {
+                "Context": context,
+                "Prefix": prefix,
+                "Prediction": pred,
+            }
+            for context, prefix, pred in zip(decoded_context, batch.prefixes, decoded_preds)
+        ]
 
-        history = []
-        for i in range(len(decoded_context)):
-            decoded_context[i] = (
-                decoded_context[i]
-                .replace(self._msg_tokenizer.pad_token, "")  # type: ignore[attr-defined]
-                .replace(self._msg_tokenizer.bos_token, "")  # type: ignore[attr-defined]
-                .replace(self._msg_tokenizer.eos_token, "")  # type: ignore[attr-defined]
-            )
-            if self._msg_tokenizer.sep_token in decoded_context[i]:  # type: ignore[attr-defined]
-                cur_history = "\n".join(
-                    decoded_context[i].split(self._msg_tokenizer.sep_token)[:-1]  # type: ignore[attr-defined]
-                )
-                history.append(cur_history)
-                decoded_context[i] = decoded_context[i].split(self._msg_tokenizer.sep_token)[-1]  # type: ignore[attr-defined]
-            else:
-                history.append("")
+    def write_preds(self, preds: List[Dict[str, str]]) -> None:
+        if len(self.preds) > 100:
+            with jsonlines.open(f"{self._preds_table_name}.jsonl", "a") as writer:
+                writer.write_all(self.preds)
+            self.preds = []
 
-        return {
-            "Diff": decoded_source,
-            "History": history,
-            "Context": decoded_context,
-            "Prefix": batch.prefixes,
-            "Prediction": decoded_preds,
-            "Target": batch.targets,
-        }
+        self.preds.extend(preds)
 
     def test_step(self, batch: BatchTest, *args, **kwargs):  # type: ignore[override]
         predictions = self.generate(batch)
@@ -240,28 +255,24 @@ class CMCModule(pl.LightningModule):
         # decode & postprocess data
         string_results = self._postprocess_generated(batch, predictions)
 
-        # add data to a little table with examples
-        for key in string_results:
-            self.table_data[key].extend(string_results[key])
+        # write to file
+        self.write_preds(string_results)
 
     def test_epoch_end(self, *args, **kwargs):
-        preds = pd.DataFrame.from_dict({k: v for k, v in self.table_data.items() if v})
+        if self.preds:
+            with jsonlines.open(f"{self._preds_table_name}.jsonl", "a") as writer:
+                writer.write_all(self.preds)
 
-        # is W&B is used, upload predictions as table and as artifact
+        # is W&B is used, upload predictions as artifact
         if isinstance(self.logger, pl.loggers.WandbLogger):
-            self.logger.log_table("test_examples", dataframe=preds)
-
-            if self._preds_artifact_name and self._preds_artifact_type and self._preds_table_name:
-                artifact = wandb.Artifact(
-                    self._preds_artifact_name,
-                    type=self._preds_artifact_type,
-                    metadata={"tags": self.logger.experiment.tags if self.logger.experiment.tags else None},
-                )
-                artifact.add(wandb.Table(dataframe=preds), self._preds_table_name)
-                self.logger.experiment.log_artifact(artifact, aliases=self._preds_table_name)
-
-        # save predictions to disk
-        preds.to_json(f"{self._preds_artifact_name}_{self._preds_table_name}.json", orient="records", lines=True)
+            artifact = wandb.Artifact(
+                self._preds_artifact_name,
+                type=self._preds_artifact_type,
+                metadata={"tags": self.logger.experiment.tags if self.logger.experiment.tags else None},
+                incremental=True,
+            )
+            artifact.add_file(f"{self._preds_table_name}.jsonl")
+            self.logger.experiment.log_artifact(artifact)
 
     def configure_optimizers(self):
         if self.learning_rate is None:
