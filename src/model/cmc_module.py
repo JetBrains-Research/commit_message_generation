@@ -231,12 +231,8 @@ class CMCModule(pl.LightningModule):
         decoded_context = self.decode_trg(batch.decoder_input_ids, skip_special_tokens=True)[0]
 
         return [
-            {
-                "Context": context,
-                "Prefix": prefix,
-                "Prediction": pred[len(prefix) :],
-            }
-            for context, prefix, pred in zip(decoded_context, batch.prefixes, decoded_preds)
+            {"Context": context, "Prefix": prefix, "Prediction": pred[len(prefix) :], "Target": target}
+            for context, prefix, pred, target in zip(decoded_context, batch.prefixes, decoded_preds, batch.targets)
         ]
 
     def write_preds(self, preds: List[Dict[str, str]]) -> None:
