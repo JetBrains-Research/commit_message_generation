@@ -28,8 +28,8 @@ class Batch:
     def pin_memory(self):
         self.encoder_input_ids = self.encoder_input_ids.pin_memory()
         self.encoder_attention_mask = self.encoder_attention_mask.pin_memory()
-        self.decoder_input_ids = self.encoder_input_ids.pin_memory()
-        self.decoder_attention_mask = self.encoder_attention_mask.pin_memory()
+        self.decoder_input_ids = self.decoder_input_ids.pin_memory()
+        self.decoder_attention_mask = self.decoder_attention_mask.pin_memory()
         if self.labels:
             self.labels = self.labels.pin_memory()
         if self.retrieved_diff_input_ids:
