@@ -38,6 +38,9 @@ def main(cfg: EvalConfig) -> None:
     dm.setup(stage=cfg.stage)
 
     if cfg.logger.use_wandb:
+        if cfg.logger.use_api_key:
+            with open(hydra.utils.to_absolute_path("wandb_api_key.txt"), "r") as f:
+                os.environ["WANDB_API_KEY"] = f.read().strip()
         trainer_logger = pl.loggers.WandbLogger(
             name=f"context_ratio_{cfg.input.context_ratio}_{('with-history' if cfg.input.generate_with_history else 'without-history')}",
             project=cfg.logger.project,
@@ -52,10 +55,6 @@ def main(cfg: EvalConfig) -> None:
     )
 
     if cfg.logger.use_wandb and cfg.logger.load_artifact:
-        if cfg.logger.use_api_key:
-            with open(hydra.utils.to_absolute_path("wandb_api_key.txt"), "r") as f:
-                os.environ["WANDB_API_KEY"] = f.read().strip()
-
         artifact_name = f"{cfg.logger.artifact_config.project}/{run_name}:{cfg.logger.artifact_config.version}"
         artifact = trainer_logger.experiment.use_artifact(artifact_name)
         if "tags" in artifact.metadata:
