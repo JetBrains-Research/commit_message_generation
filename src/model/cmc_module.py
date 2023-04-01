@@ -228,13 +228,13 @@ class CMCModule(pl.LightningModule):
             A dict with decoded sources/predictions.
         """
         decoded_preds = self.decode_trg(predictions, skip_special_tokens=True)[0]
-        decoded_context = self.decode_trg(batch.decoder_input_ids, skip_special_tokens=False)[0]
+        decoded_context = self.decode_trg(batch.decoder_input_ids, skip_special_tokens=True)[0]
 
         return [
             {
                 "Context": context,
                 "Prefix": prefix,
-                "Prediction": pred,
+                "Prediction": pred[len(prefix) :],
             }
             for context, prefix, pred in zip(decoded_context, batch.prefixes, decoded_preds)
         ]
