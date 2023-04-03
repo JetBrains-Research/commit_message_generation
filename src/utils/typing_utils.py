@@ -9,8 +9,21 @@ class SingleExample:
     diff_input_ids: List[int]
     msg_input_ids: List[int]
     history_input_ids: List[List[int]]
+    pos_in_file: int
     retrieved_diff_input_ids: Optional[List[int]] = None
     retrieved_msg_input_ids: Optional[List[int]] = None
+
+
+@dataclass
+class BatchRetrieval:
+    encoder_input_ids: torch.Tensor
+    encoder_attention_mask: torch.Tensor
+    pos_in_file: List[int]
+
+    def pin_memory(self):
+        self.encoder_input_ids = self.encoder_input_ids.pin_memory()
+        self.encoder_attention_mask = self.encoder_attention_mask.pin_memory()
+        return self
 
 
 @dataclass

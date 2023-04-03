@@ -9,6 +9,7 @@ from .model.base_configs import (
     BaseRACEConfig,
     BaseSeq2SeqConfig,
 )
+from .retrieval_config import RetrievalConfig
 from .train_config import TrainConfig
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "InputConfig",
     "DatasetConfig",
     "MetricsConfig",
+    "RetrievalConfig",
 ]

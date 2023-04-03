@@ -137,6 +137,18 @@ files = [
 frozenlist = ">=1.1.0"
 
 [[package]]
+name = "annoy"
+version = "1.17.1"
+description = "Approximate Nearest Neighbors in C++/Python optimized for memory usage and loading/saving to disk."
+category = "dev"
+optional = false
+python-versions = "*"
+files = [
+    {file = "annoy-1.17.1-cp39-cp39-macosx_10_12_universal2.whl", hash = "sha256:d15f03c8986f0d48244843cbfd706b4530047edb1700de463d034e8d10c89dbf"},
+    {file = "annoy-1.17.1.tar.gz", hash = "sha256:bf177dbeafb81f63b2ac1e1246b1f26a2acc82e73ba46638734d29d8258122da"},
+]
+
+[[package]]
 name = "antlr4-python3-runtime"
 version = "4.9.3"
 description = "ANTLR 4.9.3 runtime for Python 3.7"
@@ -2759,4 +2771,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "91d8b1b2a5ac59d011eee72f0f5c8a5454938a3c75a096f4347989003628d63c"
+content-hash = "e707761fc6bc2c5657911b2b6afc63dd071e9abad3fd8b5ce4da89e9a66be6bf"

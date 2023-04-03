@@ -67,7 +67,7 @@ class CMCDatasetWithHistory(IterableDataset):
         dataset._process_rank = dataset._gpu_rank * dataset._num_workers + worker_info.id  # type: ignore[union-attr]
         dataset._world_size = dataset._gpu_world_size * dataset._num_workers
 
-    def _process_single_example(self, example: Dict[str, Any]) -> SingleExample:
+    def _process_single_example(self, example: Dict[str, Any], pos_in_file: int) -> SingleExample:
         """Process a single row from input file."""
         diff_input_ids: List[int] = example["diff_input_ids"]
         msg_input_ids: List[int] = example["msg_input_ids"]
@@ -88,13 +88,14 @@ class CMCDatasetWithHistory(IterableDataset):
             diff_input_ids=diff_input_ids,
             msg_input_ids=msg_input_ids,
             history_input_ids=history_input_ids,
+            pos_in_file=pos_in_file,
         )
 
     def _process_single_example_retrieval(
-        self, original_example: Dict[str, Any], retrieved_example: Dict[str, Any]
+        self, original_example: Dict[str, Any], retrieved_example: Dict[str, Any], pos_in_file: int
     ) -> SingleExample:
         """Process a single row from input file + a single row from retrieval file."""
-        processed_example = self._process_single_example(original_example)
+        processed_example = self._process_single_example(example=original_example, pos_in_file=pos_in_file)
 
         retrieved_diff_input_ids: List[int] = retrieved_example["diff_input_ids"]
         retrieved_msg_input_ids: List[int] = retrieved_example["msg_input_ids"]
@@ -117,7 +118,7 @@ class CMCDatasetWithHistory(IterableDataset):
                 for i, line in enumerate(f):
                     if i % self._world_size == self._process_rank:
                         example: Dict[str, Any] = json.loads(line.strip())
-                        yield self._process_single_example(example)
+                        yield self._process_single_example(example, pos_in_file=i)
         else:
             with open(self._filename) as f:
                 with open(self._retrieval_filename) as f_retrieval:
@@ -129,7 +130,7 @@ class CMCDatasetWithHistory(IterableDataset):
                             original_example: Dict[str, Any] = json.loads(line.strip())
                             retrieved_example: Dict[str, Any] = json.loads(line_retrieval.strip())
                             yield self._process_single_example_retrieval(
-                                original_example=original_example, retrieved_example=retrieved_example
+                                original_example=original_example, retrieved_example=retrieved_example, pos_in_file=i
                             )
 
     def __iter__(self) -> Iterator[SingleExample]:

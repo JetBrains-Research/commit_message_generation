@@ -29,6 +29,10 @@ isort = "^5.10.1"
 mypy = "^0.981"
 pytest = "^7.1.2"
 
+
+[tool.poetry.group.retrieval.dependencies]
+annoy = "^1.17.1"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

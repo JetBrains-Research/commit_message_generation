@@ -64,7 +64,7 @@ def main(cfg: TrainConfig) -> None:
     )
 
     if local_rank == 0:
-        dm.prepare_data()
+        dm.prepare_data(stage="fit")
     dm.setup(stage="fit")
 
     batch_size = cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.accumulate_grad_batches * world_size
