@@ -88,8 +88,8 @@ def test_decoder_input_without_history_no_shift(default_tokenizers):
     encoder_tok, decoder_tok = default_tokenizers
 
     inputs = [
-        SingleExample(diff_input_ids=[], msg_input_ids=[i for i in range(128)], history_input_ids=[]),
-        SingleExample(diff_input_ids=[], msg_input_ids=[i for i in range(3)], history_input_ids=[]),
+        SingleExample(diff_input_ids=[], msg_input_ids=[i for i in range(128)], history_input_ids=[], pos_in_file=0),
+        SingleExample(diff_input_ids=[], msg_input_ids=[i for i in range(3)], history_input_ids=[], pos_in_file=1),
     ]
     for encoder_input_type in ["diff", "history"]:
         no_shift_data_collator = DataCollatorTrain(
@@ -151,8 +151,8 @@ def test_decoder_input_without_history_shift(default_tokenizers):
     encoder_tok, decoder_tok = default_tokenizers
 
     inputs = [
-        SingleExample(diff_input_ids=[], msg_input_ids=[i for i in range(128)], history_input_ids=[]),
-        SingleExample(diff_input_ids=[], msg_input_ids=[i for i in range(3)], history_input_ids=[]),
+        SingleExample(diff_input_ids=[], msg_input_ids=[i for i in range(128)], history_input_ids=[], pos_in_file=0),
+        SingleExample(diff_input_ids=[], msg_input_ids=[i for i in range(3)], history_input_ids=[], pos_in_file=1),
     ]
 
     for encoder_input_type in ["diff", "history"]:
@@ -227,8 +227,9 @@ def test_decoder_input_with_history_no_shift(default_tokenizers):
             diff_input_ids=[],
             msg_input_ids=[i for i in range(5, 255)],
             history_input_ids=[[i] for i in range(256, 512)],
+            pos_in_file=0,
         ),
-        SingleExample(diff_input_ids=[], msg_input_ids=[i for i in range(5, 255)], history_input_ids=[]),
+        SingleExample(diff_input_ids=[], msg_input_ids=[i for i in range(5, 255)], history_input_ids=[], pos_in_file=1),
     ]
 
     data_collator = DataCollatorTrain(
@@ -301,8 +302,9 @@ def test_decoder_input_with_history_shift(default_tokenizers):
             diff_input_ids=[],
             msg_input_ids=[i for i in range(5, 255)],
             history_input_ids=[[i] for i in range(256, 512)],
+            pos_in_file=0,
         ),
-        SingleExample(diff_input_ids=[], msg_input_ids=[i for i in range(5, 255)], history_input_ids=[]),
+        SingleExample(diff_input_ids=[], msg_input_ids=[i for i in range(5, 255)], history_input_ids=[], pos_in_file=1),
     ]
 
     no_shift_data_collator = DataCollatorTrain(

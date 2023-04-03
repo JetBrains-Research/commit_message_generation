@@ -1,7 +1,7 @@
 import logging
 import os
 from copy import deepcopy
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple
 
 import hydra
 import pytorch_lightning as pl
@@ -17,7 +17,7 @@ from src.data_utils.preprocessors import (
 from src.utils import get_decoder_start_token_id
 
 from .cmc_dataset_w_history import CMCDatasetWithHistory
-from .data_collators import DataCollatorTest, DataCollatorTrain
+from .data_collators import DataCollatorRetrieval, DataCollatorTest, DataCollatorTrain
 
 
 class CMCDataModule(pl.LightningDataModule):
@@ -32,6 +32,7 @@ class CMCDataModule(pl.LightningDataModule):
         world_size: int,
         shift_labels: bool,
         process_retrieved: bool,
+        do_retrieval: bool = False,
     ):
         super().__init__()
 
@@ -86,14 +87,21 @@ class CMCDataModule(pl.LightningDataModule):
             input_cfg=input_cfg, model_cfg=model_cfg, dataset_cfg=dataset_cfg, process_retrieved=process_retrieved
         )
 
+        if do_retrieval:
+            self.data_collator_retrieval = self._init_collator_retrieval(
+                input_cfg=input_cfg,
+                model_cfg=model_cfg,
+                dataset_cfg=dataset_cfg,
+            )
+
         self.train_dataloader_conf = dataset_cfg.train_dataloader_conf
         self.val_dataloader_conf = dataset_cfg.val_dataloader_conf
         self.test_dataloader_conf = dataset_cfg.test_dataloader_conf
 
         # datasets are initialized later
-        self.train = None
-        self.val = None
-        self.test = None
+        self.train: Optional[CMCDatasetWithHistory] = None
+        self.val: Optional[CMCDatasetWithHistory] = None
+        self.test: Optional[CMCDatasetWithHistory] = None
 
     def _init_preprocessor(self, preprocessor_configuration: str, preprocessor_chunksize: int) -> BasePreprocessor:
         """Initializes a correct preprocessor type based on passed configuration.
@@ -173,6 +181,28 @@ class CMCDataModule(pl.LightningDataModule):
             process_retrieved=process_retrieved,
             testing=dataset_cfg.testing,
             decoder_start_token_id=get_decoder_start_token_id(model_cfg),
+        )
+
+    def _init_collator_retrieval(
+        self,
+        input_cfg: InputConfig,
+        model_cfg: BaseModelConfig,
+        dataset_cfg: DatasetConfig,
+    ) -> DataCollatorRetrieval:
+        return DataCollatorRetrieval(
+            diff_bos_token_id=self.diff_tokenizer.bos_token_id,  # type: ignore[attr-defined]
+            diff_eos_token_id=self.diff_tokenizer.eos_token_id,  # type: ignore[attr-defined]
+            diff_pad_token_id=self.diff_tokenizer.pad_token_id,  # type: ignore[attr-defined]
+            msg_bos_token_id=self.msg_tokenizer.bos_token_id,  # type: ignore[attr-defined]
+            msg_eos_token_id=self.msg_tokenizer.eos_token_id,  # type: ignore[attr-defined]
+            msg_pad_token_id=self.msg_tokenizer.pad_token_id,  # type: ignore[attr-defined]
+            msg_sep_token_id=self.msg_tokenizer.sep_token_id,  # type: ignore[attr-defined]
+            encoder_input_type=input_cfg.encoder_input_type,
+            encoder_context_max_len=model_cfg.encoder_context_max_len,
+            decoder_context_max_len=model_cfg.decoder_context_max_len,
+            with_history=input_cfg.train_with_history,
+            testing=dataset_cfg.testing,
+            process_retrieved=False,
         )
 
     def _create_path(
@@ -271,8 +301,21 @@ class CMCDataModule(pl.LightningDataModule):
 
         return diff_tokenizer, msg_tokenizer
 
-    def prepare_data(self) -> None:  # type: ignore[override]
-        for part in ["train", "val", "test"]:
+    def prepare_data(self, stage: Optional[str] = None) -> None:  # type: ignore[override]
+        if stage is None:
+            logging.warning("Dry run: to actually process data, pass `stage` argument.")
+            return
+
+        elif stage == "fit" or stage == "sweep":
+            parts = ["train", "val"]
+        elif stage == "test":
+            parts = ["test"]
+        elif stage == "retrieve":
+            parts = ["train", "val", "test"]
+        else:
+            raise ValueError("Unknown stage configuration. Pass one of: `fit`, `test`, `retrieve`.")
+
+        for part in parts:
             input_dir = self._dataset_root
             data_dir = self._data_path
 
@@ -387,3 +430,30 @@ class CMCDataModule(pl.LightningDataModule):
             num_workers=self.test_dataloader_conf.num_workers,
             collate_fn=self.data_collator_test,
         )
+
+    def retrieval_dataloader(self, part: str):
+        if part == "train":
+            assert self.train
+            return self.train.get_dataloader(
+                batch_size=self.train_dataloader_conf.batch_size,
+                num_workers=self.train_dataloader_conf.num_workers,
+                collate_fn=self.data_collator_retrieval,
+            )
+
+        if part == "val":
+            assert self.val
+            return self.val.get_dataloader(
+                batch_size=self.val_dataloader_conf.batch_size,
+                num_workers=self.val_dataloader_conf.num_workers,
+                collate_fn=self.data_collator_retrieval,
+            )
+
+        if part == "test":
+            assert self.test
+            return self.test.get_dataloader(
+                batch_size=self.test_dataloader_conf.batch_size,
+                num_workers=self.test_dataloader_conf.num_workers,
+                collate_fn=self.data_collator_retrieval,
+            )
+
+        raise ValueError("Unknown dataset part; please, specify one of `train`, `val`, `test`.")

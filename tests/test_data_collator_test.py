@@ -32,13 +32,15 @@ def default_tokenizers():
 def test_decoder_input_with_history(msgs, histories, default_tokenizers):
     encoder_tok, decoder_tok = default_tokenizers
     inputs = []
-    for msg, history in zip(msgs, histories):
+    for i, (msg, history) in enumerate(zip(msgs, histories)):
         msgs_ids = decoder_tok(msg, add_special_tokens=False, padding=False, truncation=False).input_ids
         if history:
             history_ids = decoder_tok(history, add_special_tokens=False, padding=False, truncation=False).input_ids
         else:
             history_ids = []
-        inputs.append(SingleExample(diff_input_ids=[], msg_input_ids=msgs_ids, history_input_ids=history_ids))
+        inputs.append(
+            SingleExample(diff_input_ids=[], msg_input_ids=msgs_ids, history_input_ids=history_ids, pos_in_file=i)
+        )
 
     for context_ratio in [0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1.0]:
 
@@ -92,8 +94,9 @@ def test_decoder_input_without_history(default_tokenizers):
             diff_input_ids=[],
             msg_input_ids=decoder_tok(msg, padding=False, truncation=False).input_ids,
             history_input_ids=[],
+            pos_in_file=i,
         )
-        for msg in msgs
+        for i, msg in enumerate(msgs)
     ]
 
     for context_ratio in [0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 1.0]:

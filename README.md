@@ -21,7 +21,7 @@ task.
 
 This project provides dependencies for two Python dependency managers:
 * Poetry: [`poetry.lock`](poetry.lock), [`pyproject.toml`](pyproject.toml)
-* pip: [`requirements.txt`](requirements.txt) (obtained through `poetry export --with dev --output requirements.txt`)
+* pip: [`requirements.txt`](requirements.txt) (obtained through `poetry export --with dev,retrieval --output requirements.txt`)
      
 ## Usage
 
@@ -103,6 +103,10 @@ To launch training of model defined as `XXXModelConfig` and registered via `Conf
 ```
 python train.py +model=XXX ++input.train_with_history=X ++input.encoder_input_type=X
 ```
+
+#### Additional steps for RACE model
+
+> :construction: Experiments with RACE model require slightly different procedure. It will be described in this section.
 
 ### Step 4: Evaluate
 

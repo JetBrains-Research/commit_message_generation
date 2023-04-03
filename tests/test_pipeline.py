@@ -59,21 +59,22 @@ def test_eval_pipeline(tmp_path):
         os.chdir("..")
 
     for use_history in ["true", "false"]:
-        command = (
-            "python eval.py +model=codet5 "
-            "++input.encoder_input_type=diff "
-            f"++input.train_with_history={use_history} "
-            f"++input.generate_with_history={use_history} "
-            "++input.context_ratio=0.5 "
-            "++trainer.accelerator=cpu "
-            "++trainer.devices=1 "
-            "++dataset.use_eval_downsample=false "
-            "++dataset.use_cache=false "
-            f'++dataset.dataset_root="{root_dir}" '
-            "++dataset.test_dataloader_conf.batch_size=1 "
-            "++logger.use_wandb=false"
-        )
-        process = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = process.communicate()
-        output_lines = re.split(r"[\n\r]", stdout.decode("utf-8"))
-        assert any(line.startswith("Testing DataLoader 0: 100%") for line in output_lines)
+        for context_ratio in [0.0, 0.5]:
+            command = (
+                "python eval.py +model=codet5 "
+                "++input.encoder_input_type=diff "
+                f"++input.train_with_history={use_history} "
+                f"++input.generate_with_history={use_history} "
+                f"++input.context_ratio={context_ratio} "
+                "++trainer.accelerator=cpu "
+                "++trainer.devices=1 "
+                "++dataset.use_eval_downsample=false "
+                "++dataset.use_cache=false "
+                f'++dataset.dataset_root="{root_dir}" '
+                "++dataset.test_dataloader_conf.batch_size=1 "
+                "++logger.use_wandb=false"
+            )
+            process = subprocess.Popen(command.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = process.communicate()
+            output_lines = re.split(r"[\n\r]", stdout.decode("utf-8"))
+            assert any(line.startswith("Testing DataLoader 0: 100%") for line in output_lines)
