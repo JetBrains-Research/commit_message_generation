@@ -37,6 +37,10 @@ class VocabPrefixTree:
 
         return tokens
 
+    @property
+    def vocab(self):
+        return self._vocab
+
 
 class PrefixAllowedTokens:
     def __init__(
@@ -59,7 +63,7 @@ class PrefixAllowedTokens:
 
         # when given prefix is empty, we can generate any token
         if not self._prefix[batch_id]:
-            return list(self._tokenizer.vocab.values())  # type: ignore[attr-defined]
+            return list(self._trie.vocab.values())  # type: ignore[attr-defined]
 
         # if we haven't generated prefix or its part yet, we can:
         # 1) generate tokens starting with the prefix
@@ -68,7 +72,7 @@ class PrefixAllowedTokens:
             res = self._trie.get_tokens(self._prefix[batch_id])
         # if we've already generated the prefix, we can generate any token
         elif decoded_sentence.startswith(self._prefix[batch_id]):
-            res = list(self._tokenizer.vocab.values())  # type: ignore[attr-defined]
+            res = list(self._trie.vocab.values())  # type: ignore[attr-defined]
         # if we've generated only part of the prefix, we can:
         # 1) generate tokens starting with its remaining part
         # 2) generate tokens which are prefixes for its remaining part

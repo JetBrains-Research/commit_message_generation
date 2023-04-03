@@ -163,12 +163,15 @@ class CMCModule(pl.LightningModule):
         if not kwargs:
             kwargs = self.generation_kwargs  # type: ignore[assignment]
 
-        prefix_fn = PrefixAllowedTokens(
-            prefix={i: prefix for i, prefix in enumerate(batch.prefixes)},
-            context_len={i: len(msg) for i, msg in enumerate(batch.decoder_input_ids)},
-            trie=self.vocab_trie,
-            tokenizer=self._msg_tokenizer,
-        )
+        prefix_fn = None
+        if any(prefix for prefix in batch.prefixes):
+            prefix_fn = PrefixAllowedTokens(
+                prefix={i: prefix for i, prefix in enumerate(batch.prefixes)},
+                context_len={i: len(msg) for i, msg in enumerate(batch.decoder_input_ids)},
+                trie=self.vocab_trie,
+                tokenizer=self._msg_tokenizer,
+            )
+
         return self.model.generate(
             batch,
             **kwargs,
