@@ -50,8 +50,9 @@ def export_model_checkpoint(cfg: RetrievalConfig) -> None:
             model_cfg=cfg.model,
         )
 
-        os.makedirs(os.path.join(cfg.ckpt_path, "transformers_format"), exist_ok=True)
-        module.model.save_pretrained(os.path.join(cfg.ckpt_path, "transformers_format"))
+        transformers_ckpt_path = os.path.join(cfg.ckpt_path.split("/")[-1], "transformers_format")
+        os.makedirs(transformers_ckpt_path, exist_ok=True)
+        module.model.save_pretrained(transformers_ckpt_path)
 
 
 @hydra.main(version_base="1.1", config_path="conf", config_name="retrieval_config")
