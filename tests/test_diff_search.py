@@ -24,7 +24,6 @@ def angular_dist(x: List[float], y: List[float]) -> float:
 
 
 def test_idxs_out_of_order(tmp_path):
-    os.chdir(tmp_path)
     search = DiffSearch(embeddings_dim=3, num_trees=3, metric="angular", load_index=False)
     search.add(CommitEmbeddingExample(diff_embedding=np.array([0, 0, 1]), pos_in_file=1))
     search.add(CommitEmbeddingExample(diff_embedding=np.array([1, 1, 1]), pos_in_file=2))
@@ -37,8 +36,6 @@ def test_idxs_out_of_order(tmp_path):
 
 
 def test_train_logic(tmp_path):
-    os.chdir(tmp_path)
-
     search = DiffSearch(embeddings_dim=3, num_trees=3, metric="angular", load_index=False)
     search.add(CommitEmbeddingExample(diff_embedding=np.array([1, 0, 1]), pos_in_file=0))
     search.add(CommitEmbeddingExample(diff_embedding=np.array([0, 0, 1]), pos_in_file=1))
@@ -61,8 +58,6 @@ def test_train_logic(tmp_path):
 
 
 def test_nn_search(tmp_path):
-    os.chdir(tmp_path)
-
     search = DiffSearch(embeddings_dim=3, num_trees=3, metric="angular", load_index=False)
     search.add(CommitEmbeddingExample(diff_embedding=np.array([0, 0, 1]), pos_in_file=1))
     search.add(CommitEmbeddingExample(diff_embedding=np.array([1, 1, 1]), pos_in_file=2))

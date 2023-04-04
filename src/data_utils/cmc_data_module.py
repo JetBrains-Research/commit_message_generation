@@ -32,7 +32,6 @@ class CMCDataModule(pl.LightningDataModule):
         world_size: int,
         shift_labels: bool,
         process_retrieved: bool,
-        do_retrieval: bool = False,
     ):
         super().__init__()
 
@@ -87,12 +86,11 @@ class CMCDataModule(pl.LightningDataModule):
             input_cfg=input_cfg, model_cfg=model_cfg, dataset_cfg=dataset_cfg, process_retrieved=process_retrieved
         )
 
-        if do_retrieval:
-            self.data_collator_retrieval = self._init_collator_retrieval(
-                input_cfg=input_cfg,
-                model_cfg=model_cfg,
-                dataset_cfg=dataset_cfg,
-            )
+        self.data_collator_retrieval = self._init_collator_retrieval(
+            input_cfg=input_cfg,
+            model_cfg=model_cfg,
+            dataset_cfg=dataset_cfg,
+        )
 
         self.train_dataloader_conf = dataset_cfg.train_dataloader_conf
         self.val_dataloader_conf = dataset_cfg.val_dataloader_conf

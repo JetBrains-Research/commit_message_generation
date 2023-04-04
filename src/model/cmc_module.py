@@ -327,6 +327,9 @@ class CMCModule(pl.LightningModule):
         }
         return [optimizer], [scheduler]
 
+    def save_pretrained(self, path: str) -> None:
+        self.model.save_pretrained(path)
+
     def decode_src(self, *args, **kwargs):
         return tuple(self._diff_tokenizer.batch_decode(arg, **kwargs) for arg in args)
 

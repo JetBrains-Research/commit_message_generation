@@ -14,3 +14,6 @@ class BaseModel(nn.Module):
 
     def num_parameters(self, exclude_embeddings: bool):
         raise NotImplementedError()
+
+    def save_pretrained(self, path: str) -> None:
+        raise NotImplementedError()

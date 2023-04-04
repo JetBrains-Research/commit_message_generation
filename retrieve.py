@@ -5,13 +5,14 @@ from typing import List, Optional
 import hydra
 import jsonlines
 import wandb
+from omegaconf import OmegaConf
 from tqdm import tqdm
 
 from conf import RetrievalConfig
 from src.data_utils import CMCDataModule
 from src.model import CMCModule
 from src.retrieval import DiffSearch, TransformerEmbedder
-from src.retrieval.utils import RetrievalPrediction
+from src.retrieval.utils import CommitEmbeddingExample, RetrievalPrediction
 from src.utils import WandbOrganizer
 
 
@@ -40,19 +41,19 @@ def download_artifact(cfg: RetrievalConfig, run: wandb.wandb_sdk.wandb_run.Run, 
     )
 
 
-def export_model_checkpoint(cfg: RetrievalConfig) -> None:
+def export_model_checkpoint(cfg: RetrievalConfig) -> str:
     """Helper function to export model weights in Transformers format from Lightning checkpoint."""
-    if cfg.ckpt_path:
-        print(f"Checkpoint path: {cfg.ckpt_path}")
+    logging.info(f"Checkpoint path: {cfg.ckpt_path}")
 
-        module = CMCModule.load_from_checkpoint(
-            cfg.ckpt_path,
-            model_cfg=cfg.model,
-        )
+    module = CMCModule.load_from_checkpoint(
+        cfg.ckpt_path,
+        model_cfg=cfg.model,
+    )
 
-        transformers_ckpt_path = os.path.join(cfg.ckpt_path.split("/")[-1], "transformers_format")
-        os.makedirs(transformers_ckpt_path, exist_ok=True)
-        module.model.save_pretrained(transformers_ckpt_path)
+    transformers_ckpt_path = os.path.join(cfg.ckpt_path.split("/")[-1], "transformers_format")
+    os.makedirs(transformers_ckpt_path, exist_ok=True)
+    module.save_pretrained(transformers_ckpt_path)
+    return transformers_ckpt_path
 
 
 @hydra.main(version_base="1.1", config_path="conf", config_name="retrieval_config")
@@ -73,7 +74,10 @@ def main(cfg: RetrievalConfig) -> None:
                 os.environ["WANDB_API_KEY"] = f.read().strip()
 
         run = wandb.init(  # type: ignore[assignment]
-            project=cfg.logger.project, name=f"{run_name}_retrieval", job_type="retrieval"
+            project=cfg.logger.project,
+            name=f"{run_name}_retrieval",
+            config=OmegaConf.to_container(cfg, resolve=True),  # type: ignore[arg-type]
+            job_type="retrieval",
         )
         assert run is not None
 
@@ -88,7 +92,7 @@ def main(cfg: RetrievalConfig) -> None:
     # ------------------------------
     assert cfg.ckpt_path
     cfg.ckpt_path = hydra.utils.to_absolute_path(cfg.ckpt_path)
-    export_model_checkpoint(cfg)
+    transformers_ckpt_path = export_model_checkpoint(cfg)
 
     # ----------------------------
     # -    preprocess data      -
@@ -108,7 +112,34 @@ def main(cfg: RetrievalConfig) -> None:
     # -----------------------------
     # -   build embeddings index  -
     # -----------------------------
-    embedder = TransformerEmbedder(name_or_path=os.path.join(cfg.ckpt_path, "transformers_format"), device=cfg.device)
+    embedder = TransformerEmbedder(
+        name_or_path=transformers_ckpt_path,
+        device=cfg.embedder.device,
+        precision=cfg.embedder.precision,
+        normalize_embeddings=cfg.embedder.normalize_embeddings,
+    )
+
+    for part in ["train", "val", "test"]:
+        open(f"{part}_embeddings.jsonl", "w").close()
+        embeddings: List[CommitEmbeddingExample] = []
+        for batch in tqdm(dm.retrieval_dataloader(part=part), desc=f"Obtaining embeddings for {part}"):
+            if len(embeddings) > 10000:
+                with jsonlines.open(f"{part}_embeddings.jsonl", "a") as writer:
+                    writer.write_all(
+                        [
+                            {
+                                "diff_embedding": embedding["diff_embedding"].tolist(),
+                                "pos_in_file": embedding["pos_in_file"],
+                            }
+                            for embedding in embeddings
+                        ]
+                    )
+                embeddings = []
+
+            embeddings.extend(embedder.transform(batch))
+        if len(embeddings) > 0:
+            with jsonlines.open(f"{part}_embeddings.jsonl", "a") as writer:
+                writer.write_all(embeddings)
 
     os.makedirs(hydra.utils.to_absolute_path(cfg.search.index_root_dir), exist_ok=True)
     search = DiffSearch(
@@ -118,8 +149,11 @@ def main(cfg: RetrievalConfig) -> None:
         index_root_dir=hydra.utils.to_absolute_path(cfg.search.index_root_dir),
     )
     if not cfg.search.load_index:
-        for batch in tqdm(dm.retrieval_dataloader(part="train"), desc="Building embeddings index"):
-            search.add_batch(embedder.transform(batch))
+        with jsonlines.open("train_embeddings.jsonl", "r") as reader:
+            for line in tqdm(reader, total=len(dm.train), desc="Building embeddings index for train"):  # type: ignore[arg-type]
+                search.add(
+                    CommitEmbeddingExample(diff_embedding=line["diff_embedding"], pos_in_file=line["pos_in_file"])
+                )
         search.finalize()
 
     # ------------------------------
@@ -128,17 +162,19 @@ def main(cfg: RetrievalConfig) -> None:
     for part in ["train", "val", "test"]:
         logging.info(f"Start processing {part}")
 
-        open(f"{part}_predictions.jsonl", "w").close()
         predictions: List[RetrievalPrediction] = []
-        for batch in tqdm(dm.retrieval_dataloader(part=part), desc=f"Retrieving predictions for {part}"):
-            if len(predictions) > 1000:
-                with jsonlines.open(f"{part}_predictions.jsonl", "a") as writer:
-                    writer.write_all(
-                        [{"pos_in_file": pred["pos_in_file"], "distance": pred["distance"]} for pred in predictions]
-                    )
-                predictions = []
+        open(f"{part}_predictions.jsonl", "w").close()
+        with jsonlines.open(f"{part}_embeddings.jsonl", "r") as reader:
+            for line in tqdm(reader, total=len(dm.train), desc=f"Retrieving predictions for {part}"):  # type: ignore[arg-type]
 
-            predictions.extend(search.predict_batch(embedder.transform(batch), is_train=(part == "train")))
+                if len(predictions) > 10000:
+                    with jsonlines.open(f"{part}_predictions.jsonl", "a") as writer:
+                        writer.write_all(
+                            [{"pos_in_file": pred["pos_in_file"], "distance": pred["distance"]} for pred in predictions]
+                        )
+                    predictions = []
+
+                predictions.append(search.predict(diff_embedding=line["diff_embedding"], is_train=(part == "train")))
 
         if len(predictions) > 0:
             with jsonlines.open(f"{part}_predictions.jsonl", "a") as writer:
