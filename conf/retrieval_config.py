@@ -71,22 +71,38 @@ class WandbRetrievalConfig:
 
 
 @dataclass
-class RetrievalConfig:
+class EmbedderConfig:
     """
-    Configuration for evaluation.
+    Configuration for Transformer encoder that is used to construct embeddings.
 
     Args:
         device: Set to `cpu` to run model on CPU and `cuda` to run model on GPU. Currently, only single-GPU setting is supported; if your system has more than 1 GPU, make sure to set CUDA_VISIBLE_DEVICES enviromental variable to a single GPU.
+        precision: Set to 16 to use native mixed precision from PyTorch.
+        normalize_embeddings: Set to True to normalize embeddings, so that L2-norm is equal to 1.
+    """
+
+    device: str = "cpu"
+    precision: int = 16
+    normalize_embeddings: bool = True
+
+
+@dataclass
+class RetrievalConfig:
+    """
+    Configuration for retrieval.
+
+    Args:
         ckpt_path: Local path to model checkpoint. Instead of this, you can also define a configuration for loading artifact at WandbEvalConfig.
     """
 
     defaults: List[Any] = field(default_factory=lambda: ["_self_", {"dataset": "multilang"}])
-    device: str = "cpu"
+
     ckpt_path: str = ""
     dataset: DatasetConfig = MISSING
     model: BaseModelConfig = MISSING
     input: InputConfig = field(default_factory=InputConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
+    embedder: EmbedderConfig = field(default_factory=EmbedderConfig)
     logger: WandbRetrievalConfig = field(default_factory=WandbRetrievalConfig)
 
 

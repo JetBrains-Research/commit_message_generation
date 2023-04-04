@@ -238,3 +238,6 @@ class EncoderDecoderWrapper(BaseModel):
 
     def num_parameters(self, exclude_embeddings: bool):
         return self.model.num_parameters(exclude_embeddings=exclude_embeddings)
+
+    def save_pretrained(self, path: str) -> None:
+        self.model.save_pretrained(path)

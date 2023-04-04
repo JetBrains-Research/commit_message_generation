@@ -19,7 +19,9 @@ def create_batch(inputs: List[str], tokenizer: PreTrainedTokenizerFast) -> Batch
 
 
 def test_bert_embedder():
-    embedder = TransformerEmbedder(name_or_path="bert-base-uncased")
+    embedder = TransformerEmbedder(
+        name_or_path="bert-base-uncased", device="cpu", precision=123, normalize_embeddings=True
+    )
     assert embedder.embeddings_dim == embedder.model.config.hidden_size
 
     inputs = ["example input", "another example input"]
@@ -33,7 +35,7 @@ def test_bert_embedder():
 
 
 def test_t5_embedder():
-    embedder = TransformerEmbedder(name_or_path="t5-small")
+    embedder = TransformerEmbedder(name_or_path="t5-small", device="cpu", precision=123, normalize_embeddings=True)
     assert embedder.embeddings_dim == embedder.model.config.d_model
 
     inputs = ["example input", "another example input"]
