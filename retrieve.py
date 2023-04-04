@@ -54,7 +54,7 @@ def export_model_checkpoint(cfg: RetrievalConfig) -> None:
         module.model.save_pretrained(os.path.join(cfg.ckpt_path, "transformers_format"))
 
 
-@hydra.main(version_base="1.1", config_path="conf", config_name="retrieve_config")
+@hydra.main(version_base="1.1", config_path="conf", config_name="retrieval_config")
 def main(cfg: RetrievalConfig) -> None:
     run_name = WandbOrganizer.get_run_name(
         cfg.model,
