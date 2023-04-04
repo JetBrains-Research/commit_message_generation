@@ -15,7 +15,7 @@ from src.retrieval.utils import RetrievalPrediction
 from src.utils import WandbOrganizer
 
 
-def download_artifact(cfg: RetrievalConfig, run: wandb.wandb_sdk.wandb_run.Run) -> str:
+def download_artifact(cfg: RetrievalConfig, run: wandb.wandb_sdk.wandb_run.Run, artifact_name: str) -> str:
     """Helper function to download relevant artifact from W&B.
 
     Args:
@@ -25,17 +25,17 @@ def download_artifact(cfg: RetrievalConfig, run: wandb.wandb_sdk.wandb_run.Run) 
     Returns:
         A local path to the artifact.
     """
-    artifact_name = f"{cfg.logger.input_artifact.project}/{run.name}:{cfg.logger.input_artifact.version}"
-    artifact = run.use_artifact(artifact_name)
+    full_artifact_name = f"{cfg.logger.input_artifact.project}/{artifact_name}:{cfg.logger.input_artifact.version}"
+    artifact = run.use_artifact(full_artifact_name)
     if "tags" in artifact.metadata:
         run.tags = artifact.metadata["tags"]
 
     artifact.get_path(cfg.logger.input_artifact.artifact_path).download(
-        root=hydra.utils.to_absolute_path(f"{cfg.logger.input_artifact.local_path}/{run.name}")
+        root=hydra.utils.to_absolute_path(f"{cfg.logger.input_artifact.local_path}/{artifact_name}")
     )
 
     return os.path.join(
-        hydra.utils.to_absolute_path(f"{cfg.logger.input_artifact.local_path}/{run.name}"),
+        hydra.utils.to_absolute_path(f"{cfg.logger.input_artifact.local_path}/{artifact_name}"),
         cfg.logger.input_artifact.artifact_path,
     )
 
@@ -78,7 +78,7 @@ def main(cfg: RetrievalConfig) -> None:
 
         if cfg.logger.download_artifact:
             logging.info("Downloading artifact from W&B")
-            cfg.ckpt_path = download_artifact(run=run, cfg=cfg)
+            cfg.ckpt_path = download_artifact(run=run, cfg=cfg, artifact_name=run_name)
     else:
         run = None
 
