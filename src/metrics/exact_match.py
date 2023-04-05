@@ -15,7 +15,7 @@ class ExactMatch(Metric):
         n: Number of words to compare. Optional, full sequences will be considered if n is not given.
     """
 
-    def __init__(self, n: Optional[int] = None, dist_sync_on_step=False) -> None:
+    def __init__(self, n: Optional[int] = None, dist_sync_on_step: bool = False) -> None:
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
         self.n = n

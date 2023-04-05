@@ -17,7 +17,7 @@ class EditSimilarity(Metric):
         insertion_cost: int = 1,
         deletion_cost: int = 1,
         substitution_cost: int = 1,
-        dist_sync_on_step: Optional[bool] = False,
+        dist_sync_on_step: bool = False,
     ) -> None:
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 

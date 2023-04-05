@@ -68,7 +68,7 @@ class TrainerTrainConfig:
 
     Note:
         Defined fields are just the most frequently use arguments. You can easily add new ones using Hydra's
-        override logic. E.g. `python train.py ++trainer.val_check_interval=0.25`
+        override logic. E.g. `python train.py  ++trainer.devices=4 ++trainer.strategy=ddp`
     """
 
     max_epochs: int = 5
@@ -79,6 +79,7 @@ class TrainerTrainConfig:
     gradient_clip_val: float = 1.0
     accelerator: str = "gpu"
     devices: Any = 1
+    val_check_interval: Any = 1
     limit_train_batches: Optional[int] = None
     limit_val_batches: Optional[int] = None
 

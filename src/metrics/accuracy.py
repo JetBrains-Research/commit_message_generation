@@ -8,7 +8,9 @@ class Accuracy(Metric):
     # https://devblog.pytorchlightning.ai/torchmetrics-v0-9-faster-forward-d595bb321e6d
     full_state_update: bool = False
 
-    def __init__(self, top_k: int = 5, ignore_index: int = -100, shift: bool = True, dist_sync_on_step=False) -> None:
+    def __init__(
+        self, top_k: int = 5, ignore_index: int = -100, shift: bool = True, dist_sync_on_step: bool = False
+    ) -> None:
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
         self.top_k = top_k

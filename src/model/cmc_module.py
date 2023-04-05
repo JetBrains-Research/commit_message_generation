@@ -214,6 +214,7 @@ class CMCModule(pl.LightningModule):
             on_epoch=True,
             logger=True,
             batch_size=len(batch.encoder_input_ids),
+            sync_dist=True,
         )
         return {"loss": outputs.loss}
 
@@ -319,8 +320,8 @@ class CMCModule(pl.LightningModule):
         scheduler = {
             "scheduler": get_linear_schedule_with_warmup(
                 optimizer,
-                num_warmup_steps=num_warmup_steps,
-                num_training_steps=self.trainer.estimated_stepping_batches,
+                num_warmup_steps=num_warmup_steps // self.trainer.num_gpus,
+                num_training_steps=self.trainer.estimated_stepping_batches // self.trainer.num_gpus,
             ),
             "interval": "step",
             "frequency": 1,
