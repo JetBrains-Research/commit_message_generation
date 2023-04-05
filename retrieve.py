@@ -119,28 +119,6 @@ def main(cfg: RetrievalConfig) -> None:
         normalize_embeddings=cfg.embedder.normalize_embeddings,
     )
 
-    for part in ["train", "val", "test"]:
-        open(f"{part}_embeddings.jsonl", "w").close()
-        embeddings: List[CommitEmbeddingExample] = []
-        for batch in tqdm(dm.retrieval_dataloader(part=part), desc=f"Obtaining embeddings for {part}"):
-            if len(embeddings) > 10000:
-                with jsonlines.open(f"{part}_embeddings.jsonl", "a") as writer:
-                    writer.write_all(
-                        [
-                            {
-                                "diff_embedding": embedding["diff_embedding"].tolist(),
-                                "pos_in_file": embedding["pos_in_file"],
-                            }
-                            for embedding in embeddings
-                        ]
-                    )
-                embeddings = []
-
-            embeddings.extend(embedder.transform(batch))
-        if len(embeddings) > 0:
-            with jsonlines.open(f"{part}_embeddings.jsonl", "a") as writer:
-                writer.write_all(embeddings)
-
     os.makedirs(hydra.utils.to_absolute_path(cfg.search.index_root_dir), exist_ok=True)
     search = DiffSearch(
         num_trees=cfg.search.num_trees,
@@ -148,12 +126,10 @@ def main(cfg: RetrievalConfig) -> None:
         load_index=cfg.search.load_index,
         index_root_dir=hydra.utils.to_absolute_path(cfg.search.index_root_dir),
     )
+
     if not cfg.search.load_index:
-        with jsonlines.open("train_embeddings.jsonl", "r") as reader:
-            for line in tqdm(reader, total=len(dm.train), desc="Building embeddings index for train"):  # type: ignore[arg-type]
-                search.add(
-                    CommitEmbeddingExample(diff_embedding=line["diff_embedding"], pos_in_file=line["pos_in_file"])
-                )
+        for batch in tqdm(dm.retrieval_dataloader(part="train"), desc="Building embeddings index"):
+            search.add_batch(embedder.transform(batch))
         search.finalize()
 
     # ------------------------------
@@ -162,19 +138,17 @@ def main(cfg: RetrievalConfig) -> None:
     for part in ["train", "val", "test"]:
         logging.info(f"Start processing {part}")
 
-        predictions: List[RetrievalPrediction] = []
         open(f"{part}_predictions.jsonl", "w").close()
-        with jsonlines.open(f"{part}_embeddings.jsonl", "r") as reader:
-            for line in tqdm(reader, total=len(dm.train), desc=f"Retrieving predictions for {part}"):  # type: ignore[arg-type]
+        predictions: List[RetrievalPrediction] = []
+        for batch in tqdm(dm.retrieval_dataloader(part=part), desc=f"Retrieving predictions for {part}"):
+            if len(predictions) > 10000:
+                with jsonlines.open(f"{part}_predictions.jsonl", "a") as writer:
+                    writer.write_all(
+                        [{"pos_in_file": pred["pos_in_file"], "distance": pred["distance"]} for pred in predictions]
+                    )
+                predictions = []
 
-                if len(predictions) > 10000:
-                    with jsonlines.open(f"{part}_predictions.jsonl", "a") as writer:
-                        writer.write_all(
-                            [{"pos_in_file": pred["pos_in_file"], "distance": pred["distance"]} for pred in predictions]
-                        )
-                    predictions = []
-
-                predictions.append(search.predict(diff_embedding=line["diff_embedding"], is_train=(part == "train")))
+            predictions.extend(search.predict_batch(embedder.transform(batch), is_train=(part == "train")))
 
         if len(predictions) > 0:
             with jsonlines.open(f"{part}_predictions.jsonl", "a") as writer:
