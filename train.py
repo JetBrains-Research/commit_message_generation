@@ -120,6 +120,10 @@ def main(cfg: TrainConfig) -> None:
     )
     early_stopping_callback = EarlyStopping(monitor="val_loss", mode="min", verbose=True)
 
+    if isinstance(cfg.trainer.val_check_interval, float) and world_size > 1:
+        logging.warning("Will divide `val_check_interval` by number of GPUs.")
+        cfg.trainer.val_check_interval /= world_size
+
     # trainer
     trainer = pl.Trainer(
         **cfg.trainer,  # type: ignore[arg-type]

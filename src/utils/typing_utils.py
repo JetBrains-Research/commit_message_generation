@@ -43,15 +43,15 @@ class Batch:
         self.encoder_attention_mask = self.encoder_attention_mask.pin_memory()
         self.decoder_input_ids = self.decoder_input_ids.pin_memory()
         self.decoder_attention_mask = self.decoder_attention_mask.pin_memory()
-        if self.labels:
+        if self.labels is not None:
             self.labels = self.labels.pin_memory()
-        if self.retrieved_diff_input_ids:
+        if self.retrieved_diff_input_ids is not None:
             self.retrieved_diff_input_ids = self.retrieved_diff_input_ids.pin_memory()
-        if self.retrieved_diff_attention_mask:
+        if self.retrieved_diff_attention_mask is not None:
             self.retrieved_diff_attention_mask = self.retrieved_diff_attention_mask.pin_memory()
-        if self.retrieved_msg_input_ids:
+        if self.retrieved_msg_input_ids is not None:
             self.retrieved_msg_input_ids = self.retrieved_msg_input_ids.pin_memory()
-        if self.retrieved_msg_attention_mask:
+        if self.retrieved_msg_attention_mask is not None:
             self.retrieved_msg_attention_mask = self.retrieved_msg_attention_mask.pin_memory()
         return self
 
