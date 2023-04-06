@@ -282,7 +282,7 @@ class BasePreprocessor(ABC):
             part: Current dataset part.
 
         """
-        input_fname = os.path.join(data_dir, "train_processed.jsonl")
+        input_fname = os.path.join(data_dir, "train_shuffled.jsonl")
         retrieved_input_fname = os.path.join(retrieved_dir, f"{part}_predictions.jsonl")
         retrieved_output_fname = os.path.join(data_dir, f"retrieved_{part}_processed.jsonl")
 
@@ -297,13 +297,3 @@ class BasePreprocessor(ABC):
                     retrieved_example["distance"] = pred["distance"]
                     with jsonlines.open(retrieved_output_fname, "a") as writer:
                         writer.write(retrieved_example)
-
-        if part == "train":
-            if use_cache and os.path.exists(os.path.join(data_dir, f"retrieved_{part}_shuffled.jsonl")):
-                logging.info(f"retrieved_{part}_shuffled found, won't rewrite")
-            else:
-                logging.info("Shuffling train")
-                self._shuffle(
-                    input_path=retrieved_output_fname,
-                    output_path=os.path.join(data_dir, f"retrieved_{part}_shuffled.jsonl"),
-                )

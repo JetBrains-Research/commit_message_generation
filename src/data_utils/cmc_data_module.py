@@ -1,7 +1,7 @@
 import logging
 import os
 from copy import deepcopy
-from typing import Literal, Optional, Tuple
+from typing import Optional, Tuple
 
 import hydra
 import pytorch_lightning as pl
@@ -357,7 +357,7 @@ class CMCDataModule(pl.LightningDataModule):
                 retrieved_data_path=os.path.join(
                     self._data_path,
                     ("downsample" if self._use_train_downsample else ""),
-                    "retrieved_train_shuffled.jsonl",
+                    "retrieved_train_processed.jsonl",
                 )
                 if self._process_retrieved
                 else None,
