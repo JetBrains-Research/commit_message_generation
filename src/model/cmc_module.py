@@ -320,8 +320,8 @@ class CMCModule(pl.LightningModule):
         scheduler = {
             "scheduler": get_linear_schedule_with_warmup(
                 optimizer,
-                num_warmup_steps=num_warmup_steps // self.trainer.num_gpus,
-                num_training_steps=self.trainer.estimated_stepping_batches // self.trainer.num_gpus,
+                num_warmup_steps=num_warmup_steps // self.trainer.num_devices,
+                num_training_steps=self.trainer.estimated_stepping_batches // self.trainer.num_devices,
             ),
             "interval": "step",
             "frequency": 1,
