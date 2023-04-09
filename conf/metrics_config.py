@@ -16,13 +16,15 @@ class ArtifactMetricConfig:
     Attributes:
         project: W&B project.
         name: Name of W&B artifact.
-        version: Version tag of W&B artifact (it should also match the table name in artifact!)
+        version: Version tag of W&B artifact.
+        artifact_path: Path to model predictions in artifact.
         local_path: Path to save artifact locally.
     """
 
     project: str = "saridormi/commit_message_completion"
     name: str = MISSING
-    version: str = MISSING
+    version: str = "latest"
+    artifact_path: str = MISSING
     local_path: str = "artifacts"
 
 
@@ -50,22 +52,6 @@ class WandbMetricConfig:
 
 
 @dataclass
-class FilterConfig:
-    """
-    Configuration for additional data filtering.
-
-    Attributes:
-        language: Pass language name to only calculate metrics on commits on this language.
-        only_short_sequences: True to only calculate metrics on commits with diffs < 512 tokens.
-        only_long_sequences: True to only calculate metrics on commits with diffs > 512 tokens.
-    """
-
-    language: Optional[str] = None
-    only_short_sequences: Optional[bool] = None
-    only_long_sequences: Optional[bool] = None
-
-
-@dataclass
 class MetricsConfig:
     """
     Configuration for metrics calculation.
@@ -86,7 +72,6 @@ class MetricsConfig:
     dataset: DatasetConfig = MISSING
     input: InputConfig = field(default_factory=InputConfig)
     logger: WandbMetricConfig = field(default_factory=WandbMetricConfig)
-    filter: FilterConfig = field(default_factory=FilterConfig)
 
 
 cs = ConfigStore.instance()
