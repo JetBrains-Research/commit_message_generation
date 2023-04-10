@@ -11,7 +11,7 @@ from tqdm import tqdm
 from conf import RetrievalConfig
 from src.data_utils import CMCDataModule
 from src.model import CMCModule
-from src.retrieval import DiffSearch, TransformerEmbedder
+from src.retrieval import AnnoySearch, FaissSearch, TransformerEmbedder
 from src.retrieval.utils import CommitEmbeddingExample, RetrievalPrediction
 from src.utils import WandbOrganizer
 
@@ -120,11 +120,12 @@ def main(cfg: RetrievalConfig) -> None:
     )
 
     os.makedirs(hydra.utils.to_absolute_path(cfg.search.index_root_dir), exist_ok=True)
-    search = DiffSearch(
-        num_trees=cfg.search.num_trees,
+
+    search = FaissSearch(
         embeddings_dim=embedder.embeddings_dim,
         load_index=cfg.search.load_index,
         index_root_dir=hydra.utils.to_absolute_path(cfg.search.index_root_dir),
+        device=cfg.search.device
     )
 
     if not cfg.search.load_index:

@@ -22,6 +22,7 @@ rouge_score = "0.0.4"
 sacrebleu = "2.0.0"
 rapidfuzz = "2.0.11"
 marisa-trie = "^0.8.0"
+faiss-gpu = {version = "^1.7.2", platform = "linux"}
 
 [tool.poetry.group.dev.dependencies]
 black = "^22.6.0"
@@ -32,6 +33,7 @@ pytest = "^7.1.2"
 
 [tool.poetry.group.retrieval.dependencies]
 annoy = "^1.17.1"
+faiss-cpu = {version = "^1.7.3", platform = "darwin"}
 
 [build-system]
 requires = ["poetry-core"]

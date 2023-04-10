@@ -7,7 +7,7 @@ import numpy.typing as npt
 from ..utils import CommitEmbeddingExample, RetrievalPrediction
 
 
-class DiffSearch:
+class AnnoySearch:
     """This class is used to retrieve the nearest neighbor via the Annoy library."""
 
     def __init__(

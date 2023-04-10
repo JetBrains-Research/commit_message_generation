@@ -18,10 +18,9 @@ from .model.configs import (
 
 @dataclass
 class SearchConfig:
-    num_neighbors: int = 1
-    num_trees: int = 100
+    device: str = "cuda"
     load_index: bool = False
-    index_root_dir: str = "ann_indices"
+    index_root_dir: str = "faiss_indices"
 
 
 @dataclass

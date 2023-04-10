@@ -1,3 +1,4 @@
-from .diff import DiffSearch
+from .annoy import AnnoySearch
+from .faiss import FaissSearch
 
-__all__ = ["DiffSearch"]
+__all__ = ["AnnoySearch", "FaissSearch"]

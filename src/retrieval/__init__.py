@@ -1,4 +1,4 @@
 from .embedders import TransformerEmbedder
-from .search import DiffSearch
+from .search import AnnoySearch, FaissSearch
 
-__all__ = ["DiffSearch", "TransformerEmbedder"]
+__all__ = ["AnnoySearch", "FaissSearch", "TransformerEmbedder"]
