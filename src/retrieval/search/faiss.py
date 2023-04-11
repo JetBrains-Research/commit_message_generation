@@ -10,13 +10,7 @@ from ..utils import CommitEmbeddingExample, RetrievalPrediction
 class FaissSearch:
     """This class is used to retrieve the nearest neighbor via the Annoy library."""
 
-    def __init__(
-        self,
-        embeddings_dim: int,
-        load_index: bool,
-        index_root_dir: str = ".",
-        device: str = "cpu"
-    ) -> None:
+    def __init__(self, embeddings_dim: int, load_index: bool, index_root_dir: str = ".", device: str = "cpu") -> None:
 
         self._embeddings_dim = embeddings_dim
         self._index_root_dir = index_root_dir
@@ -40,9 +34,9 @@ class FaissSearch:
     def add_batch(self, batch: List[CommitEmbeddingExample]) -> None:
         """Adds a batch of items to the index."""
         embeddings: npt.NDArray = np.asarray([example["diff_embedding"] for example in batch])
+        ids: npt.NDArray = np.asarray([example["pos_in_file"] for example in batch])
         assert embeddings.shape == (len(batch), self._embeddings_dim)
 
-        ids = [example["pos_in_file"] for example in batch]
         self._index.add_with_ids(embeddings, ids)
 
     def finalize(self) -> None:
@@ -73,7 +67,10 @@ class FaissSearch:
         if is_train:
             retrieved_idxs, retrieved_distances = retrieved_idxs[:, 1:], retrieved_distances[:, 1:]
 
-        return [RetrievalPrediction(
-            distance=distance,
-            pos_in_file=idx,
-        ) for distance, idx in zip(retrieved_distances, retrieved_idxs)]
+        return [
+            RetrievalPrediction(
+                distance=distance,
+                pos_in_file=idx,
+            )
+            for distance, idx in zip(retrieved_distances, retrieved_idxs)
+        ]

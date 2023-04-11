@@ -1,6 +1,7 @@
 import logging
 from typing import List
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from transformers import AutoModel, AutoTokenizer
@@ -60,10 +61,7 @@ class TransformerEmbedder:
             embeddings = self._transform(batch)
 
         np_embeddings = embeddings.cpu().numpy()
-        return [
-            CommitEmbeddingExample(diff_embedding=np_embedding, pos_in_file=pos_in_file)
-            for np_embedding, pos_in_file in zip(np_embeddings, batch.pos_in_file)
-        ]
+        return CommitEmbeddingBatch(diff_embeddings=np_embeddings, pos_in_file=np.asarray(batch.pos_in_file))
 
     @property
     def embeddings_dim(self):

@@ -125,7 +125,7 @@ def main(cfg: RetrievalConfig) -> None:
         embeddings_dim=embedder.embeddings_dim,
         load_index=cfg.search.load_index,
         index_root_dir=hydra.utils.to_absolute_path(cfg.search.index_root_dir),
-        device=cfg.search.device
+        device=cfg.search.device,
     )
 
     if not cfg.search.load_index:
