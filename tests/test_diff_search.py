@@ -43,14 +43,14 @@ def test_train_logic(tmp_path):
     search.finalize()
 
     # searching for the nearest neighbor for embedding present in index returns itself
-    prediction = search.predict(np.array([1, 0, 1]), is_train=False)
+    prediction = search.predict(np.array([1, 0, 1]))
     assert prediction == RetrievalPrediction(
         distance=pytest.approx(angular_dist([1, 0, 1], [1, 0, 1]), abs=1e-7),
         pos_in_file=0,
     )
 
-    # but passing is_train=True fixes it
-    prediction = search.predict(np.array([1, 0, 1]), is_train=True)
+    # the expected way: use `predict_train` and pass idx of vector in index
+    prediction = search.predict_train(0)
     assert prediction == RetrievalPrediction(
         distance=pytest.approx(angular_dist([1, 0, 1], [1, 1, 1]), abs=1e-7),
         pos_in_file=2,
@@ -64,7 +64,7 @@ def test_nn_search(tmp_path):
     search.add(CommitEmbeddingExample(diff_embedding=np.array([1, 0, 1]), pos_in_file=0))
     search.finalize()
 
-    prediction = search.predict(np.array([1, 0, 1]), is_train=False)
+    prediction = search.predict(np.array([1, 0, 1]))
     assert prediction == RetrievalPrediction(
         distance=pytest.approx(angular_dist([1, 0, 1], [1, 0, 1]), abs=1e-7),
         pos_in_file=0,

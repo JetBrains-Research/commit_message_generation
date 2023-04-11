@@ -135,11 +135,34 @@ def main(cfg: RetrievalConfig) -> None:
     # ------------------------------
     # -       retrieve NNs         -
     # ------------------------------
-    for part in ["train", "val", "test"]:
+
+    logging.info(f"Start processing train")
+
+    open(f"train_predictions.jsonl", "w").close()
+    predictions: List[RetrievalPrediction] = []
+    for batch in tqdm(dm.retrieval_dataloader(part="train"), desc="Retrieving predictions for train"):
+        if len(predictions) > 10000:
+            with jsonlines.open("train_predictions.jsonl", "a") as writer:
+                writer.write_all(
+                    [{"pos_in_file": pred["pos_in_file"], "distance": pred["distance"]} for pred in predictions]
+                )
+            predictions = []
+
+        predictions.extend(search.predict_batch_train([example.pos_in_file for example in batch]))
+
+    if len(predictions) > 0:
+        with jsonlines.open("train_predictions.jsonl", "a") as writer:
+            writer.write_all(
+                [{"pos_in_file": pred["pos_in_file"], "distance": pred["distance"]} for pred in predictions]
+            )
+
+    logging.info(f"Finish processing train")
+
+    for part in ["val", "test"]:
         logging.info(f"Start processing {part}")
 
         open(f"{part}_predictions.jsonl", "w").close()
-        predictions: List[RetrievalPrediction] = []
+        predictions: List[RetrievalPrediction] = []  # type: ignore[no-redef]
         for batch in tqdm(dm.retrieval_dataloader(part=part), desc=f"Retrieving predictions for {part}"):
             if len(predictions) > 10000:
                 with jsonlines.open(f"{part}_predictions.jsonl", "a") as writer:
@@ -148,7 +171,7 @@ def main(cfg: RetrievalConfig) -> None:
                     )
                 predictions = []
 
-            predictions.extend(search.predict_batch(embedder.transform(batch), is_train=(part == "train")))
+            predictions.extend(search.predict_batch(embedder.transform(batch)))
 
         if len(predictions) > 0:
             with jsonlines.open(f"{part}_predictions.jsonl", "a") as writer:

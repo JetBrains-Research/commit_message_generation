@@ -49,8 +49,19 @@ class DiffSearch:
     def finalize(self) -> None:
         self._index.build(self._num_trees)
 
-    def predict(self, diff_embedding: npt.NDArray, is_train: bool) -> RetrievalPrediction:
-        """Retrieves the closest neighbor for given diff from index."""
+    def predict_train(self, idx: int) -> RetrievalPrediction:
+        """Retrieves the closest neighbor for given idx of embedding already present in index."""
+        # we are interested in the nearest neighbor, but for vectors from index it will always be themselves
+        # so, we search for 2 neighbors and skip the first one
+        retrieved_idxs, retrieved_distances = self._index.get_nns_by_item(idx, 2, include_distances=True)
+        retrieved_idxs, retrieved_distances = retrieved_idxs[1:], retrieved_distances[1:]
+        return RetrievalPrediction(
+            distance=float(retrieved_distances[0]),
+            pos_in_file=retrieved_idxs[0],
+        )
+
+    def predict(self, diff_embedding: npt.NDArray) -> RetrievalPrediction:
+        """Retrieves the closest neighbor from index for given embedding."""
 
         if len(diff_embedding.shape) > 1:
             assert (
@@ -58,22 +69,23 @@ class DiffSearch:
             ), "This method is used to process single example. Use `predict_batch` to process several examples."
             diff_embedding = diff_embedding.flatten()
 
-        num_neighbors = 2 if is_train else 1
-        retrieved_idxs, retrieved_distances = self._index.get_nns_by_vector(
-            diff_embedding, num_neighbors, include_distances=True
-        )
-
-        if is_train:
-            retrieved_idxs, retrieved_distances = retrieved_idxs[1:], retrieved_distances[1:]
+        retrieved_idxs, retrieved_distances = self._index.get_nns_by_vector(diff_embedding, 1, include_distances=True)
 
         return RetrievalPrediction(
             distance=float(retrieved_distances[0]),
             pos_in_file=retrieved_idxs[0],
         )
 
-    def predict_batch(self, batch: List[CommitEmbeddingExample], is_train: bool) -> List[RetrievalPrediction]:
+    def predict_batch(self, batch: List[CommitEmbeddingExample]) -> List[RetrievalPrediction]:
         """Retrieves the closest neighbors for each example in a batch.
 
         Note: Simply iterates over batch, because annoy doesn't support batch processing.
         """
-        return [self.predict(diff_embedding=example["diff_embedding"], is_train=is_train) for example in batch]
+        return [self.predict(diff_embedding=example["diff_embedding"]) for example in batch]
+
+    def predict_batch_train(self, batch_idxs: List[int]) -> List[RetrievalPrediction]:
+        """Retrieves the closest neighbors for each example in a batch. Intended for examples present in index.
+
+        Note: Simply iterates over batch, because annoy doesn't support batch processing.
+        """
+        return [self.predict_train(idx=example) for example in batch_idxs]
