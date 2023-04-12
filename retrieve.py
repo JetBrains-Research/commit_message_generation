@@ -149,7 +149,7 @@ def main(cfg: RetrievalConfig) -> None:
                 )
             predictions = []
 
-        predictions.extend(search.predict_batch_train([example.pos_in_file for example in batch]))
+        predictions.extend(search.predict_batch_train([idx for idx in batch.pos_in_file]))
 
     if len(predictions) > 0:
         with jsonlines.open("train_predictions.jsonl", "a") as writer:
