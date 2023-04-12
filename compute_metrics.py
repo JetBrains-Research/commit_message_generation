@@ -3,7 +3,6 @@ import os
 
 import hydra
 import jsonlines
-import pandas as pd
 import wandb
 from hydra.utils import to_absolute_path
 from omegaconf import OmegaConf
@@ -21,7 +20,7 @@ def load_predictions(run: wandb.wandb_sdk.wandb_run.Run, cfg: MetricsConfig) -> 
         f"{cfg.logger.artifact_config.project}/{cfg.logger.artifact_config.name}:{cfg.logger.artifact_config.version}"
     )
     if "tags" in input_artifact.metadata:
-        run.tags = input_artifact.metadata["tags"]
+        run.tags = input_artifact.metadata["tags"] + ["new_prefix_logic"]
 
     input_artifact.get_path(cfg.logger.artifact_config.artifact_path).download(
         root=hydra.utils.to_absolute_path(
@@ -86,9 +85,6 @@ def main(cfg: MetricsConfig):
             target_tokens = target.split()
 
             for i in range(1, cfg.max_n_tokens + 1):
-                if len(target_tokens) < i:
-                    break
-
                 pred_prefix_i = " ".join(pred_tokens[:i])
                 target_prefix_i = " ".join(target_tokens[:i])
                 prefix_metrics[i].add_batch(predictions=[pred_prefix_i], references=[target_prefix_i])
