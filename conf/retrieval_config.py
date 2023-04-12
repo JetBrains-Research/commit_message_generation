@@ -21,6 +21,7 @@ class SearchConfig:
     num_neighbors: int = 1
     num_trees: int = 100
     load_index: bool = False
+    load_index_path: str = ""
     index_root_dir: str = "ann_indices"
 
 
