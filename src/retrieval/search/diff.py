@@ -25,10 +25,7 @@ class DiffSearch:
         self._index.set_seed(42)
 
         if load_index:
-            if f"index_{num_trees}.ann" not in os.listdir(index_root_dir):
-                raise ValueError("Configured to load pretrained index, but it doesn't exist!")
-            else:
-                self._index.load(load_index_path)
+            self._index.load(load_index_path)
         else:
             self._index.on_disk_build(os.path.join(index_root_dir, f"index_{num_trees}.ann"))
 
