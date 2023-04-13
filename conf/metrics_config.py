@@ -1,11 +1,8 @@
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Optional
 
 from hydra.core.config_store import ConfigStore
 from omegaconf import MISSING
-
-from .data.dataset_config import DatasetConfig
-from .data.input_config import InputConfig
 
 
 @dataclass
@@ -65,15 +62,10 @@ class MetricsConfig:
         max_n_tokens: Maximum number of tokens (for prefix-level metrics).
     """
 
-    defaults: List[Any] = field(default_factory=lambda: ["_self_", {"dataset": "multilang"}])
-
     preds_path: Optional[str] = None
     max_n_tokens: int = 15
-    dataset: DatasetConfig = MISSING
-    input: InputConfig = field(default_factory=InputConfig)
     logger: WandbMetricConfig = field(default_factory=WandbMetricConfig)
 
 
 cs = ConfigStore.instance()
 cs.store(name="metrics_config", node=MetricsConfig)
-cs.store(name="multilang", group="dataset", node=DatasetConfig)

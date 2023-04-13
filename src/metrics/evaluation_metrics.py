@@ -5,7 +5,12 @@ from datasets import Metric, load_metric
 from torch import Tensor
 from torchmetrics import MetricCollection
 
-from src.metrics import MRR, Accuracy, BLEUNorm, EditSimilarity, ExactMatch, LogMNEXT
+from .accuracy import Accuracy
+from .bleu_norm import BLEUNorm
+from .edit_similarity import EditSimilarity
+from .exact_match import ExactMatch
+from .log_mnext import LogMNEXT
+from .mrr import MRR
 
 
 class EvaluationMetrics:

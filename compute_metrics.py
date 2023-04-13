@@ -9,7 +9,7 @@ from omegaconf import OmegaConf
 from tqdm import tqdm
 
 from conf import MetricsConfig
-from src.utils import EvaluationMetrics
+from src.metrics import EvaluationMetrics
 
 logger = logging.getLogger("datasets")
 logger.setLevel(logging.ERROR)

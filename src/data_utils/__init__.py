@@ -1,3 +1,3 @@
-from src.data_utils.cmc_data_module import CMCDataModule
+from .data_preprocessor import DataPreprocessor
 
-__all__ = ["CMCDataModule"]
+__all__ = ["DataPreprocessor"]

@@ -1,27 +1,4 @@
-from .data.dataset_config import DatasetConfig
-from .data.input_config import InputConfig
-from .eval_config import EvalConfig
 from .metrics_config import MetricsConfig
-from .model.base_configs import (
-    BaseDecoderConfig,
-    BaseEncoderDecoderConfig,
-    BaseModelConfig,
-    BaseRACEConfig,
-    BaseSeq2SeqConfig,
-)
-from .retrieval_config import RetrievalConfig
-from .train_config import TrainConfig
+from .openai_config import OpenAIConfig
 
-__all__ = [
-    "BaseDecoderConfig",
-    "BaseEncoderDecoderConfig",
-    "BaseModelConfig",
-    "BaseRACEConfig",
-    "BaseSeq2SeqConfig",
-    "EvalConfig",
-    "TrainConfig",
-    "InputConfig",
-    "DatasetConfig",
-    "MetricsConfig",
-    "RetrievalConfig",
-]
+__all__ = ["OpenAIConfig", "MetricsConfig"]
