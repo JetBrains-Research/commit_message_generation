@@ -301,5 +301,6 @@ class BasePreprocessor(ABC):
                 for pred in reader:
                     retrieved_example = json.loads(getline(input_path, pred["pos_in_file"] + 1).rstrip("\n"))
                     retrieved_example["distance"] = pred["distance"]
+                    del retrieved_example["history_input_ids"]
                     with jsonlines.open(retrieved_output_path, "a") as writer:
                         writer.write(retrieved_example)
