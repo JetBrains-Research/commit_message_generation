@@ -125,21 +125,21 @@ def main(cfg: TrainConfig) -> None:
 
     # main module with model logic
     if cfg.logger.use_wandb and cfg.model.configuration == "race":
-        # start from fine-tuned codet5 checkpoint
-        model = CMCModule.load_from_checkpoint(
-            os.path.join(
-                hydra.utils.to_absolute_path("artifacts"),
-                "codet5" + ("_with_history" if cfg.input.train_with_history else "_without_history"),
-                "last.ckpt",
-            ),
-        )
         transformers_ckpt_path = os.path.join(
             hydra.utils.to_absolute_path("artifacts"),
             "codet5" + ("_with_history" if cfg.input.train_with_history else "_without_history"),
             "transformers_format",
         )
-        os.makedirs(transformers_ckpt_path, exist_ok=True)
-        model.save_pretrained(transformers_ckpt_path)
+        if local_rank == 0:
+            model = CMCModule.load_from_checkpoint(
+                os.path.join(
+                    hydra.utils.to_absolute_path("artifacts"),
+                    "codet5" + ("_with_history" if cfg.input.train_with_history else "_without_history"),
+                    "last.ckpt",
+                ),
+            )
+            os.makedirs(transformers_ckpt_path, exist_ok=True)
+            model.save_pretrained(transformers_ckpt_path)
         cfg.model.name_or_path = transformers_ckpt_path
 
     model = CMCModule(

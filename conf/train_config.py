@@ -79,7 +79,7 @@ class TrainerTrainConfig:
     gradient_clip_val: float = 1.0
     accelerator: str = "gpu"
     devices: Any = 1
-    val_check_interval: Any = 1
+    val_check_interval: Any = 1.0
     limit_train_batches: Optional[int] = None
     limit_val_batches: Optional[int] = None
 
