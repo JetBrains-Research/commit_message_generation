@@ -94,7 +94,9 @@ def main(cfg: TrainConfig) -> None:
         if cfg.logger.use_wandb and cfg.model.configuration == "race":
             # download retrieved examples
             artifact = trainer_logger.experiment.use_artifact(
-                "codet5" + ("_with_history" if cfg.input.train_with_history else "_without_history") + "_retrieval",
+                "codet5"
+                + ("_with_history" if cfg.input.train_with_history else "_without_history")
+                + "_retrieval:latest",
                 type="retrieval",
             )
 
