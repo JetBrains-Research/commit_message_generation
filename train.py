@@ -95,7 +95,7 @@ def main(cfg: TrainConfig) -> None:
             # download retrieved examples
             artifact = trainer_logger.experiment.use_artifact(
                 "codet5"
-                + ("_with_history" if cfg.input.train_with_history else "_without_history")
+                + ("_with-history" if cfg.input.train_with_history else "_without-history")
                 + "_retrieval:latest",
                 type="retrieval",
             )
