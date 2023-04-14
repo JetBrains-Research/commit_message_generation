@@ -141,6 +141,7 @@ def main(cfg: TrainConfig) -> None:
             num_warmup_steps=cfg.optimizer.num_warmup_steps,
             ratio_warmup_steps=cfg.optimizer.ratio_warmup_steps,
             batch_size=batch_size,
+            strict=False
         )
     else:
         model = CMCModule(
