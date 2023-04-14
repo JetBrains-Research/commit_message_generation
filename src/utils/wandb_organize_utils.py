@@ -65,7 +65,7 @@ class WandbOrganizer:
             name.append(WandbOrganizer._prepare_pretrained_name(model_cfg.name_or_path))
         elif model_cfg.configuration == "race":
             model_cfg = BaseRACEConfig(**model_cfg)  # type: ignore[arg-type]
-            name.append(WandbOrganizer._prepare_pretrained_name(model_cfg.name_or_path))
+            name.append("race_" + WandbOrganizer._prepare_pretrained_name(model_cfg.name_or_path))
         elif model_cfg.configuration == "decoder":
             model_cfg = BaseDecoderConfig(**model_cfg)  # type: ignore[arg-type]
             name.append(WandbOrganizer._prepare_pretrained_name(model_cfg.decoder_name_or_path))
