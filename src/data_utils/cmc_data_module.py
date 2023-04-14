@@ -299,6 +299,11 @@ class CMCDataModule(pl.LightningDataModule):
 
         return diff_tokenizer, msg_tokenizer
 
+    def get_root_dir_for_part(self, root_dir: str, part: str) -> str:
+        if (part != "train" and self._use_eval_downsample) or (part == "train" and self._use_train_downsample):
+            root_dir = os.path.join(root_dir, "downsample")
+        return root_dir
+
     def prepare_data(self, stage: Optional[str] = None) -> None:  # type: ignore[override]
         if stage is None:
             logging.warning("Dry run: to actually process data, pass `stage` argument.")
@@ -314,15 +319,14 @@ class CMCDataModule(pl.LightningDataModule):
             raise ValueError("Unknown stage configuration. Pass one of: `fit`, `test`, `retrieve`.")
 
         for part in parts:
-            input_dir = self._dataset_root
-            data_dir = self._data_path
+            input_dir = self.get_root_dir_for_part(self._dataset_root, part)
+            data_dir = self.get_root_dir_for_part(self._data_path, part)
+
+            os.makedirs(input_dir, exist_ok=True)
+            os.makedirs(data_dir, exist_ok=True)
 
             if (part != "train" and self._use_eval_downsample) or (part == "train" and self._use_train_downsample):
                 logging.info(f"Will use dataset subset for {part}.")
-                input_dir = os.path.join(input_dir, "downsample")
-                data_dir = os.path.join(data_dir, "downsample")
-                os.makedirs(input_dir, exist_ok=True)
-                os.makedirs(data_dir, exist_ok=True)
 
             self._preprocessor.process(
                 input_dir=input_dir,
@@ -337,9 +341,12 @@ class CMCDataModule(pl.LightningDataModule):
             if self._process_retrieved:
                 self._preprocessor.process_retrieved(
                     data_dir=self._data_path,
-                    retrieved_dir=os.path.join(input_dir, "retrieval"),
+                    retrieved_dir=os.path.join(
+                        input_dir, "retrieval" + ("_with_history" if self._train_with_history else "_without_history")
+                    ),
                     part=part,
                     use_cache=self._use_cache,
+                    with_history=self._train_with_history,
                 )
 
         self._use_cache = True
@@ -357,7 +364,7 @@ class CMCDataModule(pl.LightningDataModule):
                 retrieved_data_path=os.path.join(
                     self._data_path,
                     ("downsample" if self._use_train_downsample else ""),
-                    "retrieved_train_processed.jsonl",
+                    f"retrieved_{'_with_history' if self._train_with_history else '_without_history'}_train_processed.jsonl",
                 )
                 if self._process_retrieved
                 else None,
@@ -377,7 +384,7 @@ class CMCDataModule(pl.LightningDataModule):
                 retrieved_data_path=os.path.join(
                     self._data_path,
                     ("downsample" if self._use_eval_downsample else ""),
-                    "retrieved_val_processed.jsonl",
+                    f"retrieved_{'_with_history' if self._train_with_history else '_without_history'}_val_processed.jsonl",
                 )
                 if self._process_retrieved
                 else None,
@@ -399,7 +406,7 @@ class CMCDataModule(pl.LightningDataModule):
                 retrieved_data_path=os.path.join(
                     self._data_path,
                     ("downsample" if self._use_eval_downsample else ""),
-                    "retrieved_test_processed.jsonl",
+                    f"retrieved_{'_with_history' if self._train_with_history else '_without_history'}_test_processed.jsonl",
                 )
                 if self._process_retrieved
                 else None,

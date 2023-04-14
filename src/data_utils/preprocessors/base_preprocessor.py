@@ -266,7 +266,9 @@ class BasePreprocessor(ABC):
                 logging.info("Shuffling train")
                 self._shuffle(input_path=processed_path, output_path=os.path.join(data_dir, f"{part}_shuffled.jsonl"))
 
-    def process_retrieved(self, retrieved_dir: str, data_dir: str, part: str, use_cache: bool) -> None:
+    def process_retrieved(
+        self, retrieved_dir: str, data_dir: str, part: str, with_history: bool, use_cache: bool
+    ) -> None:
         """
         Retrieval processing logic. Should be called after `process`, as it relies on processed files.
 
@@ -282,18 +284,22 @@ class BasePreprocessor(ABC):
             part: Current dataset part.
 
         """
-        input_fname = os.path.join(data_dir, "train_shuffled.jsonl")
-        retrieved_input_fname = os.path.join(retrieved_dir, f"{part}_predictions.jsonl")
-        retrieved_output_fname = os.path.join(data_dir, f"retrieved_{part}_processed.jsonl")
+        input_path = os.path.join(data_dir, "train_shuffled.jsonl")
+        retrieved_input_path = os.path.join(retrieved_dir, f"{part}_predictions.jsonl")
 
-        if use_cache and os.path.exists(retrieved_output_fname):
-            logging.info(f"retrieved_{part}_processed.jsonl found, won't rewrite")
+        retrieved_output_fname = (
+            f"retrieved_{'_with_history' if with_history else '_without_history'}_{part}_processed.jsonl"
+        )
+        retrieved_output_path = os.path.join(data_dir, retrieved_output_fname)
+
+        if use_cache and os.path.exists(retrieved_output_path):
+            logging.info(f"{retrieved_output_fname} found, won't rewrite")
         else:
             logging.info(f"Processing retrieved examples for {part}")
-            open(retrieved_output_fname, "w").close()
-            with jsonlines.open(retrieved_input_fname, "r") as reader:
+            open(retrieved_output_path, "w").close()
+            with jsonlines.open(retrieved_input_path, "r") as reader:
                 for pred in reader:
-                    retrieved_example = json.loads(getline(input_fname, pred["pos_in_file"] + 1).rstrip("\n"))
+                    retrieved_example = json.loads(getline(input_path, pred["pos_in_file"] + 1).rstrip("\n"))
                     retrieved_example["distance"] = pred["distance"]
-                    with jsonlines.open(retrieved_output_fname, "a") as writer:
+                    with jsonlines.open(retrieved_output_path, "a") as writer:
                         writer.write(retrieved_example)

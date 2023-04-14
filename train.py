@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import Any
 
 import hydra
 import nltk
@@ -21,6 +22,28 @@ from src.utils import WandbOrganizer
 nltk.download("wordnet")
 
 
+def get_world_size(accelerator: str, devices: Any) -> int:
+    if accelerator == "cpu":
+        return 1
+    elif accelerator == "gpu":
+        if devices == "auto":
+            return num_cuda_devices()  # all available gpus
+        elif isinstance(devices, int):
+            if devices == -1:
+                return num_cuda_devices()  # all available gpus
+            else:
+                return devices  # n first gpus
+        elif isinstance(devices, str):
+            if devices == "-1":
+                return num_cuda_devices()  # all available gpus
+            else:
+                return len(devices.split(","))  # a list of specific gpus separated by ','
+        elif isinstance(devices, list):
+            return len(devices)  # a list of specific gpus
+
+    raise ValueError("Unknown format for number of gpus")
+
+
 @hydra.main(version_base="1.1", config_path="conf", config_name="train_config")
 def main(cfg: TrainConfig) -> None:
     # -----------------------
@@ -28,27 +51,8 @@ def main(cfg: TrainConfig) -> None:
     # -----------------------
     pl.seed_everything(42)
 
-    world_size = None
-    if cfg.trainer.accelerator == "cpu":
-        world_size = 1
-    elif cfg.trainer.accelerator == "gpu":
-        if cfg.trainer.devices == "auto":
-            world_size = num_cuda_devices()  # all available gpus
-        elif isinstance(cfg.trainer.devices, int):
-            if cfg.trainer.devices == -1:
-                world_size = num_cuda_devices()  # all available gpus
-            else:
-                world_size = cfg.trainer.devices  # n first gpus
-        elif isinstance(cfg.trainer.devices, str):
-            if cfg.trainer.devices == "-1":
-                world_size = num_cuda_devices()  # all available gpus
-            else:
-                world_size = len(cfg.trainer.devices.split(","))  # a list of specific gpus separated by ','
-        elif isinstance(cfg.trainer.devices, list):
-            world_size = len(cfg.trainer.devices)  # a list of specific gpus
-
-    if world_size is None:
-        raise ValueError("Unknown format for number of gpus")
+    # initializing gpus
+    world_size = get_world_size(accelerator=cfg.trainer.accelerator, devices=cfg.trainer.devices)
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
     logging.info(f"Local rank: {local_rank}")
     logging.info(f"World size: {world_size}")
@@ -62,27 +66,6 @@ def main(cfg: TrainConfig) -> None:
         shift_labels=cfg.model.configuration != "decoder",
         process_retrieved=cfg.model.configuration == "race",
     )
-
-    if local_rank == 0:
-        dm.prepare_data(stage="fit")
-    dm.setup(stage="fit")
-
-    batch_size = cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.accumulate_grad_batches * world_size
-
-    # main module with model logic
-    model = CMCModule(
-        model_cfg=cfg.model,
-        diff_tokenizer=dm.diff_tokenizer,
-        msg_tokenizer=dm.msg_tokenizer,
-        learning_rate=cfg.optimizer.learning_rate,
-        initial_batch_size=cfg.optimizer.initial_batch_size,
-        weight_decay=cfg.optimizer.weight_decay,
-        num_warmup_steps=cfg.optimizer.num_warmup_steps,
-        ratio_warmup_steps=cfg.optimizer.ratio_warmup_steps,
-        batch_size=batch_size,
-    )
-    cfg.optimizer.learning_rate = model.learning_rate
-
     run_name = WandbOrganizer.get_run_name(
         cfg.model,
         encoder_input_type=cfg.input.encoder_input_type,
@@ -106,6 +89,42 @@ def main(cfg: TrainConfig) -> None:
             tags=run_tags,
             job_type="train",
         )
+
+    if local_rank == 0:
+        if cfg.logger.use_wandb and cfg.model.configuration == "race":
+            # download retrieved examples
+            artifact = trainer_logger.experiment.use_artifact(
+                "codet5" + ("_with_history" if cfg.input.train_with_history else "_without_history") + "_retrieval",
+                type="retrieval",
+            )
+
+            for part in ["train", "val", "test"]:
+                artifact.get_path(f"{part}_predictions.jsonl").download(
+                    root=os.path.join(
+                        hydra.utils.to_absolute_path(dm.get_root_dir_for_part(cfg.dataset.dataset_root, part)),
+                        "retrieval" + ("_with_history" if cfg.input.train_with_history else "_without_history"),
+                    )
+                )
+        dm.prepare_data(stage="fit")
+    dm.setup(stage="fit")
+
+    batch_size = cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.accumulate_grad_batches * world_size
+
+    # main module with model logic
+    model = CMCModule(
+        model_cfg=cfg.model,
+        diff_tokenizer=dm.diff_tokenizer,
+        msg_tokenizer=dm.msg_tokenizer,
+        learning_rate=cfg.optimizer.learning_rate,
+        initial_batch_size=cfg.optimizer.initial_batch_size,
+        weight_decay=cfg.optimizer.weight_decay,
+        num_warmup_steps=cfg.optimizer.num_warmup_steps,
+        ratio_warmup_steps=cfg.optimizer.ratio_warmup_steps,
+        batch_size=batch_size,
+    )
+    cfg.optimizer.learning_rate = model.learning_rate
+
+    if cfg.logger.use_wandb:
         trainer_logger.watch(model, log="gradients", log_freq=250)
 
     # callbacks
