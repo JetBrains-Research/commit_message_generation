@@ -5,6 +5,7 @@ from typing import Any
 import hydra
 import nltk
 import pytorch_lightning as pl
+import wandb
 from omegaconf import OmegaConf
 from pytorch_lightning.callbacks import (
     EarlyStopping,
@@ -12,7 +13,6 @@ from pytorch_lightning.callbacks import (
     ModelCheckpoint,
 )
 from pytorch_lightning.utilities.device_parser import num_cuda_devices
-from wandb import Artifact
 
 from conf import TrainConfig
 from src.data_utils import CMCDataModule
@@ -92,8 +92,19 @@ def main(cfg: TrainConfig) -> None:
 
     if local_rank == 0:
         if cfg.logger.use_wandb and cfg.model.configuration == "race":
+            # download model checkpoint
+            artifact = wandb.use_artifact(
+                "codet5" + ("_with-history" if cfg.input.train_with_history else "_without-history") + ":latest",
+                type="model",
+            )
+            ckpt_path = os.path.join(
+                hydra.utils.to_absolute_path("artifacts"),
+                "codet5" + ("_with_history" if cfg.input.train_with_history else "_without_history"),
+            )
+            artifact.get_path("last.ckpt").download(root=ckpt_path)
+
             # download retrieved examples
-            artifact = trainer_logger.experiment.use_artifact(
+            artifact = wandb.use_artifact(
                 "codet5"
                 + ("_with-history" if cfg.input.train_with_history else "_without-history")
                 + "_retrieval:latest",
@@ -113,17 +124,36 @@ def main(cfg: TrainConfig) -> None:
     batch_size = cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.accumulate_grad_batches * world_size
 
     # main module with model logic
-    model = CMCModule(
-        model_cfg=cfg.model,
-        diff_tokenizer=dm.diff_tokenizer,
-        msg_tokenizer=dm.msg_tokenizer,
-        learning_rate=cfg.optimizer.learning_rate,
-        initial_batch_size=cfg.optimizer.initial_batch_size,
-        weight_decay=cfg.optimizer.weight_decay,
-        num_warmup_steps=cfg.optimizer.num_warmup_steps,
-        ratio_warmup_steps=cfg.optimizer.ratio_warmup_steps,
-        batch_size=batch_size,
-    )
+    if cfg.logger.use_wandb and cfg.model.configuration == "race":
+        # start from fine-tuned codet5 checkpoint
+        model = CMCModule.load_from_checkpoint(
+            os.path.join(
+                hydra.utils.to_absolute_path("artifacts"),
+                "codet5" + ("_with_history" if cfg.input.train_with_history else "_without_history"),
+                "last.ckpt",
+            ),
+            model_cfg=cfg.model,
+            diff_tokenizer=dm.diff_tokenizer,
+            msg_tokenizer=dm.msg_tokenizer,
+            learning_rate=cfg.optimizer.learning_rate,
+            initial_batch_size=cfg.optimizer.initial_batch_size,
+            weight_decay=cfg.optimizer.weight_decay,
+            num_warmup_steps=cfg.optimizer.num_warmup_steps,
+            ratio_warmup_steps=cfg.optimizer.ratio_warmup_steps,
+            batch_size=batch_size,
+        )
+    else:
+        model = CMCModule(
+            model_cfg=cfg.model,
+            diff_tokenizer=dm.diff_tokenizer,
+            msg_tokenizer=dm.msg_tokenizer,
+            learning_rate=cfg.optimizer.learning_rate,
+            initial_batch_size=cfg.optimizer.initial_batch_size,
+            weight_decay=cfg.optimizer.weight_decay,
+            num_warmup_steps=cfg.optimizer.num_warmup_steps,
+            ratio_warmup_steps=cfg.optimizer.ratio_warmup_steps,
+            batch_size=batch_size,
+        )
     cfg.optimizer.learning_rate = model.learning_rate
 
     if cfg.logger.use_wandb:
@@ -166,13 +196,13 @@ def main(cfg: TrainConfig) -> None:
     #   save ckpt to wandb  -
     # -----------------------
     if cfg.logger.use_wandb and cfg.logger.save_artifact:
-        artifact = Artifact(
+        artifact = wandb.Artifact(
             name=run_name,
             type="model",
             metadata={"tags": run_tags},
         )
         artifact.add_dir(f"{run_name}_checkpoint")
-        trainer_logger.experiment.log_artifact(artifact)
+        wandb.log_artifact(artifact)
 
 
 if __name__ == "__main__":

@@ -267,16 +267,18 @@ class BasePreprocessor(ABC):
                 self._shuffle(input_path=processed_path, output_path=os.path.join(data_dir, f"{part}_shuffled.jsonl"))
 
     def process_retrieved(
-        self, retrieved_dir: str, data_dir: str, part: str, with_history: bool, use_cache: bool
+        self,
+        retrieved_dir: str,
+        input_data_dir: str,
+        output_data_dir: str,
+        part: str,
+        with_history: bool,
+        use_cache: bool,
     ) -> None:
         """
         Retrieval processing logic. Should be called after `process`, as it relies on processed files.
 
-        1. Iterate over processed train file, obtain examples in an order specified in retrieved file.
-        2. If processing train, shuffle processed file and save to separate file.
-
-        Shuffling should be done with the same random seed as `process`!! `seed_everything` from Lightning should take
-        care of this.
+        Iterate over processed train file, obtain examples in an order specified in retrieved file.
 
         Args:
             retrieved_dir: Path to directory with retrieved files.
@@ -284,13 +286,13 @@ class BasePreprocessor(ABC):
             part: Current dataset part.
 
         """
-        input_path = os.path.join(data_dir, "train_shuffled.jsonl")
+        input_path = os.path.join(input_data_dir, "train_shuffled.jsonl")
         retrieved_input_path = os.path.join(retrieved_dir, f"{part}_predictions.jsonl")
 
         retrieved_output_fname = (
-            f"retrieved_{'_with_history' if with_history else '_without_history'}_{part}_processed.jsonl"
+            f"retrieved{'_with_history' if with_history else '_without_history'}_{part}_processed.jsonl"
         )
-        retrieved_output_path = os.path.join(data_dir, retrieved_output_fname)
+        retrieved_output_path = os.path.join(output_data_dir, retrieved_output_fname)
 
         if use_cache and os.path.exists(retrieved_output_path):
             logging.info(f"{retrieved_output_fname} found, won't rewrite")
@@ -298,7 +300,7 @@ class BasePreprocessor(ABC):
             logging.info(f"Processing retrieved examples for {part}")
             open(retrieved_output_path, "w").close()
             with jsonlines.open(retrieved_input_path, "r") as reader:
-                for pred in reader:
+                for pred in tqdm(reader, desc="Processing retrieved examples"):
                     retrieved_example = json.loads(getline(input_path, pred["pos_in_file"] + 1).rstrip("\n"))
                     retrieved_example["distance"] = pred["distance"]
                     del retrieved_example["history_input_ids"]

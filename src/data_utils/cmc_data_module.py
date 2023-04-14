@@ -340,7 +340,8 @@ class CMCDataModule(pl.LightningDataModule):
             )
             if self._process_retrieved:
                 self._preprocessor.process_retrieved(
-                    data_dir=self._data_path,
+                    input_data_dir=self._data_path,
+                    output_data_dir=data_dir,
                     retrieved_dir=os.path.join(
                         input_dir, "retrieval" + ("_with_history" if self._train_with_history else "_without_history")
                     ),
@@ -364,7 +365,7 @@ class CMCDataModule(pl.LightningDataModule):
                 retrieved_data_path=os.path.join(
                     self._data_path,
                     ("downsample" if self._use_train_downsample else ""),
-                    f"retrieved_{'_with_history' if self._train_with_history else '_without_history'}_train_processed.jsonl",
+                    f"retrieved{'_with_history' if self._train_with_history else '_without_history'}_train_processed.jsonl",
                 )
                 if self._process_retrieved
                 else None,
@@ -384,7 +385,7 @@ class CMCDataModule(pl.LightningDataModule):
                 retrieved_data_path=os.path.join(
                     self._data_path,
                     ("downsample" if self._use_eval_downsample else ""),
-                    f"retrieved_{'_with_history' if self._train_with_history else '_without_history'}_val_processed.jsonl",
+                    f"retrieved{'_with_history' if self._train_with_history else '_without_history'}_val_processed.jsonl",
                 )
                 if self._process_retrieved
                 else None,
@@ -406,7 +407,7 @@ class CMCDataModule(pl.LightningDataModule):
                 retrieved_data_path=os.path.join(
                     self._data_path,
                     ("downsample" if self._use_eval_downsample else ""),
-                    f"retrieved_{'_with_history' if self._train_with_history else '_without_history'}_test_processed.jsonl",
+                    f"retrieved{'_with_history' if self._train_with_history else '_without_history'}_test_processed.jsonl",
                 )
                 if self._process_retrieved
                 else None,
