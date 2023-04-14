@@ -19,8 +19,6 @@ from src.data_utils import CMCDataModule
 from src.model import CMCModule
 from src.utils import WandbOrganizer
 
-nltk.download("wordnet")
-
 
 def get_world_size(accelerator: str, devices: Any) -> int:
     if accelerator == "cpu":
@@ -91,6 +89,8 @@ def main(cfg: TrainConfig) -> None:
         )
 
     if local_rank == 0:
+        nltk.download("wordnet")
+
         if cfg.logger.use_wandb and cfg.model.configuration == "race":
             # download model checkpoint
             artifact = wandb.use_artifact(
@@ -154,9 +154,6 @@ def main(cfg: TrainConfig) -> None:
         batch_size=batch_size,
     )
     cfg.optimizer.learning_rate = model.learning_rate
-
-    if cfg.logger.use_wandb:
-        trainer_logger.watch(model, log="gradients", log_freq=250)
 
     # callbacks
     lr_logger = LearningRateMonitor(logging_interval="step")
