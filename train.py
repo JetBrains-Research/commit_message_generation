@@ -132,29 +132,27 @@ def main(cfg: TrainConfig) -> None:
                 "codet5" + ("_with_history" if cfg.input.train_with_history else "_without_history"),
                 "last.ckpt",
             ),
-            model_cfg=cfg.model,
-            diff_tokenizer=dm.diff_tokenizer,
-            msg_tokenizer=dm.msg_tokenizer,
-            learning_rate=cfg.optimizer.learning_rate,
-            initial_batch_size=cfg.optimizer.initial_batch_size,
-            weight_decay=cfg.optimizer.weight_decay,
-            num_warmup_steps=cfg.optimizer.num_warmup_steps,
-            ratio_warmup_steps=cfg.optimizer.ratio_warmup_steps,
-            batch_size=batch_size,
-            strict=False
         )
-    else:
-        model = CMCModule(
-            model_cfg=cfg.model,
-            diff_tokenizer=dm.diff_tokenizer,
-            msg_tokenizer=dm.msg_tokenizer,
-            learning_rate=cfg.optimizer.learning_rate,
-            initial_batch_size=cfg.optimizer.initial_batch_size,
-            weight_decay=cfg.optimizer.weight_decay,
-            num_warmup_steps=cfg.optimizer.num_warmup_steps,
-            ratio_warmup_steps=cfg.optimizer.ratio_warmup_steps,
-            batch_size=batch_size,
+        transformers_ckpt_path = os.path.join(
+            hydra.utils.to_absolute_path("artifacts"),
+            "codet5" + ("_with_history" if cfg.input.train_with_history else "_without_history"),
+            "transformers_format",
         )
+        os.makedirs(transformers_ckpt_path, exist_ok=True)
+        model.save_pretrained(transformers_ckpt_path)
+        cfg.model.name_or_path = transformers_ckpt_path
+
+    model = CMCModule(
+        model_cfg=cfg.model,
+        diff_tokenizer=dm.diff_tokenizer,
+        msg_tokenizer=dm.msg_tokenizer,
+        learning_rate=cfg.optimizer.learning_rate,
+        initial_batch_size=cfg.optimizer.initial_batch_size,
+        weight_decay=cfg.optimizer.weight_decay,
+        num_warmup_steps=cfg.optimizer.num_warmup_steps,
+        ratio_warmup_steps=cfg.optimizer.ratio_warmup_steps,
+        batch_size=batch_size,
+    )
     cfg.optimizer.learning_rate = model.learning_rate
 
     if cfg.logger.use_wandb:
