@@ -1,11 +1,32 @@
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from hydra.core.config_store import ConfigStore
 from omegaconf import MISSING
 
-from .data.dataset_config import DatasetConfig
-from .data.input_config import InputConfig
+
+@dataclass
+class FilterConfig:
+    """
+    Configuration for additional data filtering when calculating metrics.
+
+    Attributes:
+        use_filtering: True to use additional data filtering, False otherwise.
+        path: Path to file with filters metadata for a test set.
+        filters_to_include: List of column names to consider.
+          Each column should be boolean.
+        logic: A logic to follow when multiple columns are given (`and` for logical and, `or` for logical or).
+        fit_filters: If True, will consider examples that fit given columns with given logic.
+          If False, will consider examples that DON'T FIT given columns with given logic.
+    """
+
+    use_filtering: bool = False
+    path: str = "raw_data/multilang/downsample/filters/test.jsonl"
+    filters_to_include: List[str] = field(
+        default_factory=lambda: ["is_vdo", "one_sentence_newline", "message_30_tokens", "diff_100_tokens"]
+    )
+    logic: str = "and"
+    fit_filters: bool = True
 
 
 @dataclass
@@ -65,15 +86,11 @@ class MetricsConfig:
         max_n_tokens: Maximum number of tokens (for prefix-level metrics).
     """
 
-    defaults: List[Any] = field(default_factory=lambda: ["_self_", {"dataset": "multilang"}])
-
     preds_path: Optional[str] = None
     max_n_tokens: int = 15
-    dataset: DatasetConfig = MISSING
-    input: InputConfig = field(default_factory=InputConfig)
+    filter: FilterConfig = field(default_factory=FilterConfig)
     logger: WandbMetricConfig = field(default_factory=WandbMetricConfig)
 
 
 cs = ConfigStore.instance()
 cs.store(name="metrics_config", node=MetricsConfig)
-cs.store(name="multilang", group="dataset", node=DatasetConfig)
