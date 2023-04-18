@@ -106,6 +106,7 @@ def main(cfg: MetricsConfig):
 
     # or define filters configuration to control what subset will be considered
     else:
+
         def include_example(filters_line: Dict[str, str]) -> bool:
             """Combines all given filters via given logical operations and returns the final
             result: should we include the current example when calculating metrics or not."""
