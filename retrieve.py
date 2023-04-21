@@ -42,7 +42,11 @@ def download_artifact(cfg: RetrievalConfig, run: wandb.wandb_sdk.wandb_run.Run, 
 
 
 def export_model_checkpoint(cfg: RetrievalConfig) -> str:
-    """Helper function to export model weights in Transformers format from Lightning checkpoint."""
+    """Helper function to export model weights in a Transformers format from Lightning checkpoint.
+
+    Returns:
+        A local path to directory with checkpoint in a Transformers format.
+    """
     logging.info(f"Checkpoint path: {cfg.ckpt_path}")
 
     module = CMCModule.load_from_checkpoint(

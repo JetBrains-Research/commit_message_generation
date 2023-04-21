@@ -99,14 +99,35 @@ This project explores two kinds of input for commit message completion task: dif
 2. Choose one of available model configs or add your own.
 3. Note that you have to define missing parameters from [`InputConfig`](conf/data/input_config.py). You can do it via CLI or just rewrite them. Below is the example how to define parameters via CLI.
 
-To launch training of model defined as `XXXModelConfig` and registered via `ConfigStore.store(name="XXX", group="model", node=XXXModelConfig)`, run the following command:
+To launch training of model defined as `XXXModelConfig` and registered via `ConfigStore.store(name="XXX", group="model", node=XXXModelConfig)`, run the following command (with actual values instead of X's):
 ```
 python train.py +model=XXX ++input.train_with_history=X ++input.encoder_input_type=X
 ```
 
 #### Additional steps for RACE model
 
-> :construction: Experiments with RACE model require slightly different procedure. It will be described in this section.
+Experiments with RACE model require a slightly different procedure.
+
+1. Fine-tune CodeT5 model. Refer to the instruction above for details.
+
+2. Use encoder from fine-tuned CodeT5 checkpoint to perform retrieval. 
+   
+    Define configuration in [`conf/retrieval_config.py`](conf/retrieval_config.py). You have to either provide a local path to checkpoint in `ckpt_path` or use W&B artifact.
+   In the latter case, artifact name will be inferred from model configuration.
+   
+    An example with a local path:
+    ```
+    python retrieve.py ++ckpt_path=<local_path>
+    ```
+
+    An example with a W&B artifact:
+    ```
+    python retrieve.py +model=codet5 ++input.train_with_history=X ++input.encoder_input_type=X
+    ```
+3. Initialize RACE with fine-tuned CodeT5 weights and use retrieved examples to train the model. 
+   Refer to the instruction above for details.
+    
+    > :construction: Currently, downloading retrieved predictions and fine-tuned CodeT5 checkpoint is only possible with W&B.
 
 ### Step 4: Evaluate
 
