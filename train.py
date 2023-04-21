@@ -21,6 +21,15 @@ from src.utils import WandbOrganizer
 
 
 def get_world_size(accelerator: str, devices: Any) -> int:
+    """Determines world size for all possible ways of defining number of devices in Lightning.
+
+    Args:
+        accelerator: Argument for `pytorch_lightning.trainer`, corresponds to a device type.
+        devices: Argument for `pytorch_lightning.trainer`, corresponds to a number of devices/specific devices to use.
+
+    Returns:
+        World size.
+    """
     if accelerator == "cpu":
         return 1
     elif accelerator == "gpu":

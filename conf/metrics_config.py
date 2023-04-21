@@ -83,10 +83,13 @@ class MetricsConfig:
 
     Attributes:
         preds_path: Local path to model predictions. Instead of this, you can also define configuration for loading artifact at WandbMetricConfig.
+        include_short: False to only consider messages with >= i tokens when computing metrics for prefixes of i tokens,
+         True to include all messages.
         max_n_tokens: Maximum number of tokens (for prefix-level metrics).
     """
 
     preds_path: Optional[str] = None
+    include_short: bool = False
     max_n_tokens: int = 15
     filter: FilterConfig = field(default_factory=FilterConfig)
     logger: WandbMetricConfig = field(default_factory=WandbMetricConfig)

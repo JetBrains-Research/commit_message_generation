@@ -18,14 +18,18 @@ logger.setLevel(logging.ERROR)
 random.seed(42)
 
 
-def load_predictions(run: wandb.wandb_sdk.wandb_run.Run, cfg: MetricsConfig) -> str:
-    input_artifact = run.use_artifact(
+def load_predictions(cfg: MetricsConfig) -> str:
+    """Load predictions from W&B artifact.
+
+    Args:
+        cfg: Config; all information about artifact should be provided in corresponding fields there.
+
+    Returns:
+        Local path to downloaded predictions.
+    """
+    input_artifact = wandb.use_artifact(
         f"{cfg.logger.artifact_config.project}/{cfg.logger.artifact_config.name}:{cfg.logger.artifact_config.version}"
     )
-    if "tags" in input_artifact.metadata:
-        run.tags = ["new_prefix_logic"] + (
-            ["only_filtered" if cfg.filter.fit_filters else "only_unfiltered"] if cfg.filter.use_filtering else []
-        )
 
     input_artifact.get_path(cfg.logger.artifact_config.artifact_path).download(
         root=hydra.utils.to_absolute_path(
@@ -43,8 +47,24 @@ def load_predictions(run: wandb.wandb_sdk.wandb_run.Run, cfg: MetricsConfig) -> 
 
 
 def add_single_example(
-    line: Dict[str, str], full_metrics: EvaluationMetrics, prefix_metrics: Dict[int, EvaluationMetrics]
+    line: Dict[str, str],
+    full_metrics: EvaluationMetrics,
+    prefix_metrics: Dict[int, EvaluationMetrics],
+    include_short: bool,
 ) -> None:
+    """Adds a single example to metrics.
+
+    * Compute the usual metrics between full prediction and full target.
+    * Compute the metrics between all prefixes of prediction and target,
+      `prefix_metrics` keys are used to determine the numbers of tokens in prefixes.
+
+    Args:
+        line: Current example, expected to include keys `Prediction` and `Target`.
+        full_metrics: A class for calculating metrics between full prediction and full target.
+        prefix_metrics: A dictionary where key `i` corresponds to metrics for prefixes of `i` tokens.
+        include_short: False to only consider messages with >= i tokens when computing metrics for prefixes of i tokens,
+         True to include all messages.
+    """
     prediction = line["Prediction"].strip()
     target = line["Target"].strip()
 
@@ -60,6 +80,8 @@ def add_single_example(
     target_tokens = target.split()
 
     for i in prefix_metrics:
+        if not include_short and len(target_tokens) < i:
+            break
         pred_prefix_i = " ".join(pred_tokens[:i])
         target_prefix_i = " ".join(target_tokens[:i])
         prefix_metrics[i].add_batch(predictions=[pred_prefix_i], references=[target_prefix_i])
@@ -80,8 +102,10 @@ def main(cfg: MetricsConfig):
             name=cfg.logger.artifact_config.name,
             config=OmegaConf.to_container(cfg, resolve=True),  # type: ignore[arg-type]
             job_type="metrics" if not cfg.filter.use_filtering else "filter_metrics",
+            tags=(["new_prefix_logic"] if cfg.include_short else [])
+            + (["only_filtered" if cfg.filter.fit_filters else "only_unfiltered"] if cfg.filter.use_filtering else []),
         )  # type: ignore[assignment]
-        cfg.preds_path = load_predictions(run=run, cfg=cfg)
+        cfg.preds_path = load_predictions(cfg)
     elif cfg.preds_path:
         cfg.preds_path = to_absolute_path(cfg.preds_path)
     else:
@@ -102,7 +126,9 @@ def main(cfg: MetricsConfig):
     if not cfg.filter.use_filtering:
         with jsonlines.open(cfg.preds_path, "r") as reader:
             for line in tqdm(reader, desc="Computing metrics"):
-                add_single_example(line, full_metrics=full_metrics, prefix_metrics=prefix_metrics)
+                add_single_example(
+                    line, full_metrics=full_metrics, prefix_metrics=prefix_metrics, include_short=cfg.include_short
+                )
 
     # or define filters configuration to control what subset will be considered
     else:
@@ -156,7 +182,12 @@ def main(cfg: MetricsConfig):
                         and i in subset_ids
                         and include_example(filters_line)
                     ):
-                        add_single_example(input_line, full_metrics=full_metrics, prefix_metrics=prefix_metrics)
+                        add_single_example(
+                            input_line,
+                            full_metrics=full_metrics,
+                            prefix_metrics=prefix_metrics,
+                            include_short=cfg.include_short,
+                        )
 
     # -----------------------
     # -   compute results   -
