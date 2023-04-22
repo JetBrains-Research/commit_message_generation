@@ -4,6 +4,7 @@ import os
 import hydra
 import nltk
 import pytorch_lightning as pl
+import wandb
 from omegaconf import OmegaConf
 
 from conf import EvalConfig
@@ -34,8 +35,6 @@ def main(cfg: EvalConfig) -> None:
         shift_labels=cfg.model.configuration != "decoder",
         process_retrieved=cfg.model.configuration == "race",
     )
-    dm.prepare_data(stage="test")
-    dm.setup(stage=cfg.stage)
 
     if cfg.logger.use_wandb:
         if cfg.logger.use_api_key:
@@ -47,6 +46,26 @@ def main(cfg: EvalConfig) -> None:
             config=OmegaConf.to_container(cfg, resolve=True),
             job_type="eval",
         )
+
+        if cfg.model.configuration == "race":
+            # download retrieved examples
+            artifact = wandb.use_artifact(
+                "codet5"
+                + ("_with-history" if cfg.input.train_with_history else "_without-history")
+                + "_retrieval:latest",
+                type="retrieval",
+            )
+
+            for part in ["train", "val", "test"]:
+                artifact.get_path(f"{part}_predictions.jsonl").download(
+                    root=os.path.join(
+                        hydra.utils.to_absolute_path(dm.get_root_dir_for_part(cfg.dataset.dataset_root, part)),
+                        "retrieval" + ("_with_history" if cfg.input.train_with_history else "_without_history"),
+                    )
+                )
+
+    dm.prepare_data(stage="test")
+    dm.setup(stage=cfg.stage)
 
     run_name = WandbOrganizer.get_run_name(
         cfg.model,
