@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import Optional
 
 from hydra.core.config_store import ConfigStore
 from omegaconf import MISSING
@@ -11,6 +12,8 @@ class DatasetConfig:
     Attributes:
         root_dir: Path to root directory with input data.
         input_path: Filename of input file (should be located in root directory).
+        input_path_unfinished_preds: Path to file with unfinished predictions (optional, necessary only to complete
+         unfinished run).
         max_number_of_tokens: Maximum allowed number of BPE tokens in diffs (they will be truncated to this number).
         prompt_configuration: A type of prompt constructor to use.
           Currently supported: `simple`, `history`.
@@ -20,6 +23,7 @@ class DatasetConfig:
 
     root_dir: str = "raw_data/multilang"
     input_path: str = "test.jsonl"
+    input_path_unfinished_preds: Optional[str] = None
     max_number_of_tokens: int = 512
     prompt_configuration: str = MISSING
     use_cache: bool = False
@@ -70,6 +74,7 @@ class OpenAIConfig:
     """Configuration for experiments with OpenAI models."""
 
     model_id: str = MISSING
+    fill_file: bool = False
     dataset: DatasetConfig = field(default_factory=DatasetConfig)
     generation: GenerationConfig = field(default_factory=GenerationConfig)
     logger: WandbConfig = field(default_factory=WandbConfig)

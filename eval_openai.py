@@ -57,9 +57,19 @@ def main(cfg: OpenAIConfig) -> None:
     # -----------------------
     #     estimate tokens   -
     # -----------------------
-    num_tokens_prompts, num_tokens_completion = token_estimator.get_num_tokens_file(
-        processed_path, num_tokens_to_generate=cfg.generation.max_tokens
-    )
+    if cfg.fill_file:
+        logging.info("Configured to fill unfinished predictions file.")
+        assert cfg.dataset.input_path_unfinished_preds is not None
+        cfg.dataset.input_path_unfinished_preds = hydra.utils.to_absolute_path(cfg.dataset.input_path_unfinished_preds)
+        num_tokens_prompts, num_tokens_completion = token_estimator.get_num_tokens_unfinished_file(
+            input_path_prompts=processed_path,
+            input_path_predictions=cfg.dataset.input_path_unfinished_preds,
+            num_tokens_to_generate=cfg.generation.max_tokens,
+        )
+    else:
+        num_tokens_prompts, num_tokens_completion = token_estimator.get_num_tokens_file(
+            processed_path, num_tokens_to_generate=cfg.generation.max_tokens
+        )
 
     logging.warning(
         f"Expected to consume {num_tokens_prompts + num_tokens_completion} tokens. "
@@ -76,10 +86,20 @@ def main(cfg: OpenAIConfig) -> None:
     # ----------------------
     output_path = f"{cfg.model_id}_{cfg.dataset.prompt_configuration}_{cfg.dataset.input_path}"
 
-    if use_chat:
-        openai_model.get_completion_chat_file(processed_path, output_path)
+    if cfg.fill_file:
+        logging.info("Configured to fill unfinished predictions file.")
+        assert cfg.dataset.input_path_unfinished_preds is not None
+        assert use_chat, "Currently, filling unfinished predictions file is not supported for Completion endpoint."
+        openai_model.fill_completion_chat_file(
+            input_path_prompts=processed_path,
+            input_path_predictions=cfg.dataset.input_path_unfinished_preds,
+            output_path=output_path,
+        )
     else:
-        openai_model.get_completion_file(processed_path, output_path)
+        if use_chat:
+            openai_model.get_completion_chat_file(processed_path, output_path)
+        else:
+            openai_model.get_completion_file(processed_path, output_path)
 
     # -------------------------------------------------
     #       upload predictions to W&B (optional)      -

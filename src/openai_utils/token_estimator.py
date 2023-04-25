@@ -1,4 +1,5 @@
 import logging
+from itertools import zip_longest
 from typing import Dict, List, Tuple
 
 import jsonlines
@@ -80,4 +81,39 @@ class TokenEstimator:
                     assert line["prompt"] is None
                     total += self.get_num_tokens_chat(line["messages"])
                 num_examples += 1
+        return total, num_examples * num_tokens_to_generate
+
+    def get_num_tokens_unfinished_file(
+        self, input_path_prompts: str, input_path_predictions: str, num_tokens_to_generate: int
+    ) -> Tuple[int, int]:
+        """Estimate the expected number of tokens to get predictions for all remaining examples based on unfinished predictions file.
+
+        Use-case: previous run didn't finish completely due to API errors :(
+
+        Args:
+            input_path_prompts: Path to input file. It is expected to be in JSONLines format
+              with keys `prompt`, `messages` and `target` for each example.
+            input_path_predictions: Path to unfinished file with predictions. It is expected to be in JSONLines format
+              with keys `Prediction` and `Target` for each example.
+            num_tokens_to_generate: Maximum number of tokens that will be generated for each example.
+
+        Returns:
+            A tuple of two integers: expected number of tokens for prompts & expected number of tokens for completion.
+        """
+        total = 0
+        num_examples = 0
+        with jsonlines.open(input_path_prompts, "r") as reader_prompts:
+            with jsonlines.open(input_path_predictions, "r") as reader_predictions:
+                for (line_prompts, line_predictions) in tqdm(
+                    zip_longest(reader_prompts, reader_predictions),
+                    "Calculating number of tokens that processing of this file will consume",
+                ):
+                    if line_predictions is None or line_predictions["Prediction"] is None:
+                        if line_prompts["prompt"] is not None:
+                            assert line_prompts["messages"] is None
+                            total += self.get_num_tokens([line_prompts["prompt"]])
+                        if line_prompts["messages"] is not None:
+                            assert line_prompts["prompt"] is None
+                            total += self.get_num_tokens_chat(line_prompts["messages"])
+                        num_examples += 1
         return total, num_examples * num_tokens_to_generate
