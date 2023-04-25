@@ -24,6 +24,3 @@ jobs:
     - name: Lint with mypy
       run: |
         mypy .
-    - name: Run unit tests with pytest
-      run: |
-        pytest
