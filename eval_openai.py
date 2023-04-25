@@ -45,8 +45,8 @@ def main(cfg: OpenAIConfig) -> None:
     # -----------------------
     #    process prompts    -
     # -----------------------
-    cfg.dataset.input_path = hydra.utils.to_absolute_path(cfg.dataset.root_dir)
-    processed_path = f"{cfg.dataset.root_dir}/{cfg.dataset.prompt_configuration}" + ".jsonl"
+    cfg.dataset.root_dir = hydra.utils.to_absolute_path(cfg.dataset.root_dir)
+    processed_path = f"{cfg.dataset.root_dir}/{cfg.dataset.prompt_configuration}_{cfg.dataset.input_path}"
     preprocessor.process_file(
         input_path=f"{cfg.dataset.root_dir}/{cfg.dataset.input_path}",
         output_path=processed_path,
@@ -74,7 +74,7 @@ def main(cfg: OpenAIConfig) -> None:
     # ----------------------
     #       query API      -
     # ----------------------
-    output_path = f"{cfg.model_id}_{cfg.dataset.prompt_configuration}" + ".jsonl"
+    output_path = f"{cfg.model_id}_{cfg.dataset.prompt_configuration}_{cfg.dataset.input_path}"
 
     if use_chat:
         openai_model.get_completion_chat_file(processed_path, output_path)

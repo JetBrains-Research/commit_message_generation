@@ -17,6 +17,7 @@ class DatasetConfig:
         use_cache: True to reuse existing files when found, False otherwise.
         chunksize: Number of examples in a single chunk.
     """
+
     root_dir: str = "raw_data/multilang"
     input_path: str = "test.jsonl"
     max_number_of_tokens: int = 512
