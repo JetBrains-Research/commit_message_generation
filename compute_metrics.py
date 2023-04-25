@@ -131,7 +131,8 @@ def main(cfg: MetricsConfig):
                 )
 
     # or define filters configuration to control what subset will be considered
-    else:
+    # option 1: boolean filters
+    elif not cfg.filter.use_pos_in_file_filtering:
 
         def include_example(filters_line: Dict[str, str]) -> bool:
             """Combines all given filters via given logical operations and returns the final
@@ -188,6 +189,21 @@ def main(cfg: MetricsConfig):
                             prefix_metrics=prefix_metrics,
                             include_short=cfg.include_short,
                         )
+
+    # option 2: pos in file-filtering (only include examples that are present in a given file, controlled by `pos_in_file` column)
+    else:
+        with jsonlines.open(cfg.filter.path, "r") as filters_reader:
+            ids_to_include = set(line["pos_in_file"] for line in filters_reader)
+
+        with jsonlines.open(cfg.preds_path, "r") as reader:
+            for i, input_line in tqdm(enumerate(reader), desc="Computing metrics with filters"):
+                if i in ids_to_include:
+                    add_single_example(
+                        input_line,
+                        full_metrics=full_metrics,
+                        prefix_metrics=prefix_metrics,
+                        include_short=cfg.include_short,
+                    )
 
     # -----------------------
     # -   compute results   -
