@@ -103,7 +103,8 @@ def main(cfg: MetricsConfig):
             config=OmegaConf.to_container(cfg, resolve=True),  # type: ignore[arg-type]
             job_type="metrics" if not cfg.filter.use_filtering else "filter_metrics",
             tags=(["new_prefix_logic"] if cfg.include_short else [])
-            + (["only_filtered" if cfg.filter.fit_filters else "only_unfiltered"] if cfg.filter.use_filtering else []),
+            + (["only_filtered" if cfg.filter.fit_filters else "only_unfiltered"] if cfg.filter.use_filtering else [])
+            + (["subset"] if cfg.filter.use_pos_in_file_filtering else []),
         )  # type: ignore[assignment]
         cfg.preds_path = load_predictions(cfg)
     elif cfg.preds_path:
