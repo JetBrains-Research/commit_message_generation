@@ -152,24 +152,32 @@ def main(cfg: MetricsConfig):
 
         # dry run: estimate the total number of examples and the number of examples in the filtered subset
         with jsonlines.open(cfg.preds_path, "r") as reader:
-            total = sum(1 for _ in reader)
+            num_total = sum(1 for _ in reader)
         with jsonlines.open(cfg.filter.path, "r") as filters_reader:
-            included = sum(1 for filters_line in filters_reader if include_example(filters_line))
+            num_included = sum(1 for filters_line in filters_reader if include_example(filters_line))
 
         # TODO: make configurable?
         # when computing metrics on out-of-filters subset, select a random subsample of the same size as filtered subset
         if not cfg.filter.fit_filters:
-            num_examples_subset = total - included
-            logging.warning(
-                f"Total number of examples: {total}, will consider a random subset of {num_examples_subset} examples ({num_examples_subset / total * 100 :.2f}%)."
-            )
+            with jsonlines.open(cfg.filter.path, "r") as filters_reader:
+                num_filtered = sum(
+                    1
+                    for filters_line in filters_reader
+                    if all(filters_line[filter_col] for filter_col in cfg.filter.filters_to_include)
+                )
+
+            num_examples_subset = num_total - num_included
+            if num_included > num_filtered:
+                logging.warning(
+                    f"Total number of examples: {num_total}, number of examples to include: {num_included}, will consider a random subset of {num_examples_subset} examples ({num_examples_subset / num_total * 100 :.2f}%)."
+                )
             with jsonlines.open(cfg.filter.path, "r") as filters_reader:
                 ids = [i for i, filters_line in enumerate(filters_reader) if include_example(filters_line)]
             subset_ids = set(random.sample(ids, k=num_examples_subset))
         else:
             subset_ids = None
             logging.warning(
-                f"Total number of examples: {total}, will consider {included} examples ({included / total * 100 :.2f}%)."
+                f"Total number of examples: {num_total}, will consider {num_included} examples ({num_included / num_total * 100 :.2f}%)."
             )
 
         with jsonlines.open(cfg.preds_path, "r") as reader:
