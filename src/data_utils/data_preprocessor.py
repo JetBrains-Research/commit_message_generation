@@ -10,11 +10,11 @@ from .cmg_prompts import CMGChatPrompts, CMGPrompts
 
 
 class DataPreprocessor:
-    prompt_constructors: Dict[str, Callable[[str, Optional[str]], str]] = {
+    prompt_constructors: Dict[str, Callable] = {
         "simple": CMGPrompts.zero_shot_simple,
         "history": CMGPrompts.zero_shot_history,
     }
-    prompt_constructors_chat: Dict[str, Callable[[str, Optional[str]], List[Dict[str, str]]]] = {
+    prompt_constructors_chat: Dict[str, Callable] = {
         "simple": CMGChatPrompts.zero_shot_simple,
         "history": CMGChatPrompts.zero_shot_history,
     }
@@ -66,7 +66,11 @@ class DataPreprocessor:
         return diff
 
     def process(
-        self, mods: List[Dict[str, str]], prompt_configuration: str, previous_message: Optional[str] = None
+        self,
+        mods: List[Dict[str, str]],
+        prompt_configuration: str,
+        previous_message: Optional[str] = None,
+        prefix: str = "",
     ) -> str:
         # get diff from a list of file modifications (combine + add heading in a git fashion)
         diff = DataPreprocessor._process_mods(mods)
@@ -75,11 +79,17 @@ class DataPreprocessor:
         diff = self._truncate_diff(diff)
 
         # construct a prompt for Completion based on the diff (and possibly the previous message)
-        prompt = DataPreprocessor.prompt_constructors[prompt_configuration](diff, previous_message)
+        prompt = DataPreprocessor.prompt_constructors[prompt_configuration](
+            diff=diff, previous_message=previous_message, prefix=prefix
+        )
         return prompt
 
     def process_chat(
-        self, mods: List[Dict[str, str]], prompt_configuration: str, previous_message: Optional[str] = None
+        self,
+        mods: List[Dict[str, str]],
+        prompt_configuration: str,
+        previous_message: Optional[str] = None,
+        prefix: str = "",
     ) -> List[Dict[str, str]]:
         # get diff from a list of file modifications (combine + add heading in a git fashion)
         diff = DataPreprocessor._process_mods(mods)
@@ -88,10 +98,14 @@ class DataPreprocessor:
         diff = self._truncate_diff(diff)
 
         # construct an input for ChatCompletion based on the diff (and possibly the previous message)
-        chat_messages = DataPreprocessor.prompt_constructors_chat[prompt_configuration](diff, previous_message)
+        chat_messages = DataPreprocessor.prompt_constructors_chat[prompt_configuration](
+            diff=diff, previous_message=previous_message, prefix=prefix
+        )
         return chat_messages
 
-    def process_file(self, input_path: str, output_path: str, chunksize: int, use_cache: bool) -> None:
+    def process_file(
+        self, input_path: str, output_path: str, chunksize: int, use_cache: bool, context_ratio: float
+    ) -> None:
         if use_cache and os.path.exists(output_path):
             logging.info("Found preprocessed prompts!")
         else:
@@ -111,25 +125,32 @@ class DataPreprocessor:
                     else:
                         previous_message = None
 
+                    if context_ratio == 0.0:
+                        prefix, target = "", line["message"]
+                    else:
+                        context_len = int(context_ratio * len(line["message"]))
+                        prefix, target = line["message"][:context_len], line["message"][context_len:]
                     if self._use_chat:
                         prompt = {
                             "prompt": None,
                             "messages": self.process_chat(
                                 mods=line["mods"],
                                 previous_message=previous_message,
+                                prefix=prefix,
                                 prompt_configuration=self._prompt_configuration,
                             ),
-                            "target": line["message"],
+                            "target": target,
                         }
                     else:
                         prompt = {
                             "prompt": self.process(
                                 mods=line["mods"],
                                 previous_message=previous_message,
+                                prefix=prefix,
                                 prompt_configuration=self._prompt_configuration,
                             ),
                             "messages": None,
-                            "target": line["message"],
+                            "target": target,
                         }
                     chunk.append(prompt)
 

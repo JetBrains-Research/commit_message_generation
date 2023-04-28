@@ -46,12 +46,15 @@ def main(cfg: OpenAIConfig) -> None:
     #    process prompts    -
     # -----------------------
     cfg.dataset.root_dir = hydra.utils.to_absolute_path(cfg.dataset.root_dir)
-    processed_path = f"{cfg.dataset.root_dir}/{cfg.dataset.prompt_configuration}_{cfg.dataset.input_path}"
+    processed_path = (
+        f"{cfg.dataset.root_dir}/{cfg.dataset.prompt_configuration}_{cfg.context_ratio}_{cfg.dataset.input_path}"
+    )
     preprocessor.process_file(
         input_path=f"{cfg.dataset.root_dir}/{cfg.dataset.input_path}",
         output_path=processed_path,
         chunksize=cfg.dataset.chunksize,
         use_cache=cfg.dataset.use_cache,
+        context_ratio=cfg.context_ratio,
     )
 
     # -----------------------
@@ -84,7 +87,7 @@ def main(cfg: OpenAIConfig) -> None:
     # ----------------------
     #       query API      -
     # ----------------------
-    output_path = f"{cfg.model_id}_{cfg.dataset.prompt_configuration}_{cfg.dataset.input_path}"
+    output_path = f"{cfg.model_id}_{cfg.dataset.prompt_configuration}_{cfg.context_ratio}_{cfg.dataset.input_path}"
 
     if cfg.fill_file:
         logging.info("Configured to fill unfinished predictions file.")
@@ -106,8 +109,7 @@ def main(cfg: OpenAIConfig) -> None:
     # -------------------------------------------------
     if cfg.logger.use_wandb and cfg.logger.upload_artifact:
         artifact = wandb.Artifact(
-            name=f"{cfg.model_id}_{cfg.dataset.prompt_configuration}" + "_preds",
-            type="openai_preds",
+            name=f"{cfg.model_id}_{cfg.dataset.prompt_configuration}" + "_preds", type="openai_preds", incremental=False
         )
         artifact.add_file(output_path)
         wandb.log_artifact(artifact)

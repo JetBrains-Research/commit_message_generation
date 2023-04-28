@@ -74,6 +74,7 @@ class OpenAIConfig:
     """Configuration for experiments with OpenAI models."""
 
     model_id: str = MISSING
+    context_ratio: float = 0.0
     fill_file: bool = False
     dataset: DatasetConfig = field(default_factory=DatasetConfig)
     generation: GenerationConfig = field(default_factory=GenerationConfig)
