@@ -134,6 +134,7 @@ def main(cfg: MetricsConfig):
     # or define filters configuration to control what subset will be considered
     # option 1: boolean filters
     elif not cfg.filter.use_pos_in_file_filtering:
+        logging.info("Will compute metrics with given filters.")
 
         def include_example(filters_line: Dict[str, str]) -> bool:
             """Combines all given filters via given logical operations and returns the final
@@ -156,42 +157,16 @@ def main(cfg: MetricsConfig):
         with jsonlines.open(cfg.filter.path, "r") as filters_reader:
             num_included = sum(1 for filters_line in filters_reader if include_example(filters_line))
 
-        # TODO: make configurable?
-        # when computing metrics on out-of-filters subset, select a random subsample of the same size as filtered subset
-        if not cfg.filter.fit_filters:
-            with jsonlines.open(cfg.filter.path, "r") as filters_reader:
-                num_filtered = sum(
-                    1
-                    for filters_line in filters_reader
-                    if all(filters_line[filter_col] for filter_col in cfg.filter.filters_to_include)
-                )
-
-            num_examples_subset = num_total - num_included
-            if num_included > num_filtered:
-                logging.warning(
-                    f"Total number of examples: {num_total}, number of examples to include: {num_included}, will consider a random subset of {num_examples_subset} examples ({num_examples_subset / num_total * 100 :.2f}%)."
-                )
-            with jsonlines.open(cfg.filter.path, "r") as filters_reader:
-                ids = [i for i, filters_line in enumerate(filters_reader) if include_example(filters_line)]
-            subset_ids = set(random.sample(ids, k=num_examples_subset))
-        else:
-            subset_ids = None
-            logging.warning(
-                f"Total number of examples: {num_total}, will consider {num_included} examples ({num_included / num_total * 100 :.2f}%)."
-            )
+        logging.warning(
+            f"Total number of examples: {num_total}, will consider {num_included} examples ({num_included / num_total * 100 :.2f}%)."
+        )
 
         with jsonlines.open(cfg.preds_path, "r") as reader:
             with jsonlines.open(cfg.filter.path, "r") as filters_reader:
                 for i, (input_line, filters_line) in tqdm(
                     enumerate(zip(reader, filters_reader)), desc="Computing metrics with filters"
                 ):
-                    if (
-                        not subset_ids
-                        and include_example(filters_line)
-                        or subset_ids
-                        and i in subset_ids
-                        and include_example(filters_line)
-                    ):
+                    if include_example(filters_line):
                         add_single_example(
                             input_line,
                             full_metrics=full_metrics,
@@ -201,11 +176,20 @@ def main(cfg: MetricsConfig):
 
     # option 2: pos in file-filtering (only include examples that are present in a given file, controlled by `pos_in_file` column)
     else:
+        logging.info("Will compute metrics on a given subset.")
+
         with jsonlines.open(cfg.filter.path, "r") as filters_reader:
             ids_to_include = set(line["pos_in_file"] for line in filters_reader)
 
+        # dry run: estimate the total number of examples and the number of examples in the subset
         with jsonlines.open(cfg.preds_path, "r") as reader:
-            for i, input_line in tqdm(enumerate(reader), desc="Computing metrics with filters"):
+            num_total = sum(1 for _ in reader)
+        logging.warning(
+            f"Total number of examples: {num_total}, will consider {len(ids_to_include)} examples ({len(ids_to_include) / num_total * 100 :.2f}%)."
+        )
+
+        with jsonlines.open(cfg.preds_path, "r") as reader:
+            for i, input_line in tqdm(enumerate(reader), desc="Computing metrics on a given subset"):
                 if i in ids_to_include:
                     add_single_example(
                         input_line,
