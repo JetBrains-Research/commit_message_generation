@@ -13,10 +13,14 @@ class DataPreprocessor:
     prompt_constructors: Dict[str, Callable] = {
         "simple": CMGPrompts.zero_shot_simple,
         "history": CMGPrompts.zero_shot_history,
+        "simple_completion": CMGPrompts.zero_shot_simple_completion,
+        "history_completion": CMGPrompts.zero_shot_history_completion,
     }
     prompt_constructors_chat: Dict[str, Callable] = {
         "simple": CMGChatPrompts.zero_shot_simple,
         "history": CMGChatPrompts.zero_shot_history,
+        "simple_completion": CMGChatPrompts.zero_shot_simple_completion,
+        "history_completion": CMGChatPrompts.zero_shot_history_completion,
     }
 
     def __init__(self, tokenizer: Encoding, max_number_of_tokens: int, prompt_configuration: str, use_chat: bool):
@@ -79,9 +83,14 @@ class DataPreprocessor:
         diff = self._truncate_diff(diff)
 
         # construct a prompt for Completion based on the diff (and possibly the previous message)
-        prompt = DataPreprocessor.prompt_constructors[prompt_configuration](
-            diff=diff, previous_message=previous_message, prefix=prefix
-        )
+        if prefix:
+            prompt = DataPreprocessor.prompt_constructors[f"{prompt_configuration}_completion"](
+                diff=diff, previous_message=previous_message, prefix=prefix
+            )
+        else:
+            prompt = DataPreprocessor.prompt_constructors[prompt_configuration](
+                diff=diff, previous_message=previous_message
+            )
         return prompt
 
     def process_chat(
@@ -98,9 +107,14 @@ class DataPreprocessor:
         diff = self._truncate_diff(diff)
 
         # construct an input for ChatCompletion based on the diff (and possibly the previous message)
-        chat_messages = DataPreprocessor.prompt_constructors_chat[prompt_configuration](
-            diff=diff, previous_message=previous_message, prefix=prefix
-        )
+        if prefix:
+            chat_messages = DataPreprocessor.prompt_constructors_chat[f"{prompt_configuration}_completion"](
+                diff=diff, previous_message=previous_message, prefix=prefix
+            )
+        else:
+            chat_messages = DataPreprocessor.prompt_constructors_chat[prompt_configuration](
+                diff=diff, previous_message=previous_message
+            )
         return chat_messages
 
     def process_file(
