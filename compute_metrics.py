@@ -193,7 +193,7 @@ def main(cfg: MetricsConfig):
                 cfg.filter.subset_num_examples is not None
             ), "Configured to use subset, but the desired number of examples is None."
             assert (
-                cfg.filter.subset_num_examples >= num_included
+                num_included >= cfg.filter.subset_num_examples
             ), "Configured to use subset, but the desired number of examples is larger than the total sample."
 
             logging.info(f"Will consider random subset of {cfg.filter.subset_num_examples} examples.")
