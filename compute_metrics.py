@@ -5,6 +5,7 @@ from typing import Dict
 
 import hydra
 import jsonlines
+import numpy as np
 import wandb
 from hydra.utils import to_absolute_path
 from omegaconf import OmegaConf
@@ -16,6 +17,7 @@ from src.utils import EvaluationMetrics
 logger = logging.getLogger("datasets")
 logger.setLevel(logging.ERROR)
 random.seed(42)
+np.random.seed(42)
 
 
 def load_predictions(cfg: MetricsConfig) -> str:
@@ -104,7 +106,8 @@ def main(cfg: MetricsConfig):
             job_type="metrics" if not cfg.filter.use_filtering else "filter_metrics",
             tags=(["new_prefix_logic"] if cfg.include_short else [])
             + (["only_filtered" if cfg.filter.fit_filters else "only_unfiltered"] if cfg.filter.use_filtering else [])
-            + (["subset"] if cfg.filter.use_pos_in_file_filtering else []),
+            + (["specific_subset"] if cfg.filter.use_pos_in_file_filtering else [])
+            + ([f"random_subset_{cfg.filter.subset_num_examples}"] if cfg.filter.use_subset else []),
         )  # type: ignore[assignment]
         cfg.preds_path = load_predictions(cfg)
     elif cfg.preds_path:
@@ -125,11 +128,35 @@ def main(cfg: MetricsConfig):
 
     # default: simply compute the metrics for all the examples
     if not cfg.filter.use_filtering:
-        with jsonlines.open(cfg.preds_path, "r") as reader:
-            for line in tqdm(reader, desc="Computing metrics"):
-                add_single_example(
-                    line, full_metrics=full_metrics, prefix_metrics=prefix_metrics, include_short=cfg.include_short
-                )
+        # or for a subset of N examples
+        if cfg.filter.use_subset:
+            assert (
+                cfg.filter.subset_num_examples is not None
+            ), "Configured to use subset, but the desired number of examples is None."
+            logging.info(f"Will consider random subset of {cfg.filter.subset_num_examples} examples.")
+
+            with jsonlines.open(cfg.preds_path, "r") as reader:
+                num_examples = sum(1 for _ in reader)
+            subset_ids = set(np.random.choice(num_examples, size=cfg.filter.subset_num_examples, replace=False))
+
+            with jsonlines.open(cfg.preds_path, "r") as reader:
+                for i, line in tqdm(
+                    enumerate(reader),
+                    desc=f"Computing metrics on a random subset of {cfg.filter.subset_num_examples} examples",
+                ):
+                    if i in subset_ids:
+                        add_single_example(
+                            line,
+                            full_metrics=full_metrics,
+                            prefix_metrics=prefix_metrics,
+                            include_short=cfg.include_short,
+                        )
+        else:
+            with jsonlines.open(cfg.preds_path, "r") as reader:
+                for line in tqdm(reader, desc="Computing metrics"):
+                    add_single_example(
+                        line, full_metrics=full_metrics, prefix_metrics=prefix_metrics, include_short=cfg.include_short
+                    )
 
     # or define filters configuration to control what subset will be considered
     # option 1: boolean filters
@@ -160,24 +187,49 @@ def main(cfg: MetricsConfig):
         logging.warning(
             f"Total number of examples: {num_total}, will consider {num_included} examples ({num_included / num_total * 100 :.2f}%)."
         )
+        # or for a subset of N examples
+        if cfg.filter.use_subset:
+            assert (
+                cfg.filter.subset_num_examples is not None
+            ), "Configured to use subset, but the desired number of examples is None."
+            assert (
+                cfg.filter.subset_num_examples >= num_included
+            ), "Configured to use subset, but the desired number of examples is larger than the total sample."
 
-        with jsonlines.open(cfg.preds_path, "r") as reader:
+            logging.info(f"Will consider random subset of {cfg.filter.subset_num_examples} examples.")
             with jsonlines.open(cfg.filter.path, "r") as filters_reader:
-                for i, (input_line, filters_line) in tqdm(
-                    enumerate(zip(reader, filters_reader)), desc="Computing metrics with filters"
+                included_ids = [i for i, filters_line in enumerate(filters_reader) if include_example(filters_line)]
+            subset_ids = set(np.random.choice(included_ids, size=cfg.filter.subset_num_examples, replace=False))
+
+            with jsonlines.open(cfg.preds_path, "r") as reader:
+                for i, line in tqdm(
+                    enumerate(reader),
+                    desc=f"Computing metrics with filters on a random subset of {cfg.filter.subset_num_examples} examples",
                 ):
-                    if include_example(filters_line):
+                    if i in subset_ids:
                         add_single_example(
-                            input_line,
+                            line,
                             full_metrics=full_metrics,
                             prefix_metrics=prefix_metrics,
                             include_short=cfg.include_short,
                         )
+        else:
+            with jsonlines.open(cfg.preds_path, "r") as reader:
+                with jsonlines.open(cfg.filter.path, "r") as filters_reader:
+                    for i, (input_line, filters_line) in tqdm(
+                        enumerate(zip(reader, filters_reader)), desc="Computing metrics with filters"
+                    ):
+                        if include_example(filters_line):
+                            add_single_example(
+                                input_line,
+                                full_metrics=full_metrics,
+                                prefix_metrics=prefix_metrics,
+                                include_short=cfg.include_short,
+                            )
 
     # option 2: pos in file-filtering (only include examples that are present in a given file, controlled by `pos_in_file` column)
     else:
-        logging.info("Will compute metrics on a given subset.")
-
+        logging.info("Will compute metrics on a specific given subset.")
         with jsonlines.open(cfg.filter.path, "r") as filters_reader:
             ids_to_include = set(line["pos_in_file"] for line in filters_reader)
 
@@ -189,7 +241,7 @@ def main(cfg: MetricsConfig):
         )
 
         with jsonlines.open(cfg.preds_path, "r") as reader:
-            for i, input_line in tqdm(enumerate(reader), desc="Computing metrics on a given subset"):
+            for i, input_line in tqdm(enumerate(reader), desc="Computing metrics on a specific given subset"):
                 if i in ids_to_include:
                     add_single_example(
                         input_line,

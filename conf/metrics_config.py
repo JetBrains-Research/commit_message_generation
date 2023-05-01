@@ -11,24 +11,27 @@ class FilterConfig:
     Configuration for additional data filtering when calculating metrics.
 
     Attributes:
-        use_filtering: True to use additional data filtering, False otherwise.
         path: Path to file with filters metadata for a test set.
-        use_pos_in_file_filtering: True to use `pos_in_file` column and only consider lines present in a given file,
-          False to use boolean filters logic.
+        use_filtering: True to use additional data filtering, False otherwise.
         filters_to_include: List of column names to consider. Each column should be boolean.
         logic: A logic to follow when multiple columns are given (`and` for logical and, `or` for logical or).
         fit_filters: If True, will consider examples that fit given columns with given logic.
           If False, will consider examples that DON'T FIT given columns with given logic.
+        use_pos_in_file_filtering: True to use `pos_in_file` column and only consider lines present in a given file,
+          False to use boolean filters logic.
+
     """
 
-    use_filtering: bool = False
     path: str = "raw_data/multilang/downsample/filters/test.jsonl"
-    use_pos_in_file_filtering: bool = False
+    use_filtering: bool = False
     filters_to_include: List[str] = field(
         default_factory=lambda: ["is_vdo", "one_sentence_newline", "message_30_tokens", "diff_100_tokens"]
     )
     logic: str = "and"
     fit_filters: bool = True
+    use_pos_in_file_filtering: bool = False
+    use_subset: bool = False
+    subset_num_examples: Optional[int] = None
 
 
 @dataclass
