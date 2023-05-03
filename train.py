@@ -109,7 +109,6 @@ def main(cfg: TrainConfig) -> None:
                     + "codet5"
                     + ("_with-history" if cfg.input.train_with_history else "_without-history")
                     + f":{cfg.logger.checkpoint.version}",
-                    type="model",
                 )
                 ckpt_path = os.path.join(
                     hydra.utils.to_absolute_path("artifacts"),
@@ -124,9 +123,8 @@ def main(cfg: TrainConfig) -> None:
                     f"{cfg.logger.retrieval.project}/"
                     + "codet5"
                     + ("_with-history" if cfg.input.train_with_history else "_without-history")
-                    + "_retrieval",
-                    +f":{cfg.logger.retrieval.version}",
-                    type="retrieval",
+                    + "_retrieval"
+                    + f":{cfg.logger.retrieval.version}",
                 )
 
                 for part in ["train", "val", "test"]:
@@ -152,7 +150,7 @@ def main(cfg: TrainConfig) -> None:
                 os.path.join(
                     hydra.utils.to_absolute_path("artifacts"),
                     "codet5" + ("_with_history" if cfg.input.train_with_history else "_without_history"),
-                    "last.ckpt",
+                    cfg.logger.checkpoint.artifact_path,
                 ),
             )
             os.makedirs(transformers_ckpt_path, exist_ok=True)
