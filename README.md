@@ -9,20 +9,10 @@ task.
 
 * :snake: Python
 * :floppy_disk: Dependencies
-    * Neural networks frameworks: [PyTorch](https://pytorch.org/)
-        , [🤗 Transformers](https://huggingface.co/transformers/)
-        and [PyTorch Lightning](https://www.pytorchlightning.ai/)
-    * Configuration: [Hydra](https://hydra.cc/)
-    * Experiments tracking: [Weights & Biases](https://wandb.ai/site)
-    * Metrics: [TorchMetrics](https://torchmetrics.readthedocs.io/en/stable/)
-      , [🤗 Datasets](https://huggingface.co/docs/datasets/)
-      and other packages necessary for specific metrics implementations
-    * Lint & unit tests: [mypy](https://github.com/python/mypy), [Black](https://black.readthedocs.io/en/stable/), [isort](https://pycqa.github.io/isort/), [pytest](https://docs.pytest.org/en/7.1.x/)
+    * This project provides dependencies for two Python dependency managers:
+      * Poetry: [`poetry.lock`](poetry.lock), [`pyproject.toml`](pyproject.toml)
+      * pip: [`requirements.txt`](requirements.txt) (obtained through `poetry export --with dev,retrieval --output requirements.txt`)
 
-This project provides dependencies for two Python dependency managers:
-* Poetry: [`poetry.lock`](poetry.lock), [`pyproject.toml`](pyproject.toml)
-* pip: [`requirements.txt`](requirements.txt) (obtained through `poetry export --with dev,retrieval --output requirements.txt`)
-     
 ## Usage
 
 ### Step 1: Prepare raw data
@@ -35,7 +25,7 @@ This project provides dependencies for two Python dependency managers:
 <details>
 <summary>:yellow_heart: click here for more information on required data format</summary>
 
-This project expects all dataset parts to be stored in a separate JSONLines files:
+This project expects each dataset part to be stored in a separate JSONLines files:
 ```
  ├── ...  # data directory
  │   ├── train.jsonl
@@ -84,14 +74,14 @@ You can find specific configs for the following models in [`conf/model/configs.p
 
 #### Input type
 
-This project explores two kinds of input for commit message completion task: diff and commit message history. 
+This project explores two kinds of input for a commit message completion task: diff and commit message history. 
 
-* For decoder, there is only one supported option: concatenate commit message history with current commit message and pass to context.
+* For decoder, there is only one supported option: concatenate commit message history with a current commit message and pass to context.
 
 * For seq2seq models, there are three supported options:
-  * *Diff-only:* pass diff to encoder, pass current message to decoder.
-  * *History-only:* pass history to encoder, pass current message to decoder.
-  * *Diff + history:* pass diff to encoder, pass commit message history concatenated with current message to decoder.
+  * *Diff-only:* pass diff to encoder, pass a current message to decoder.
+  * *History-only:* pass history to encoder, pass a current message to decoder.
+  * *Diff + history:* pass diff to encoder, pass commit message history concatenated with a current message to decoder.
 
 ### Step 3: Train
 
@@ -125,10 +115,29 @@ Experiments with RACE model require a slightly different procedure.
     python retrieve.py +model=codet5 ++input.train_with_history=X ++input.encoder_input_type=X
     ```
 3. Initialize RACE with fine-tuned CodeT5 weights and use retrieved examples to train the model. 
-   Refer to the instruction above for details.
-    
-    > :construction: Currently, downloading retrieved predictions and fine-tuned CodeT5 checkpoint is only possible with W&B.
 
+   For checkpoint, you have to either provide a path to checkpoint in :hugs: Transformers format as `name_or_path` in [`RACEConfig`](`conf/model/configs.py`) or
+   define [`logger.checkpoint`](conf/train_config.py) in train config correctly to download it from W&B Artifacts.
+   
+   For retrieved examples, you have to either provide them locally or define [`logger.retrieval`](conf/train_config.py) in train config correctly to download it from W&B Artifacts.
+   
+   To provide retrieved examples locally, place them inside root dataset directory in a folder `retrieval_with_history` or `retrieval_without_history` (depending whether the encoder used for retrieval was trained with history or not).
+
+    ```
+     ├── ...  # data directory
+     │   ├── retrieval_with_history
+     │   │    ├── train_predictions.jsonl
+     │   │    ├── val_predictions.jsonl
+     │   │    ├── test_predictions.jsonl
+     │   ├── retrieval_without_history
+     │   │    ├── train_predictions.jsonl
+     │   │    ├── val_predictions.jsonl
+     │   │    ├── test_predictions.jsonl
+     │   ├── train.jsonl
+     │   ├── val.jsonl
+     │   └── test.jsonl
+     └── ...
+    ```
 ### Step 4: Evaluate
 
 #### Step 4.1: Generating predictions
@@ -141,7 +150,7 @@ Experiments with RACE model require a slightly different procedure.
 
 3. Note that you have to define all parameters from [`InputConfig`](conf/data/input_config.py). You can do it via CLI or just rewrite them. Below is the example how to define parameters via CLI.
 
-To launch evaluation of model defined as `XXXModelConfig` and registered via `ConfigStore.store(name="XXX", group="model", node=XXXModelConfig)`, run the following command:
+To launch evaluation of a model defined as `XXXModelConfig` and registered via `ConfigStore.store(name="XXX", group="model", node=XXXModelConfig)`, run the following command:
 ```
 python eval.py +model=XXX ++input.train_with_history=X ++input.encoder_input_type=X ++input.generate_with_history=X ++input.context_ratio=X
 ```

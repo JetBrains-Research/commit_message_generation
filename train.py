@@ -102,38 +102,46 @@ def main(cfg: TrainConfig) -> None:
 
         if cfg.logger.use_wandb and cfg.model.configuration == "race":
             # download model checkpoint
-            artifact = wandb.use_artifact(
-                "codet5" + ("_with-history" if cfg.input.train_with_history else "_without-history") + ":latest",
-                type="model",
-            )
-            ckpt_path = os.path.join(
-                hydra.utils.to_absolute_path("artifacts"),
-                "codet5" + ("_with_history" if cfg.input.train_with_history else "_without_history"),
-            )
-            artifact.get_path("last.ckpt").download(root=ckpt_path)
+            if cfg.logger.checkpoint.load_artifact:
+                logging.info("Downloading fine-tuned CodeT5 checkpoint from W&B")
+                artifact = wandb.use_artifact(
+                    f"{cfg.logger.checkpoint.project}"
+                    + "codet5"
+                    + ("_with-history" if cfg.input.train_with_history else "_without-history")
+                    + f":{cfg.logger.checkpoint.version}",
+                    type="model",
+                )
+                ckpt_path = os.path.join(
+                    hydra.utils.to_absolute_path("artifacts"),
+                    "codet5" + ("_with_history" if cfg.input.train_with_history else "_without_history"),
+                )
+                artifact.get_path(cfg.logger.checkpoint.artifact_path).download(root=ckpt_path)
 
             # download retrieved examples
-            artifact = wandb.use_artifact(
-                "codet5"
-                + ("_with-history" if cfg.input.train_with_history else "_without-history")
-                + "_retrieval:latest",
-                type="retrieval",
-            )
-
-            for part in ["train", "val", "test"]:
-                artifact.get_path(f"{part}_predictions.jsonl").download(
-                    root=os.path.join(
-                        hydra.utils.to_absolute_path(dm.get_root_dir_for_part(cfg.dataset.dataset_root, part)),
-                        "retrieval" + ("_with_history" if cfg.input.train_with_history else "_without_history"),
-                    )
+            if cfg.logger.retrieval.load_artifact:
+                logging.info("Downloading retrieved predictions from W&B")
+                artifact = wandb.use_artifact(
+                    f"{cfg.logger.retrieval.project}/"
+                    + "codet5"
+                    + ("_with-history" if cfg.input.train_with_history else "_without-history")
+                    + "_retrieval",
+                    +f":{cfg.logger.retrieval.version}",
+                    type="retrieval",
                 )
+
+                for part in ["train", "val", "test"]:
+                    artifact.get_path(f"{part}_predictions.jsonl").download(
+                        root=os.path.join(
+                            hydra.utils.to_absolute_path(dm.get_root_dir_for_part(cfg.dataset.dataset_root, part)),
+                            "retrieval" + ("_with_history" if cfg.input.train_with_history else "_without_history"),
+                        )
+                    )
         dm.prepare_data(stage="fit")
     dm.setup(stage="fit")
 
     batch_size = cfg.dataset.train_dataloader_conf.batch_size * cfg.trainer.accumulate_grad_batches * world_size
 
-    # main module with model logic
-    if cfg.logger.use_wandb and cfg.model.configuration == "race":
+    if cfg.logger.use_wandb and cfg.model.configuration == "race" and cfg.logger.checkpoint.load_artifact:
         transformers_ckpt_path = os.path.join(
             hydra.utils.to_absolute_path("artifacts"),
             "codet5" + ("_with_history" if cfg.input.train_with_history else "_without_history"),
@@ -151,6 +159,7 @@ def main(cfg: TrainConfig) -> None:
             model.save_pretrained(transformers_ckpt_path)
         cfg.model.name_or_path = transformers_ckpt_path
 
+    # main module with model logic
     model = CMCModule(
         model_cfg=cfg.model,
         diff_tokenizer=dm.diff_tokenizer,
