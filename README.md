@@ -116,7 +116,7 @@ Experiments with RACE model require a slightly different procedure.
     ```
 3. Initialize RACE with fine-tuned CodeT5 weights and use retrieved examples to train the model. 
 
-   For checkpoint, you have to either provide a path to checkpoint in :hugs: Transformers format as `name_or_path` in [`RACEConfig`](`conf/model/configs.py`) or
+   For checkpoint, you have to either provide a path to checkpoint in :hugs: Transformers format as `name_or_path` in [`RACEConfig`](conf/model/configs.py) or
    define [`logger.checkpoint`](conf/train_config.py) in train config correctly to download it from W&B Artifacts.
    
    For retrieved examples, you have to either provide them locally or define [`logger.retrieval`](conf/train_config.py) in train config correctly to download it from W&B Artifacts.
