@@ -127,7 +127,7 @@ def main(cfg: MetricsConfig):
     }
 
     # default: simply compute the metrics for all the examples
-    if not cfg.filter.use_filtering:
+    if not cfg.filter.use_filtering and not cfg.filter.use_pos_in_file_filtering:
         # or for a subset of N examples
         if cfg.filter.use_subset:
             assert (
@@ -160,7 +160,7 @@ def main(cfg: MetricsConfig):
 
     # or define filters configuration to control what subset will be considered
     # option 1: boolean filters
-    elif not cfg.filter.use_pos_in_file_filtering:
+    elif cfg.filter.use_filtering and not cfg.filter.use_pos_in_file_filtering:
         logging.info("Will compute metrics with given filters.")
 
         def include_example(filters_line: Dict[str, str]) -> bool:
@@ -228,7 +228,7 @@ def main(cfg: MetricsConfig):
                             )
 
     # option 2: pos in file-filtering (only include examples that are present in a given file, controlled by `pos_in_file` column)
-    else:
+    elif not cfg.filter.use_filtering and cfg.filter.use_pos_in_file_filtering:
         logging.info("Will compute metrics on a specific given subset.")
         with jsonlines.open(cfg.filter.path, "r") as filters_reader:
             ids_to_include = set(line["pos_in_file"] for line in filters_reader)

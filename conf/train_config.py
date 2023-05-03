@@ -37,6 +37,26 @@ class OptimizerConfig:
 
 
 @dataclass
+class ArtifactTrainConfig:
+    """
+    Configuration for W&B artifact.
+
+    Artifact name is not configurable because it's automatically retrieved from model and input configuration.
+
+    Attributes:
+        load_artifact: True to download artifact from W&B, False otherwise.
+        project: W&B project.
+        version: Version tag of W&B artifact.
+        artifact_path: Path to download in artifact.
+    """
+
+    load_artifact: bool = True
+    project: str = "saridormi/commit_message_completion"
+    version: str = "latest"
+    artifact_path: str = "last.ckpt"
+
+
+@dataclass
 class WandbTrainConfig:
     """
     Configuration for W&B logging.
@@ -48,15 +68,20 @@ class WandbTrainConfig:
 
     Attributes:
         use_wandb: Whether W&B will be used for logging or not.
-        project: Name of a project this run will appear in.
-        save_artifact: True to load model checkpoints to W&B as artifacts, False otherwise.
         use_api_key: True to read an API key from a local file (expected to be stored in `wandb_api_key.txt`).
+        project: Name of a project this run will appear in.
+        save_artifact: True to upload model checkpoints to W&B as artifacts, False otherwise.
+        checkpoint: Artifact configuration for fine-tuned model checkpoint (option for RACE).
+        retrieval: Artifact configuration for retrieved predictions (option for RACE).
+
     """
 
     use_wandb: bool = True
+    use_api_key: bool = False
     project: str = "commit_message_completion"
     save_artifact: bool = True
-    use_api_key: bool = False
+    checkpoint: ArtifactTrainConfig = field(default_factory=ArtifactTrainConfig)
+    retrieval: ArtifactTrainConfig = field(default_factory=ArtifactTrainConfig)
 
 
 @dataclass
