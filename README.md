@@ -2,26 +2,25 @@
 
 ![GitHub](https://img.shields.io/github/license/saridormi/commit_message_generation?style=for-the-badge)
 
+<p align="center">
+| <a href="TODO">:scroll: Preprint</a> | <a href="https://huggingface.co/datasets/JetBrains-Research/commit-chronicle"> :hugs: Dataset</a> | <a href="https://huggingface.co/JetBrains-Research/cmg-codet5-without-history#available-checkpoints">:hugs: Models</a> |
+</p>
+
 This repository provides a replication package for our paper :scroll: From Commit Message Generation to History-Aware Commit Message Completion, ASE 2023.
 
-## Available materials
-
-* **Preprint:** TODO
 * **Code**
   * Models experiments – this repository
     * The most actual version – `main` branch
     * The exact replication package for CMG experiments for our ASE 2023 paper – [`appendix_cmg` tag](https://github.com/JetBrains-Research/commit_message_generation/tree/appendix_cmg)
     * The exact replication package for LLM experiments for our ASE 2023 paper – [`appendix_llm` tag](https://github.com/JetBrains-Research/commit_message_generation/tree/appendix_llm)
   * Data collection and processing – [separate repo](https://github.com/saridormi/commits_dataset)
-* **:scroll: CommitChronicle :crystal_ball: dataset**
-  * [Zenodo](https://zenodo.org/record/8189044)
-  * [:hugs: HuggingFace Hub](https://huggingface.co/datasets/JetBrains-Research/commit-chronicle)
-* **Models checkpoints**
-  * [Zenodo](https://zenodo.org/record/8199408)
-  * [:hugs: HuggingFace Hub](https://huggingface.co/JetBrains-Research/cmg-codet5-without-history#available-checkpoints)
+* **Dataset**: also available on [Zenodo](https://zenodo.org/record/8189044)
+* **Models checkpoints**: also available on [Zenodo](https://zenodo.org/record/8199408)
 * **Other**
   * Models predictions: [`appendix/predictions`](appendix/predictions)
   * Full experimental results: [`appendix/results`](appendix/results)
+
+> :construction: Work in progress, some links are currently unavailable.
 
 ## How to use
 
@@ -37,10 +36,7 @@ This repository provides a replication package for our paper :scroll: From Commi
 
 #### Step 1: Prepare raw data
 
-> :construction: At some point, we plan to publish our dataset of commits. Until then, and if you wish to utilize this project 
-> for other data, refer to this section.
-
-> :star2: The data for this project was obtained via [commits_dataset](https://github.com/saridormi/commits_dataset) repo. 
+> :star2: Useful links: [our dataset](https://huggingface.co/datasets/JetBrains-Research/commit-chronicle) and/or [the repo](https://github.com/saridormi/commits_dataset) we used for data preparation. 
 
 <details>
 <summary>:yellow_heart: click here for more information on required data format</summary>
