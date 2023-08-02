@@ -1,21 +1,41 @@
-# Commit message completion ~~(and generation)~~
+# From Commit Message Generation to History-Aware Commit Message Completion
 
 ![GitHub](https://img.shields.io/github/license/saridormi/commit_message_generation?style=for-the-badge)
 
-This repository contains code for training and evaluation of Transformer-based models for commit message completion
-task.
+This repository provides a replication package for our paper :scroll: From Commit Message Generation to History-Aware Commit Message Completion, ASE 2023.
 
-## Requirements
+## Available materials
+
+* **Preprint:** TODO
+* **Code**
+  * Models experiments – this repository
+    * The most actual version – `main` branch
+    * The exact replication package for CMG experiments for our ASE 2023 paper – [`appendix_cmg` tag](https://github.com/JetBrains-Research/commit_message_generation/tree/appendix_cmg)
+    * The exact replication package for LLM experiments for our ASE 2023 paper – [`appendix_llm` tag](https://github.com/JetBrains-Research/commit_message_generation/tree/appendix_llm)
+  * Data collection and processing – [separate repo](https://github.com/saridormi/commits_dataset)
+* **:scroll: CommitChronicle :crystal_ball: dataset**
+  * [Zenodo](https://zenodo.org/record/8189044)
+  * [:hugs: HuggingFace Hub](https://huggingface.co/datasets/JetBrains-Research/commit-chronicle)
+* **Models checkpoints**
+  * [Zenodo](https://zenodo.org/record/8199408)
+  * [:hugs: HuggingFace Hub](https://huggingface.co/JetBrains-Research/cmg-codet5-without-history#available-checkpoints)
+* **Other**
+  * Models predictions: [`appendix/predictions`](appendix/predictions)
+  * Full experimental results: [`appendix/results`](appendix/results)
+
+## How to use
+
+### Requirements
 
 * :snake: Python
 * :floppy_disk: Dependencies
     * This project provides dependencies for two Python dependency managers:
-      * Poetry: [`poetry.lock`](poetry.lock), [`pyproject.toml`](pyproject.toml)
+      * Poetry: [`poetry.lock`](poetry.lock), [`pyproject.toml`](pyproject.toml) (preferred)
       * pip: [`requirements.txt`](requirements.txt) (obtained through `poetry export --with dev,retrieval --output requirements.txt`)
 
-## Usage
+### Usage
 
-### Step 1: Prepare raw data
+#### Step 1: Prepare raw data
 
 > :construction: At some point, we plan to publish our dataset of commits. Until then, and if you wish to utilize this project 
 > for other data, refer to this section.
@@ -46,9 +66,9 @@ In our case, each input example is commit. Also note that commits from each auth
 
 </details>
 
-### Step 2: Choose configuration
+#### Step 2: Choose configuration
 
-#### Model architecture
+##### Model architecture
 
 This project supports the following models:
 
@@ -72,7 +92,7 @@ You can find specific configs for the following models in [`conf/model/configs.p
 * CodeReviewer from [:scroll: Automating Code Review Activities by Large-Scale Pre-training](https://arxiv.org/abs/2203.09095)
 * RACE + T5 from [:scroll: RACE: Retrieval-Augmented Commit Message Generation](https://arxiv.org/abs/2203.02700v3)
 
-#### Input type
+##### Input type
 
 This project explores two kinds of input for a commit message completion task: diff and commit message history. 
 
@@ -83,7 +103,7 @@ This project explores two kinds of input for a commit message completion task: d
   * *History-only:* pass history to encoder, pass a current message to decoder.
   * *Diff + history:* pass diff to encoder, pass commit message history concatenated with a current message to decoder.
 
-### Step 3: Train
+#### Step 3: Train
 
 1. Define configuration for training at [`conf/train_config.py`](conf/train_config.py).
 2. Choose one of available model configs or add your own.
@@ -94,7 +114,7 @@ To launch training of model defined as `XXXModelConfig` and registered via `Conf
 python train.py +model=XXX ++input.train_with_history=X ++input.encoder_input_type=X
 ```
 
-#### Additional steps for RACE model
+##### Additional steps for RACE model
 
 Experiments with RACE model require a slightly different procedure.
 
@@ -138,9 +158,9 @@ Experiments with RACE model require a slightly different procedure.
      │   └── test.jsonl
      └── ...
     ```
-### Step 4: Evaluate
+#### Step 4: Evaluate
 
-#### Step 4.1: Generating predictions
+##### Step 4.1: Generating predictions
 
 1. Define configuration for evaluation at [`conf/eval_config.py`](conf/eval_config.py).
 
@@ -155,7 +175,7 @@ To launch evaluation of a model defined as `XXXModelConfig` and registered via `
 python eval.py +model=XXX ++input.train_with_history=X ++input.encoder_input_type=X ++input.generate_with_history=X ++input.context_ratio=X
 ```
 
-#### Step 4.2: Compute metrics
+##### Step 4.2: Compute metrics
 
 1. Define configuration for metrics computation at [`conf/metrics_config.py`](conf/metrics_config.py).
 
