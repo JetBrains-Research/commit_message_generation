@@ -17,8 +17,11 @@ This repository provides a replication package for our paper :scroll: From Commi
 * **Dataset**: also available on [Zenodo](https://zenodo.org/record/8189044)
 * **Models checkpoints**: also available on [Zenodo](https://zenodo.org/record/8199408)
 * **Other**
-  * Models predictions: [`appendix/predictions`](appendix/predictions)
-  * Full experimental results: [`appendix/results`](appendix/results)
+  * Check [`appendix`](appendix) folder for:
+    * models predictions;
+    * comprehensive metrics for all our experiments;
+    * implementations of frequent filters from CMG research;
+    * and other details mentioned in the paper!
 
 > :construction: Work in progress, some links are currently unavailable.
 
