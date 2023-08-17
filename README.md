@@ -3,7 +3,7 @@
 ![GitHub](https://img.shields.io/github/license/saridormi/commit_message_generation?style=for-the-badge)
 
 <p align="center">
-| <a href="https://arxiv.org/abs/2308.07655">:scroll: Preprint</a> | <a href="https://huggingface.co/datasets/JetBrains-Research/commit-chronicle"> :hugs: Dataset</a> | <a href="https://huggingface.co/JetBrains-Research/cmg-codet5-without-history#available-checkpoints">:hugs: Models</a> |
+| <a href="https://commit-chronicle.github.io/">:globe_with_meridians: Website</a> | <a href="https://arxiv.org/abs/2308.07655">:scroll: Preprint</a> | <a href="https://huggingface.co/datasets/JetBrains-Research/commit-chronicle"> :hugs: Dataset</a> | <a href="https://huggingface.co/JetBrains-Research/cmg-codet5-without-history#available-checkpoints">:hugs: Models</a> |
 </p>
 
 This repository provides a replication package for our paper :scroll: From Commit Message Generation to History-Aware Commit Message Completion, ASE 2023.
